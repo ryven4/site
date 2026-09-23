@@ -1911,41 +1911,65 @@ try{
   console.warn("Firebase indisponible, mode local uniquement.", e);
 }
 
-function syncMatchesToCloud(){
-  if(!db) return;
-  db.collection("matches").doc("shared").set({
-    matches: state.matches,
-    updatedAt: Date.now(),
-    updatedBy: state.username
-  }).catch(err => console.warn("Erreur de synchronisation :", err));
+/* Chaque match a son propre document Firestore (collection "matches"),
+   mis à jour intégralement à chaque changement mais de façon isolée par
+   match — deux joueurs qui modifient deux matchs différents (ou même le
+   même, à quelques secondes d'écart) ne s'écrasent plus mutuellement. */
+
+function pushMatchToCloud(match){
+  if(!db || !match || !match.id) return;
+  db.collection("matches").doc(match.id).set(match)
+    .catch(err => console.warn("Erreur de synchronisation du match :", err));
+}
+
+function deleteMatchFromCloud(id){
+  if(!db || !id) return;
+  db.collection("matches").doc(id).delete()
+    .catch(err => console.warn("Erreur de suppression du match :", err));
 }
 
 function initCloudSync(){
   if(!db) return;
-  db.collection("matches").doc("shared").onSnapshot(function(docSnap){
+  db.collection("matches").doc("shared").delete().catch(() => {}); // nettoyage de l'ancien système de synchro
+  db.collection("matches").onSnapshot(function(snapshot){
     cloudReady = true;
-    if(!docSnap.exists) return;
-    const data = docSnap.data();
-    if(!data || !Array.isArray(data.matches)) return;
-    if(data.updatedBy === state.username && data.updatedAt && (Date.now() - data.updatedAt) < 1500) return;
-
     syncingFromRemote = true;
-    state.matches = data.matches;
+    const remoteMatches = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if(data && data.id) remoteMatches.push(data);
+    });
+    state.matches = remoteMatches;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     syncingFromRemote = false;
-    processIncomingMatchResults();
+
+    let changed = applyPendingResultsForMe();
+    if(checkVictoryTimers()) changed = true;
+    if(changed) save();
+
     render();
   }, function(err){
     console.warn("Erreur d'écoute Firestore :", err);
   });
+
+  setInterval(function(){
+    let changed = false;
+    if(checkVictoryTimers()) changed = true;
+    if(changed){ save(); render(); }
+  }, 30000);
 }
 
 /* =========================================================
-   RÉSULTATS DE MATCH AUTOMATIQUES
-   Quand un joueur déclare son résultat, l'adversaire reçoit
-   automatiquement le résultat inverse dès que son client
-   reçoit la mise à jour — plus besoin que les deux déclarent.
+   RÉSULTATS DE MATCH — façon BetterPlayerWin
+   - "J'ai perdu"  → défaite immédiate pour moi, victoire immédiate
+     pour l'adversaire.
+   - "J'ai gagné"  → réclamation avec un timer de 15 min. Si
+     l'adversaire ne réagit pas (ou déclare lui-même sa défaite),
+     la victoire est confirmée. S'il déclare AUSSI "J'ai gagné",
+     le match passe en litige et les deux doivent envoyer une preuve.
 ========================================================= */
+
+const VICTORY_TIMER_MS = 15 * 60 * 1000;
 
 function applyMatchResultForMe(match, type){
   match.processedBy = match.processedBy || [];
@@ -1976,31 +2000,192 @@ function applyMatchResultForMe(match, type){
   return true;
 }
 
-function processIncomingMatchResults(){
+function applyPendingResultsForMe(){
   let changed = false;
-
   (state.matches || []).forEach(match => {
     if(!match.results) return;
-    const players = match.players || [];
-    if(!players.includes(state.username)) return;
-    if(match.results[state.username]) return;
-
+    const myResult = match.results[state.username];
+    if(!myResult) return;
     const processedBy = match.processedBy || [];
     if(processedBy.includes(state.username)) return;
-
-    const opponentEntry = Object.entries(match.results).find(([name]) => name !== state.username);
-    if(!opponentEntry) return;
-
-    const opponentResult = opponentEntry[1];
-    const myAutoResult = opponentResult === 'WIN' ? 'LOSS' : 'WIN';
-
-    if(applyMatchResultForMe(match, myAutoResult)){
-      match.results[state.username] = myAutoResult;
-      changed = true;
-    }
+    if(applyMatchResultForMe(match, myResult)) changed = true;
   });
+  return changed;
+}
 
-  if(changed) save();
+function checkVictoryTimers(){
+  let changed = false;
+  (state.matches || []).forEach(match => {
+    if(!match.victoryClaim || match.disputed || match.completed) return;
+    const elapsed = Date.now() - match.victoryClaim.at;
+    if(elapsed < VICTORY_TIMER_MS) return;
+
+    const claimant = match.victoryClaim.by;
+    const players = match.players || [];
+    const opponent = players.find(p => p !== claimant);
+    finalizeMatchResult(match, claimant, 'WIN', opponent, 'LOSS');
+    changed = true;
+  });
+  return changed;
+}
+
+function finalizeMatchResult(match, userA, resultA, userB, resultB){
+  match.results = match.results || {};
+  match.results[userA] = resultA;
+  if(userB) match.results[userB] = resultB;
+  match.victoryClaim = null;
+  match.disputed = false;
+  match.completed = true;
+
+  if(userA === state.username) applyMatchResultForMe(match, resultA);
+  if(userB === state.username) applyMatchResultForMe(match, resultB);
+
+  if(state.currentLobby === match.id) state.currentLobby = null;
+
+  pushMatchToCloud(match);
+}
+
+function declareResult(matchId, type){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+  const players = match.players || [];
+  const opponent = players.find(p => p !== state.username);
+
+  if(type === 'LOSS'){
+    finalizeMatchResult(match, state.username, 'LOSS', opponent, 'WIN');
+    save();
+    setPage("matches");
+    return;
+  }
+
+  // type === 'WIN'
+  if(match.victoryClaim && match.victoryClaim.by && match.victoryClaim.by !== state.username){
+    match.disputed = true;
+    toast("Vous avez tous les deux déclaré la victoire — envoyez une preuve pour résoudre le litige.");
+    pushMatchToCloud(match);
+    render();
+    return;
+  }
+
+  if(match.victoryClaim && match.victoryClaim.by === state.username){
+    toast("Tu as déjà déclaré ta victoire, en attente de l'adversaire.");
+    return;
+  }
+
+  match.victoryClaim = { by: state.username, at: Date.now() };
+  toast("Victoire déclarée ! Ton adversaire a 15 minutes pour réagir, sinon c'est confirmé automatiquement.");
+  pushMatchToCloud(match);
+  render();
+}
+
+function uploadProof(matchId, inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    const img = new Image();
+    img.onload = function(){
+      const maxW = 700;
+      const scale = Math.min(1, maxW / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+
+      const match = state.matches.find(m => m.id === matchId);
+      if(!match) return;
+      match.proofs = match.proofs || {};
+      match.proofs[state.username] = dataUrl;
+      pushMatchToCloud(match);
+      render();
+      toast("Preuve envoyée !");
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderResultSection(lobby){
+  const players = lobby.players || [];
+  const opponent = players.find(p => p !== state.username);
+
+  if(lobby.completed){
+    const myResult = (lobby.results || {})[state.username];
+    if(!myResult) return "";
+    const win = myResult === "WIN";
+    return `
+      <div style="padding:20px; background:${win ? 'rgba(0,255,136,.06)' : 'rgba(255,71,87,.06)'}; border-top:1px solid var(--line); text-align:center;">
+        <h3 style="color:${win ? 'var(--green)' : 'var(--red)'}; margin-bottom:6px;">${win ? '🏆 Victoire enregistrée' : '❌ Défaite enregistrée'}</h3>
+        <p style="color:var(--muted); font-size:11px;">Ce match est terminé.</p>
+      </div>
+    `;
+  }
+
+  if(lobby.disputed){
+    const myProof = (lobby.proofs || {})[state.username];
+    const oppProof = opponent ? (lobby.proofs || {})[opponent] : null;
+    return `
+      <div style="padding:20px; background:rgba(255,171,64,.06); border-top:1px solid var(--line); text-align:center;">
+        <h3 style="color:#ffab40; margin-bottom:6px;">⚠️ Litige — Vous avez tous les deux déclaré la victoire</h3>
+        <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Envoyez une capture d'écran du score pour appuyer votre déclaration. Un modérateur tranchera.</p>
+        <div style="display:flex; gap:20px; justify-content:center; flex-wrap:wrap;">
+          <div style="width:220px;">
+            <div style="font-size:9px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Ta preuve</div>
+            ${myProof ? `<img src="${myProof}" style="width:100%; border-radius:10px; border:1px solid var(--line);">` : `
+              <label class="btn" style="cursor:pointer; display:block;">
+                📷 Envoyer une preuve
+                <input type="file" accept="image/*" style="display:none;" onchange="uploadProof('${lobby.id}', this)">
+              </label>
+            `}
+          </div>
+          <div style="width:220px;">
+            <div style="font-size:9px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Preuve adverse</div>
+            ${oppProof ? `<img src="${oppProof}" style="width:100%; border-radius:10px; border:1px solid var(--line);">` : `<div style="color:var(--muted2); font-size:10px; padding:20px 0;">En attente...</div>`}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if(lobby.victoryClaim){
+    const remainingMs = Math.max(0, VICTORY_TIMER_MS - (Date.now() - lobby.victoryClaim.at));
+    const remainingMin = Math.ceil(remainingMs / 60000);
+    const isClaimant = lobby.victoryClaim.by === state.username;
+
+    if(isClaimant){
+      return `
+        <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
+          <h3 style="color:#fff; margin-bottom:6px;">🕒 Victoire déclarée — en attente de confirmation</h3>
+          <p style="color:var(--muted); font-size:11px;">Confirmation automatique dans ${remainingMin} min si ton adversaire ne réagit pas.</p>
+        </div>
+      `;
+    }
+
+    return `
+      <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
+        <h3 style="color:#fff; margin-bottom:6px;">🕒 Ton adversaire a déclaré la victoire</h3>
+        <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Si tu ne réagis pas dans ${remainingMin} min, sa victoire sera confirmée automatiquement.</p>
+        <div style="display:flex; justify-content:center; gap:15px;">
+          <button class="btn danger" onclick="declareResult('${lobby.id}', 'LOSS')">Confirmer ma défaite</button>
+          <button class="btn green" onclick="declareResult('${lobby.id}', 'WIN')">Je conteste, j'ai gagné</button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
+      <h3 style="color:#fff; margin-bottom:10px;">Partie Verrouillée — Saisir le résultat</h3>
+      <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Une fois le match terminé sur Fortnite, indique le résultat ci-dessous. Si tu déclares une défaite, la victoire est immédiate pour l'adversaire. Si tu déclares une victoire, l'adversaire a 15 min pour réagir.</p>
+      <div style="display:flex; justify-content:center; gap:15px;">
+        <button class="btn green" onclick="declareResult('${lobby.id}', 'WIN')">🏆 J'ai Gagné (Victoire)</button>
+        <button class="btn danger" onclick="declareResult('${lobby.id}', 'LOSS')">❌ J'ai Perdu (Défaite)</button>
+      </div>
+    </div>
+  `;
 }
 
 /* STATE */
@@ -2043,7 +2228,6 @@ const MATCH_TTL_MS = 30 * 60 * 1000;
 
 function save(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if(!syncingFromRemote) syncMatchesToCloud();
   if(currentUid && db){
     db.collection("users").doc(currentUid).set({
       username: state.username,
@@ -2383,6 +2567,9 @@ function createMatch(){
     readies: {},
     results: {},
     processedBy: [],
+    victoryClaim: null,
+    disputed: false,
+    proofs: {},
     locked: false,
     completed: false,
     createdAt: Date.now()
@@ -2391,6 +2578,7 @@ function createMatch(){
   state.matches.unshift(newMatch);
   state.currentLobby = newMatch.id;
   save();
+  pushMatchToCloud(newMatch);
   closeCreateModal();
   toast("Match créé avec succès !");
   setPage("lobby");
@@ -2788,16 +2976,7 @@ function render(){
           ` : ''}
 
           <!-- SECTION RESULTATS EN FIN DE MATCH -->
-          ${lobby.locked ? `
-            <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
-              <h3 style="color:#fff; margin-bottom:10px;">Partie Verrouillée — Saisir le résultat</h3>
-              <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Une fois le match terminé sur Fortnite, indique le résultat ci-dessous.</p>
-              <div style="display:flex; justify-content:center; gap:15px;">
-                <button class="btn green" onclick="claimResult('${lobby.id}', 'WIN')">🏆 J'ai Gagné (Victoire)</button>
-                <button class="btn danger" onclick="claimResult('${lobby.id}', 'LOSS')">❌ J'ai Perdu (Défaite)</button>
-              </div>
-            </div>
-          ` : ''}
+          ${lobby.locked ? renderResultSection(lobby) : ''}
 
         </div>
       </div>
@@ -3067,6 +3246,7 @@ function quitMatch(id){
   state.matches = state.matches.filter(m => m.id !== id);
   if(state.currentLobby === id) state.currentLobby = null;
   save();
+  deleteMatchFromCloud(id);
   toast("Match quitté.");
   render();
 }
@@ -3106,6 +3286,7 @@ function executeJoin(match){
   match.opponentStats = {...state.stats};
   state.currentLobby = match.id;
   save();
+  pushMatchToCloud(match);
   toast("Tu as rejoint le match ! Identité masquée jusqu'à ce que vous soyez prêts.");
   setPage("lobby");
 }
@@ -3118,6 +3299,7 @@ function simulateOpponent(matchId){
   match.opponentStats = generateFakeStats();
   match.readies["Bot_Opponent"] = true;
   save();
+  pushMatchToCloud(match);
   toast("Un adversaire a rejoint le match ! Identité masquée pour l'instant.");
   render();
 }
@@ -3175,21 +3357,8 @@ function toggleReady(matchId){
   }
 
   save();
+  pushMatchToCloud(match);
   render();
-}
-
-function claimResult(matchId, type){
-  const match = state.matches.find(m => m.id === matchId);
-  if(!match) return;
-
-  match.results = match.results || {};
-  applyMatchResultForMe(match, type);
-  match.results[state.username] = type;
-
-  match.completed = true;
-  state.currentLobby = null;
-  save();
-  setPage("matches");
 }
 
 function leaveLobby(){
@@ -3198,9 +3367,11 @@ function leaveLobby(){
     toast("Impossible de quitter un match en cours !");
     return;
   }
+  const lobbyId = lobby ? lobby.id : null;
   if(lobby) state.matches = state.matches.filter(m => m.id !== lobby.id);
   state.currentLobby = null;
   save();
+  if(lobbyId) deleteMatchFromCloud(lobbyId);
   toast("Lobby quitté.");
   setPage("matches");
 }
