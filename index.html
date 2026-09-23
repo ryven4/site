@@ -1573,6 +1573,7 @@ button:active{ transform:scale(.97) !important; }
     <button data-page="tournaments"><span class="nav-icon">♛</span> Tournois</button>
     <button data-page="shop"><span class="nav-icon">🛍️</span> Boutique</button>
     <button data-page="settings"><span class="nav-icon">⚙</span> Paramètres</button>
+    <button data-page="moderation" id="navModeration" style="display:none;"><span class="nav-icon">🛡️</span> Modération</button>
   </nav>
 
   <div class="sidebar-bottom">
@@ -1983,6 +1984,27 @@ function initCloudSync(){
 ========================================================= */
 
 const VICTORY_TIMER_MS = 15 * 60 * 1000;
+
+/* =========================================================
+   MODÉRATION — comptes autorisés à résoudre les litiges
+========================================================= */
+const ADMIN_USERNAMES = ["Ryven"];
+function isAdmin(){
+  return ADMIN_USERNAMES.includes(state.username);
+}
+
+function resolveDispute(matchId, winnerUsername){
+  if(!isAdmin()) return;
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+  const players = match.players || [];
+  const loserUsername = players.find(p => p !== winnerUsername);
+  if(!loserUsername) return;
+
+  finalizeMatchResult(match, winnerUsername, 'WIN', loserUsername, 'LOSS');
+  toast("Litige résolu : victoire attribuée à " + winnerUsername);
+  render();
+}
 
 function formatCountdown(ms){
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -2555,7 +2577,7 @@ function toast(msg){
 }
 
 function pageTitle(page){
-  const titles = { home:"Accueil", matches:"Matchs", lobby:"Lobby", roue:"Roue", profile:"Profil", ranking:"Classement", tournaments:"Tournois", shop:"Boutique", settings:"Paramètres" };
+  const titles = { home:"Accueil", matches:"Matchs", lobby:"Lobby", roue:"Roue", profile:"Profil", ranking:"Classement", tournaments:"Tournois", shop:"Boutique", settings:"Paramètres", moderation:"Modération" };
   return titles[page] || "Accueil";
 }
 
@@ -2710,6 +2732,9 @@ function renderHeaderUI(){
 
   const coinEl = document.getElementById("topCoins");
   if(coinEl) coinEl.textContent = state.coins;
+
+  const modNav = document.getElementById("navModeration");
+  if(modNav) modNav.style.display = isAdmin() ? "" : "none";
 }
 
 function render(){
@@ -3308,6 +3333,68 @@ function render(){
         </div>
       </div>
     `;
+  }
+
+  else if(currentPage === "moderation"){
+    if(!isAdmin()){
+      container.innerHTML = `<div class="empty"><strong>Accès refusé</strong><span>Cette page est réservée aux modérateurs.</span></div>`;
+    } else {
+      const disputes = state.matches.filter(m => m.disputed && !m.completed);
+      const resolved = state.matches.filter(m => m.completed && m.proofs && Object.keys(m.proofs).length > 0).slice(0, 10);
+
+      container.innerHTML = `
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">🛡️ Litiges en attente (${disputes.length})</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:18px;">Les deux joueurs ont déclaré la victoire. Compare les preuves et tranche manuellement.</p>
+
+          ${disputes.length === 0 ? `
+            <div style="color:var(--muted2); font-size:11px; text-align:center; padding:20px;">Aucun litige en cours. 🎉</div>
+          ` : disputes.map(m => {
+            const players = m.players || [];
+            const guest = players.find(p => p !== m.host);
+            const hostProof = (m.proofs || {})[m.host];
+            const guestProof = guest ? (m.proofs || {})[guest] : null;
+            return `
+              <div style="border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; background:var(--panel2);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                  <div>
+                    <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode)} — ${escapeHTML(m.teamSize)}</strong>
+                    <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${m.id}</div>
+                  </div>
+                </div>
+                <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                  <div style="flex:1; min-width:220px;">
+                    <div style="font-size:9px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Host — ${escapeHTML(m.host)}</div>
+                    ${hostProof ? `<img src="${hostProof}" style="width:100%; border-radius:10px; border:1px solid var(--line); margin-bottom:10px;">` : `<div style="color:var(--muted2); font-size:10px; padding:20px 0; text-align:center;">Pas de preuve envoyée</div>`}
+                    <button class="btn green" style="width:100%;" onclick="resolveDispute('${m.id}', '${escapeHTML(m.host)}')">Victoire pour ${escapeHTML(m.host)}</button>
+                  </div>
+                  <div style="flex:1; min-width:220px;">
+                    <div style="font-size:9px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Guest — ${escapeHTML(guest || "—")}</div>
+                    ${guestProof ? `<img src="${guestProof}" style="width:100%; border-radius:10px; border:1px solid var(--line); margin-bottom:10px;">` : `<div style="color:var(--muted2); font-size:10px; padding:20px 0; text-align:center;">Pas de preuve envoyée</div>`}
+                    <button class="btn green" style="width:100%;" onclick="resolveDispute('${m.id}', '${escapeHTML(guest || "")}')" ${guest ? '' : 'disabled'}>Victoire pour ${escapeHTML(guest || "—")}</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+
+        ${resolved.length > 0 ? `
+          <div class="setting-card" style="padding:20px;">
+            <h3 style="margin-bottom:15px; font-size:14px;">Historique des litiges résolus</h3>
+            ${resolved.map(m => {
+              const winner = Object.entries(m.results || {}).find(([, r]) => r === 'WIN');
+              return `
+                <div class="stats-history-row">
+                  <div><span class="stats-history-mode">${escapeHTML(m.mode)}</span><span class="stats-history-meta">${escapeHTML(m.teamSize)} · ${m.id}</span></div>
+                  <span class="stats-history-result win">Gagné par ${escapeHTML(winner ? winner[0] : "—")}</span>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        ` : ''}
+      `;
+    }
   }
 
   else {
