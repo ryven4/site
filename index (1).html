@@ -1452,6 +1452,41 @@ button:active{ transform:scale(.97) !important; }
 <!-- Firebase (base de données partagée pour les matchs en temps réel) -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+
+<style>
+.auth-screen{
+  position:fixed;
+  inset:0;
+  z-index:500;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+  background:radial-gradient(circle at 30% 20%, rgba(0,255,136,.08), transparent 50%), var(--bg);
+}
+.auth-screen.open{ display:flex; }
+
+.auth-card{
+  width:100%;
+  max-width:380px;
+  padding:28px;
+  border-radius:16px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+
+.auth-logo-text{ text-align:center; font-size:21px; font-weight:950; letter-spacing:-.5px; color:#fff; margin-bottom:22px; }
+.auth-logo-text span{ color:var(--green); text-shadow:0 0 10px rgba(0,255,136,.4); }
+
+.auth-tabs{ display:flex; gap:6px; padding:4px; border:1px solid var(--line); border-radius:10px; background:var(--bg); margin-bottom:18px; }
+.auth-tab{ flex:1; height:36px; border:0; border-radius:7px; background:transparent; color:var(--muted); font-size:11px; font-weight:800; }
+.auth-tab.active{ color:#040906; background:linear-gradient(135deg,var(--green),var(--cyan)); }
+
+.auth-card .form-group{ margin-bottom:14px; }
+.auth-error{ margin-top:10px; font-size:10px; color:var(--red); text-align:center; min-height:14px; }
+</style>
 </head>
 
 <body>
@@ -1463,7 +1498,48 @@ button:active{ transform:scale(.97) !important; }
   <div class="bg-orb o4"></div>
 </div>
 
-<div class="app">
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo-text">PRIME <span>TOKEN</span></div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="authTabLogin" onclick="setAuthTab('login')">Connexion</button>
+      <button class="auth-tab" id="authTabSignup" onclick="setAuthTab('signup')">Créer un compte</button>
+    </div>
+
+    <div id="authLoginForm">
+      <div class="form-group full">
+        <label>Email</label>
+        <input class="input" type="email" id="loginEmail" placeholder="ton@email.com">
+      </div>
+      <div class="form-group full">
+        <label>Mot de passe</label>
+        <input class="input" type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <button class="btn green" style="width:100%; margin-top:6px;" onclick="doLogin()">Se connecter</button>
+      <div class="auth-error" id="loginError"></div>
+    </div>
+
+    <div id="authSignupForm" style="display:none;">
+      <div class="form-group full">
+        <label>Pseudo</label>
+        <input class="input" type="text" id="signupUsername" placeholder="TonPseudo" maxlength="18">
+      </div>
+      <div class="form-group full">
+        <label>Email</label>
+        <input class="input" type="email" id="signupEmail" placeholder="ton@email.com">
+      </div>
+      <div class="form-group full">
+        <label>Mot de passe</label>
+        <input class="input" type="password" id="signupPassword" placeholder="6 caractères minimum">
+      </div>
+      <button class="btn green" style="width:100%; margin-top:6px;" onclick="doSignup()">Créer mon compte</button>
+      <div class="auth-error" id="signupError"></div>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="appRoot" style="display:none;">
 
 <aside class="sidebar">
 
@@ -1822,12 +1898,15 @@ const firebaseConfig = {
 };
 
 let db = null;
+let auth = null;
 let cloudReady = false;
 let syncingFromRemote = false;
+let currentUid = null;
 
 try{
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  auth = firebase.auth();
 } catch(e){
   console.warn("Firebase indisponible, mode local uniquement.", e);
 }
@@ -1854,17 +1933,81 @@ function initCloudSync(){
     state.matches = data.matches;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     syncingFromRemote = false;
+    processIncomingMatchResults();
     render();
   }, function(err){
     console.warn("Erreur d'écoute Firestore :", err);
   });
 }
 
+/* =========================================================
+   RÉSULTATS DE MATCH AUTOMATIQUES
+   Quand un joueur déclare son résultat, l'adversaire reçoit
+   automatiquement le résultat inverse dès que son client
+   reçoit la mise à jour — plus besoin que les deux déclarent.
+========================================================= */
+
+function applyMatchResultForMe(match, type){
+  match.processedBy = match.processedBy || [];
+  if(match.processedBy.includes(state.username)) return false;
+  match.processedBy.push(state.username);
+
+  state.stats.played += 1;
+  if(type === 'WIN'){
+    state.stats.wins += 1;
+    state.stats.streak = (state.stats.streak || 0) + 1;
+    if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
+    state.coins = (state.coins || 0) + 30;
+    toast("Victoire enregistrée ! +1 Win · +30 coins");
+  } else {
+    state.stats.losses += 1;
+    state.stats.streak = 0;
+    state.coins = (state.coins || 0) + 5;
+    toast("Défaite enregistrée. +5 coins");
+  }
+
+  state.history.unshift({
+    mode: match.mode,
+    teamSize: match.teamSize,
+    result: type,
+    date: Date.now()
+  });
+
+  return true;
+}
+
+function processIncomingMatchResults(){
+  let changed = false;
+
+  (state.matches || []).forEach(match => {
+    if(!match.results) return;
+    const players = match.players || [];
+    if(!players.includes(state.username)) return;
+    if(match.results[state.username]) return;
+
+    const processedBy = match.processedBy || [];
+    if(processedBy.includes(state.username)) return;
+
+    const opponentEntry = Object.entries(match.results).find(([name]) => name !== state.username);
+    if(!opponentEntry) return;
+
+    const opponentResult = opponentEntry[1];
+    const myAutoResult = opponentResult === 'WIN' ? 'LOSS' : 'WIN';
+
+    if(applyMatchResultForMe(match, myAutoResult)){
+      match.results[state.username] = myAutoResult;
+      changed = true;
+    }
+  });
+
+  if(changed) save();
+}
+
 /* STATE */
 const STORAGE_KEY = "primeTokenV11";
 
 let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {
-  username:"Player",
+  username: "Player" + Math.floor(1000 + Math.random() * 9000),
   epic:"",
   matches:[],
   currentLobby:null,
@@ -1901,6 +2044,17 @@ const MATCH_TTL_MS = 30 * 60 * 1000;
 function save(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if(!syncingFromRemote) syncMatchesToCloud();
+  if(currentUid && db){
+    db.collection("users").doc(currentUid).set({
+      username: state.username,
+      epic: state.epic,
+      stats: state.stats,
+      coins: state.coins,
+      ownedAvatars: state.ownedAvatars,
+      equippedAvatar: state.equippedAvatar,
+      history: state.history
+    }, { merge:true }).catch(err => console.warn("Erreur sauvegarde profil :", err));
+  }
 }
 
 function escapeHTML(val){
@@ -2227,6 +2381,8 @@ function createMatch(){
     status: "OPEN",
     players: [state.username],
     readies: {},
+    results: {},
+    processedBy: [],
     locked: false,
     completed: false,
     createdAt: Date.now()
@@ -2861,14 +3017,19 @@ function render(){
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">Paramètres du Profil</h3>
           <div class="form-group" style="margin-bottom:12px;">
-            <label>Nom d'utilisateur</label>
-            <input type="text" class="input" id="settingUsername" value="${escapeHTML(state.username)}">
+            <label>Nom d'utilisateur (lié à ton compte)</label>
+            <input type="text" class="input" id="settingUsername" value="${escapeHTML(state.username)}" disabled style="opacity:.6; cursor:not-allowed;">
           </div>
           <div class="form-group" style="margin-bottom:15px;">
             <label>Pseudo Epic Games</label>
             <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Ton Pseudo Epic">
           </div>
           <button class="btn green" onclick="saveSettings()">Sauvegarder</button>
+        </div>
+        <div class="setting-card" style="padding:20px;">
+          <h3 style="margin-bottom:15px; font-size:14px;">Compte</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Connecté avec : ${escapeHTML((auth && auth.currentUser && auth.currentUser.email) || "—")}</p>
+          <button class="btn danger" onclick="logout()">Se déconnecter</button>
         </div>
       </div>
     `;
@@ -3021,26 +3182,9 @@ function claimResult(matchId, type){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
 
-  state.stats.played += 1;
-  if(type === 'WIN'){
-    state.stats.wins += 1;
-    state.stats.streak = (state.stats.streak || 0) + 1;
-    if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
-    state.coins = (state.coins || 0) + 30;
-    toast("Victoire enregistrée ! +1 Win · +30 coins");
-  } else {
-    state.stats.losses += 1;
-    state.stats.streak = 0;
-    state.coins = (state.coins || 0) + 5;
-    toast("Défaite enregistrée. +5 coins");
-  }
-
-  state.history.unshift({
-    mode: match.mode,
-    teamSize: match.teamSize,
-    result: type,
-    date: Date.now()
-  });
+  match.results = match.results || {};
+  applyMatchResultForMe(match, type);
+  match.results[state.username] = type;
 
   match.completed = true;
   state.currentLobby = null;
@@ -3162,10 +3306,7 @@ function applyPendingAvatar(){
 }
 
 function saveSettings(){
-  const u = document.getElementById("settingUsername").value.trim();
   const e = document.getElementById("settingEpic").value.trim();
-  if(!u){ toast("Nom d'utilisateur requis !"); return; }
-  state.username = u;
   state.epic = e;
   save();
   toast("Sauvegardé !");
@@ -3173,8 +3314,128 @@ function saveSettings(){
 }
 
 
-render();
-initCloudSync();
+/* =========================================================
+   COMPTE — connexion / inscription (Firebase Authentication)
+========================================================= */
+
+function setAuthTab(tab){
+  document.getElementById("authTabLogin").classList.toggle("active", tab === "login");
+  document.getElementById("authTabSignup").classList.toggle("active", tab === "signup");
+  document.getElementById("authLoginForm").style.display = tab === "login" ? "block" : "none";
+  document.getElementById("authSignupForm").style.display = tab === "signup" ? "block" : "none";
+}
+
+function showAuthScreen(){
+  document.getElementById("authScreen").classList.add("open");
+  document.getElementById("appRoot").style.display = "none";
+}
+
+function hideAuthScreen(){
+  document.getElementById("authScreen").classList.remove("open");
+  document.getElementById("appRoot").style.display = "";
+}
+
+function firebaseAuthErrorMessage(e){
+  const code = e && e.code;
+  if(code === "auth/email-already-in-use") return "Cet email est déjà utilisé.";
+  if(code === "auth/invalid-email") return "Email invalide.";
+  if(code === "auth/weak-password") return "Mot de passe trop faible (6 caractères min).";
+  if(code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") return "Email ou mot de passe incorrect.";
+  return "Erreur : " + (e && e.message ? e.message : "inconnue");
+}
+
+async function doSignup(){
+  const username = document.getElementById("signupUsername").value.trim();
+  const email = document.getElementById("signupEmail").value.trim();
+  const password = document.getElementById("signupPassword").value;
+  const errEl = document.getElementById("signupError");
+  errEl.textContent = "";
+
+  if(!username || username.length < 3){ errEl.textContent = "Pseudo trop court (3 caractères min)."; return; }
+  if(!email || !password || password.length < 6){ errEl.textContent = "Email et mot de passe (6 caractères min) requis."; return; }
+  if(!db || !auth){ errEl.textContent = "Service indisponible pour le moment."; return; }
+
+  try{
+    const existing = await db.collection("users").where("username", "==", username).limit(1).get();
+    if(!existing.empty){ errEl.textContent = "Ce pseudo est déjà pris."; return; }
+
+    const cred = await auth.createUserWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+
+    const profile = {
+      username,
+      epic: "",
+      stats: { played:0, wins:0, losses:0, streak:0, bestStreak:0 },
+      coins: 500,
+      ownedAvatars: ["default"],
+      equippedAvatar: "default",
+      history: [],
+      joinedAt: Date.now()
+    };
+    await db.collection("users").doc(uid).set(profile);
+  } catch(e){
+    errEl.textContent = firebaseAuthErrorMessage(e);
+  }
+}
+
+async function doLogin(){
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const errEl = document.getElementById("loginError");
+  errEl.textContent = "";
+
+  if(!email || !password){ errEl.textContent = "Email et mot de passe requis."; return; }
+  if(!auth){ errEl.textContent = "Service indisponible pour le moment."; return; }
+
+  try{
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch(e){
+    errEl.textContent = firebaseAuthErrorMessage(e);
+  }
+}
+
+function logout(){
+  if(auth) auth.signOut();
+}
+
+async function loadProfileAndStart(uid){
+  currentUid = uid;
+
+  try{
+    const docSnap = await db.collection("users").doc(uid).get();
+    if(docSnap.exists){
+      const profile = docSnap.data();
+      state.username = profile.username || state.username;
+      state.epic = profile.epic || "";
+      state.stats = profile.stats || state.stats;
+      state.coins = (profile.coins !== undefined) ? profile.coins : state.coins;
+      state.ownedAvatars = profile.ownedAvatars || state.ownedAvatars;
+      state.equippedAvatar = profile.equippedAvatar || state.equippedAvatar;
+      state.history = profile.history || state.history;
+    }
+  } catch(e){
+    console.warn("Impossible de charger le profil :", e);
+  }
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  hideAuthScreen();
+  render();
+  initCloudSync();
+}
+
+if(auth){
+  auth.onAuthStateChanged(function(user){
+    if(user){
+      loadProfileAndStart(user.uid);
+    } else {
+      currentUid = null;
+      showAuthScreen();
+    }
+  });
+} else {
+  render();
+  initCloudSync();
+}
 
 </script>
 </body>
