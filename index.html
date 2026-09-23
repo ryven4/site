@@ -1448,6 +1448,10 @@ button:active{ transform:scale(.97) !important; }
   .rank-list-row span:nth-child(4), .rank-list-row span:nth-child(5), .rank-list-row span:nth-child(6){ display:none; }
 }
 </style>
+
+<!-- Firebase (base de données partagée pour les matchs en temps réel) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 </head>
 
 <body>
@@ -1803,6 +1807,59 @@ button:active{ transform:scale(.97) !important; }
 
 <script>
 
+/* =========================================================
+   FIREBASE — base de données partagée (matchs en temps réel)
+========================================================= */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyClpnUE33chIuKZfaZO7P91tZsdzcRYRPQ",
+  authDomain: "prime-token.firebaseapp.com",
+  projectId: "prime-token",
+  storageBucket: "prime-token.firebasestorage.app",
+  messagingSenderId: "540806522840",
+  appId: "1:540806522840:web:7e3e1761711378f5eef4ad",
+  measurementId: "G-97K7YBBKQV"
+};
+
+let db = null;
+let cloudReady = false;
+let syncingFromRemote = false;
+
+try{
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+} catch(e){
+  console.warn("Firebase indisponible, mode local uniquement.", e);
+}
+
+function syncMatchesToCloud(){
+  if(!db) return;
+  db.collection("matches").doc("shared").set({
+    matches: state.matches,
+    updatedAt: Date.now(),
+    updatedBy: state.username
+  }).catch(err => console.warn("Erreur de synchronisation :", err));
+}
+
+function initCloudSync(){
+  if(!db) return;
+  db.collection("matches").doc("shared").onSnapshot(function(docSnap){
+    cloudReady = true;
+    if(!docSnap.exists) return;
+    const data = docSnap.data();
+    if(!data || !Array.isArray(data.matches)) return;
+    if(data.updatedBy === state.username && data.updatedAt && (Date.now() - data.updatedAt) < 1500) return;
+
+    syncingFromRemote = true;
+    state.matches = data.matches;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    syncingFromRemote = false;
+    render();
+  }, function(err){
+    console.warn("Erreur d'écoute Firestore :", err);
+  });
+}
+
 /* STATE */
 const STORAGE_KEY = "primeTokenV11";
 
@@ -1843,6 +1900,7 @@ const MATCH_TTL_MS = 30 * 60 * 1000;
 
 function save(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if(!syncingFromRemote) syncMatchesToCloud();
 }
 
 function escapeHTML(val){
@@ -3116,6 +3174,7 @@ function saveSettings(){
 
 
 render();
+initCloudSync();
 
 </script>
 </body>
