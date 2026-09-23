@@ -517,7 +517,7 @@ button:active{ transform:scale(.97) !important; }
 
 .hero{
   position:relative;
-  min-height:380px;
+  min-height:calc(100vh - 200px);
   overflow:hidden;
   padding:45px;
   display:flex;
@@ -2134,7 +2134,13 @@ function applyPendingResultsForMe(){
     if(!myResult) return;
     const processedBy = match.processedBy || [];
     if(processedBy.includes(state.username)) return;
-    if(applyMatchResultForMe(match, myResult)) changed = true;
+    if(applyMatchResultForMe(match, myResult)){
+      changed = true;
+      // Très important : on renvoie processedBy vers Firestore tout de suite,
+      // sinon un simple refresh recharge l'ancien match (sans notre nom dedans)
+      // et le résultat serait réappliqué à chaque fois (coins/victoires en boucle).
+      pushMatchToCloud(match);
+    }
   });
   return changed;
 }
