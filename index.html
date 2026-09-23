@@ -638,14 +638,24 @@ button:active{ transform:scale(.97) !important; }
 .hero-card-row strong{ color:#fff; }
 
 .home-grid{
-  display:grid;
-  grid-template-columns:1.2fr 1fr;
-  gap:18px;
   margin-top:20px;
-  align-items:stretch;
+  margin-right:418px;
 }
 
-.home-chat-panel{ display:flex; flex-direction:column; min-height:calc(100vh - 200px); }
+.home-chat-panel{
+  display:flex;
+  flex-direction:column;
+  position:fixed;
+  top:70px;
+  right:0;
+  bottom:0;
+  width:400px;
+  border-radius:0;
+  border-top:0;
+  border-right:0;
+  border-bottom:0;
+  z-index:15;
+}
 .home-chat-panel .panel-body{ flex:1; display:flex; min-height:0; }
 
 .home-hero-stats{ margin-top:22px; max-width:320px; }
@@ -1437,8 +1447,9 @@ button:active{ transform:scale(.97) !important; }
   .sidebar{ width:210px; }
   .main{ margin-left:210px; }
   .hero-side{ display:none; }
-  .home-grid, .lobby-layout{ grid-template-columns:1fr; }
-  .home-chat-panel{ min-height:480px; }
+  .lobby-layout{ grid-template-columns:1fr; }
+  .home-grid{ margin-right:0; }
+  .home-chat-panel{ position:static; width:auto; min-height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
   .matches-list{ grid-template-columns:1fr 1fr; }
 }
 
