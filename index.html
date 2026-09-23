@@ -2501,10 +2501,24 @@ function getAvatar(id){
   return AVATAR_CATALOG.find(a => a.id === id) || AVATAR_CATALOG[0];
 }
 
-function avatarInnerHTML(id){
+function avatarInnerHTML(id, username){
   const a = getAvatar(id);
-  if(id === "default" || !a) return initials(state.username);
+  if(id === "default" || !a) return initials(username || state.username);
   return `<span style="filter:drop-shadow(0 0 6px rgba(0,0,0,.5));">${a.emoji}</span>`;
+}
+
+/* Live lookup of a player's public info (epic/stats/avatar) from the synced
+   users collection — works for any player in a match, not just yourself. */
+function playerLiveInfo(username){
+  if(username === state.username){
+    return { epic: state.epic || "", stats: state.stats, equippedAvatar: state.equippedAvatar };
+  }
+  const p = allPlayersCache.find(pl => pl.username === username);
+  return {
+    epic: (p && p.epic) || "",
+    stats: (p && p.stats) || { played:0, wins:0, losses:0, streak:0, bestStreak:0 },
+    equippedAvatar: (p && p.equippedAvatar) || "default"
+  };
 }
 
 function avatarStyleAttr(id){
@@ -3005,6 +3019,8 @@ function createMatch(){
     simpleEdit: simpleEditEnabled,
     status: "OPEN",
     players: [state.username],
+    hostPlayers: [state.username],
+    guestPlayers: [],
     readies: {},
     results: {},
     processedBy: [],
@@ -3308,13 +3324,20 @@ function render(){
       return;
     }
 
-    const isHost = (lobby.host === state.username);
-    const hasOpponent = (lobby.players.length > 1);
-    const guestUsername = hasOpponent ? lobby.players.find(p => p !== lobby.host) : null;
-    const isGuest = hasOpponent && (state.username === guestUsername);
+    // Backward-compat: older matches only had a single `players` array.
+    const hostPlayers = lobby.hostPlayers || [lobby.host];
+    const guestPlayers = lobby.guestPlayers || (lobby.players || []).filter(p => p !== lobby.host);
+
+    const maxPerSide = TEAM_SIZE_MAX[lobby.teamSize] || 1;
+    const isHost = hostPlayers.includes(state.username);
+    const isGuest = guestPlayers.includes(state.username);
+    const hasOpponent = guestPlayers.length > 0;
+    const hostFull = hostPlayers.length >= maxPerSide;
+    const guestFull = guestPlayers.length >= maxPerSide;
+    const allPlayers = [...hostPlayers, ...guestPlayers];
+    const bothReady = hostFull && guestFull && allPlayers.length > 0 && allPlayers.every(p => lobby.readies && lobby.readies[p]);
 
     const userReady = lobby.readies && lobby.readies[state.username];
-    const bothReady = hasOpponent && lobby.readies && Object.keys(lobby.readies).length >= 2 && Object.values(lobby.readies).every(Boolean);
 
     const stepIndex = !hasOpponent ? 0 : (!lobby.locked ? 1 : 2);
     const steps = ["Waiting", "Ready?", "Result"];
@@ -3322,6 +3345,33 @@ function render(){
     const createdLabel = lobby.createdAt
       ? new Date(lobby.createdAt).toLocaleDateString("en-US", { day:"numeric", month:"long", year:"numeric" })
       : "—";
+
+    const renderPlayerRow = (username) => {
+      const isMe = username === state.username;
+      const revealed = isMe || bothReady;
+      const info = playerLiveInfo(username);
+      const readyBool = lobby.readies && lobby.readies[username];
+      return `
+        <div class="player-row">
+          <div class="avatar ${revealed ? 'clickable' : ''}" ${revealed ? `onclick="showPlayerStats('${username}')"` : ''} ${revealed ? `style="${avatarStyleAttr(isMe ? state.equippedAvatar : info.equippedAvatar)}"` : ''}>${revealed ? avatarInnerHTML(isMe ? state.equippedAvatar : info.equippedAvatar, username) : "?"}</div>
+          <div class="player-row-info">
+            <div class="slot-name-row">
+              <div class="slot-name">${revealed ? escapeHTML(username) : "Hidden Player"}</div>
+            </div>
+            <div class="slot-epic">${revealed ? "Epic: " + escapeHTML(info.epic || "Not set") : "Identity hidden"}</div>
+            <div class="player-row-status">
+              <span class="status-pill ${readyBool ? 'ready' : 'waiting'}">${readyBool ? "Ready" : "Not ready"}</span>
+            </div>
+          </div>
+          ${revealed ? `<button class="stats-icon-btn" onclick="showPlayerStats('${username}')" title="View stats">📊</button>` : ''}
+        </div>
+      `;
+    };
+
+    const renderEmptySlot = () => `<div class="player-row" style="color:var(--muted2); font-size:10px; justify-content:center;">Waiting for a player...</div>`;
+
+    const hostSlotsHTML = Array.from({ length: maxPerSide }, (_, i) => hostPlayers[i] ? renderPlayerRow(hostPlayers[i]) : renderEmptySlot()).join("");
+    const guestSlotsHTML = Array.from({ length: maxPerSide }, (_, i) => guestPlayers[i] ? renderPlayerRow(guestPlayers[i]) : renderEmptySlot()).join("");
 
     container.innerHTML = `
       <div class="lobby-layout">
@@ -3363,34 +3413,22 @@ function render(){
 
             <div class="team-card">
               <div class="team-card-head">
-                <span>HOST</span>
-                <span class="team-card-tag">TEAM</span>
+                <span>HOST${maxPerSide > 1 ? ` (${hostPlayers.length}/${maxPerSide})` : ''}</span>
+                <span class="team-card-tag">${lobby.team ? escapeHTML(lobby.team.name) : 'TEAM'}</span>
               </div>
-              <div class="player-row">
-                <div class="avatar ${(isHost || bothReady) ? 'clickable' : ''}" ${(isHost || bothReady) ? `onclick="showPlayerStats('host')"` : ''} ${isHost ? `style="${avatarStyleAttr(state.equippedAvatar)}"` : ''}>${isHost ? avatarInnerHTML(state.equippedAvatar) : ((isHost || bothReady) ? initials(lobby.host) : "?")}</div>
-                <div class="player-row-info">
-                  <div class="slot-name-row">
-                    <div class="slot-name">${(isHost || bothReady) ? escapeHTML(lobby.host) : "Hidden Player"}</div>
-                  </div>
-                  <div class="slot-epic">${(isHost || bothReady) ? "Epic: " + escapeHTML(lobby.hostEpic || "Not set") : "Identity hidden"}</div>
-                  <div class="player-row-status">
-                    <span class="status-pill ${lobby.readies && lobby.readies[lobby.host] ? 'ready' : 'waiting'}">${lobby.readies && lobby.readies[lobby.host] ? "Ready" : "Not ready"}</span>
-                  </div>
-                </div>
-                ${(isHost || bothReady) ? `<button class="stats-icon-btn" onclick="showPlayerStats('host')" title="View stats">📊</button>` : ''}
-              </div>
+              ${hostSlotsHTML}
             </div>
 
             <div class="lobby-center">
               <div class="vs-badge">VS</div>
 
-              ${(hasOpponent && !lobby.locked) ? `
+              ${((isHost || isGuest) && !lobby.locked) ? `
                 <button class="btn ${userReady ? 'danger' : 'green'}" onclick="toggleReady('${lobby.id}')">
                   ${userReady ? 'Cancel Ready' : 'READY UP'}
                 </button>
               ` : ''}
 
-              ${(!hasOpponent && isHost) ? `
+              ${(!guestFull && isHost) ? `
                 <button class="btn" onclick="simulateOpponent('${lobby.id}')">🤖 Simulate an Opponent</button>
               ` : ''}
 
@@ -3409,32 +3447,16 @@ function render(){
               <div class="game-info-box">
                 <div class="game-info-row"><span>Status</span><strong>${lobby.locked ? "Locked" : (hasOpponent ? "Ready?" : "Waiting")}</strong></div>
                 <div class="game-info-row"><span>Host</span><strong>${escapeHTML(lobby.host)}</strong></div>
-                <div class="game-info-row"><span>Guest</span><strong>${hasOpponent ? escapeHTML(guestUsername) : "—"}</strong></div>
+                <div class="game-info-row"><span>Guests</span><strong>${hasOpponent ? guestPlayers.length : 0}/${maxPerSide}</strong></div>
               </div>
             </div>
 
             <div class="team-card guest">
               <div class="team-card-head">
-                <span>GUEST</span>
+                <span>GUEST${maxPerSide > 1 ? ` (${guestPlayers.length}/${maxPerSide})` : ''}</span>
                 <span class="team-card-tag">TEAM</span>
               </div>
-              ${hasOpponent ? `
-                <div class="player-row">
-                  <div class="avatar ${(isGuest || bothReady) ? 'clickable' : ''}" ${(isGuest || bothReady) ? `onclick="showPlayerStats('guest')"` : ''} ${isGuest ? `style="${avatarStyleAttr(state.equippedAvatar)}"` : ''}>${isGuest ? avatarInnerHTML(state.equippedAvatar) : ((isGuest || bothReady) ? initials(guestUsername) : "?")}</div>
-                  <div class="player-row-info">
-                    <div class="slot-name-row">
-                      <div class="slot-name">${(isGuest || bothReady) ? escapeHTML(guestUsername) : "Hidden Player"}</div>
-                    </div>
-                    <div class="slot-epic">${(isGuest || bothReady) ? "Epic: " + escapeHTML(lobby.opponentEpic || "Not set") : "Identity hidden"}</div>
-                    <div class="player-row-status">
-                      <span class="status-pill ${lobby.readies && lobby.readies[guestUsername] ? 'ready' : 'waiting'}">${lobby.readies && lobby.readies[guestUsername] ? "Ready" : "Not ready"}</span>
-                    </div>
-                  </div>
-                  ${(isGuest || bothReady) ? `<button class="stats-icon-btn" onclick="showPlayerStats('guest')" title="View stats">📊</button>` : ''}
-                </div>
-              ` : `
-                <div class="player-row" style="color:var(--muted2); font-size:10px; justify-content:center;">Waiting for an opponent...</div>
-              `}
+              ${guestSlotsHTML}
             </div>
 
           </div>
@@ -4000,7 +4022,22 @@ function joinMatch(id){
   const match = state.matches.find(m => m.id === id);
   if(!match) return;
   if(match.host === state.username){ toast("You are the host of this match!"); return; }
-  if(match.players.length >= 2){ toast("Match full!"); return; }
+
+  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+  const hostPlayers = match.hostPlayers || [match.host];
+  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+
+  if(hostPlayers.includes(state.username) || guestPlayers.includes(state.username)){
+    toast("You're already in this match!");
+    return;
+  }
+
+  const onHostTeam = match.team && (match.team.members || []).includes(state.username);
+  if(onHostTeam){
+    if(hostPlayers.length >= maxPerSide){ toast("Your team's side is already full!"); return; }
+  } else {
+    if(guestPlayers.length >= maxPerSide){ toast("Match full!"); return; }
+  }
 
   if(match.visibility === "private"){
     targetJoinMatchId = id;
@@ -4026,23 +4063,43 @@ function confirmJoinPrivateMatch(){
 }
 
 function executeJoin(match){
-  match.players.push(state.username);
+  match.hostPlayers = match.hostPlayers || [match.host];
+  match.guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+
+  const onHostTeam = match.team && (match.team.members || []).includes(state.username);
+  if(onHostTeam){
+    match.hostPlayers.push(state.username);
+  } else {
+    match.guestPlayers.push(state.username);
+  }
+  match.players = [...match.hostPlayers, ...match.guestPlayers];
+
+  // Kept for backward compatibility with older display code; live data now
+  // comes from playerLiveInfo() instead of these snapshot fields.
   match.opponentEpic = state.epic || "N/A";
   match.opponentStats = {...state.stats};
+
   state.currentLobby = match.id;
   save();
   pushMatchToCloud(match);
-  toast("You joined the match! Identity hidden until you're both ready.");
+  toast(onHostTeam ? "You joined your team's match!" : "You joined the match! Identities stay hidden until everyone is ready.");
   setPage("lobby");
 }
 
 function simulateOpponent(matchId){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
-  match.players.push("Bot_Opponent");
-  match.opponentEpic = "BotOpponent_2024";
-  match.opponentStats = generateFakeStats();
-  match.readies["Bot_Opponent"] = true;
+  match.hostPlayers = match.hostPlayers || [match.host];
+  match.guestPlayers = match.guestPlayers || [];
+
+  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+  if(match.guestPlayers.length >= maxPerSide){ toast("Guest side is already full!"); return; }
+
+  const botName = "Bot_Opponent" + (match.guestPlayers.length + 1);
+  match.guestPlayers.push(botName);
+  match.players = [...match.hostPlayers, ...match.guestPlayers];
+  match.readies = match.readies || {};
+  match.readies[botName] = true;
   save();
   pushMatchToCloud(match);
   toast("An opponent joined the match! Identity hidden for now.");
@@ -4056,31 +4113,14 @@ function generateFakeStats(){
   return { played, wins, losses };
 }
 
-function showPlayerStats(role){
-  const lobby = state.matches.find(m => m.id === state.currentLobby);
-  if(!lobby) return;
-
-  const hasOpponent = (lobby.players.length > 1);
-  const guestUsername = hasOpponent ? lobby.players.find(p => p !== lobby.host) : null;
-
-  let name, epic, stats, isSelf;
-
-  if(role === "host"){
-    name = lobby.host;
-    epic = lobby.hostEpic;
-    isSelf = (state.username === lobby.host);
-    stats = isSelf ? state.stats : (lobby.hostStats || { played:0, wins:0, losses:0 });
-  } else {
-    name = guestUsername;
-    epic = lobby.opponentEpic;
-    isSelf = (state.username === guestUsername);
-    stats = isSelf ? state.stats : (lobby.opponentStats || { played:0, wins:0, losses:0 });
-  }
-
-  openStatsModal(name, epic, stats, {
+function showPlayerStats(username){
+  if(!username) return;
+  const info = playerLiveInfo(username);
+  const isSelf = username === state.username;
+  openStatsModal(username, info.epic, info.stats, {
     isSelf,
-    streak: isSelf ? (state.stats.streak || 0) : 0,
-    bestStreak: isSelf ? (state.stats.bestStreak || 0) : 0
+    streak: info.stats.streak || 0,
+    bestStreak: info.stats.bestStreak || 0
   });
 }
 
@@ -4089,15 +4129,21 @@ function toggleReady(matchId){
   if(!match) return;
   if(!match.readies) match.readies = {};
 
-  const wasBothReady = Object.keys(match.readies).length >= 2 && Object.values(match.readies).every(Boolean);
+  const hostPlayers = match.hostPlayers || [match.host];
+  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+  const allPlayers = [...hostPlayers, ...guestPlayers];
+
+  const isFullSquad = hostPlayers.length >= maxPerSide && guestPlayers.length >= maxPerSide && allPlayers.length > 0;
+  const wasAllReady = isFullSquad && allPlayers.every(p => match.readies[p]);
 
   match.readies[state.username] = !match.readies[state.username];
 
-  const isBothReadyNow = Object.keys(match.readies).length >= 2 && Object.values(match.readies).every(Boolean);
+  const isAllReadyNow = isFullSquad && allPlayers.every(p => match.readies[p]);
 
-  if(isBothReadyNow && !wasBothReady){
+  if(isAllReadyNow && !wasAllReady){
     match.locked = true;
-    toast("Both players are ready! Identities revealed — the match is LOCKED.");
+    toast("Everyone is ready! Identities revealed — the match is LOCKED.");
   }
 
   save();
