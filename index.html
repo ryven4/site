@@ -645,8 +645,8 @@ button:active{ transform:scale(.97) !important; }
   align-items:stretch;
 }
 
-.home-chat-panel{ display:flex; flex-direction:column; }
-.home-chat-panel .panel-body{ flex:1; display:flex; }
+.home-chat-panel{ display:flex; flex-direction:column; min-height:calc(100vh - 200px); }
+.home-chat-panel .panel-body{ flex:1; display:flex; min-height:0; }
 
 .home-hero-stats{ margin-top:22px; max-width:320px; }
 
@@ -819,7 +819,7 @@ button:active{ transform:scale(.97) !important; }
    CHAT
 ========================= */
 
-.chat-box{ height:300px; display:flex; flex-direction:column; flex:1; min-height:0; }
+.chat-box{ display:flex; flex-direction:column; flex:1; min-height:0; height:100%; }
 .chat-messages{ flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
 .chat-message{ display:flex; gap:10px; }
 .chat-avatar{ width:28px; height:28px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:7px; background:var(--panel3); border:1px solid var(--line); color:var(--green); font-size:9px; font-weight:900; }
@@ -1438,6 +1438,7 @@ button:active{ transform:scale(.97) !important; }
   .main{ margin-left:210px; }
   .hero-side{ display:none; }
   .home-grid, .lobby-layout{ grid-template-columns:1fr; }
+  .home-chat-panel{ min-height:480px; }
   .matches-list{ grid-template-columns:1fr 1fr; }
 }
 
