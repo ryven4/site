@@ -1783,10 +1783,25 @@ button:active{ transform:scale(.97) !important; }
         </div>
       </div>
 
+      <div class="form-group full" id="createTeamWrap" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label style="margin:0;">Team</label>
+          <a href="javascript:void(0)" onclick="goCreateTeamFromMatch()" style="color:var(--cyan); font-size:10px; font-weight:800; text-decoration:none;">Create a team</a>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn" style="width:42px; padding:0; flex:none;" onclick="renderCreateTeamOptions()" title="Refresh">🔄</button>
+          <select class="select" id="createTeamSelect" onchange="onCreateTeamSelectChange()" style="flex:1;"></select>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; font-weight:700; cursor:pointer;">
+          <input type="checkbox" id="coverBetCheckbox" style="width:16px; height:16px;">
+          I want cover bet for all members in my team
+        </label>
+      </div>
+
       <div class="form-group full">
         <label>Game Mode</label>
         <select class="select" id="createMode">
-          <option value="">Choisir un Game Mode</option>
+          <option value="">Choose a Game Mode</option>
           <option>Box Fight</option>
           <option>Build Fight</option>
           <option>Zone Wars</option>
@@ -2429,6 +2444,7 @@ if(!state.equippedAvatar) state.equippedAvatar = "default";
 let currentPage = "home";
 let createVisibility = "public";
 let selectedTeamSize = "1v1";
+let selectedTeamId = null;
 let selectedFirstTo = 1;
 let killLeadEnabled = false;
 let selectedKillLead = 1;
@@ -2852,7 +2868,10 @@ function setPage(page){
 document.querySelectorAll(".nav button").forEach(btn => btn.addEventListener("click", () => setPage(btn.dataset.page)));
 
 /* MODAL CONTROLS */
-function openCreateModal(){ document.getElementById("createOverlay").classList.add("open"); }
+function openCreateModal(){
+  document.getElementById("createOverlay").classList.add("open");
+  toggleCreateTeamWrap();
+}
 function closeCreateModal(){ document.getElementById("createOverlay").classList.remove("open"); }
 
 function setVisibility(v){
@@ -2866,6 +2885,48 @@ function setTeamSize(btn, size){
   btn.parentElement.querySelectorAll("button").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   selectedTeamSize = size;
+  toggleCreateTeamWrap();
+}
+
+function toggleCreateTeamWrap(){
+  const wrap = document.getElementById("createTeamWrap");
+  if(!wrap) return;
+  if(selectedTeamSize === "1v1"){
+    wrap.style.display = "none";
+    selectedTeamId = null;
+  } else {
+    wrap.style.display = "";
+    renderCreateTeamOptions();
+  }
+}
+
+function renderCreateTeamOptions(){
+  const select = document.getElementById("createTeamSelect");
+  if(!select) return;
+  const myTeams = teamsCache.filter(t => t.size === selectedTeamSize && (t.members || []).includes(state.username));
+
+  if(myTeams.length === 0){
+    select.innerHTML = `<option value="">No team available for ${selectedTeamSize}</option>`;
+    selectedTeamId = null;
+    return;
+  }
+
+  select.innerHTML = myTeams.map(t => `<option value="${t.id}">${escapeHTML(t.name)} (${(t.members || []).length}/${TEAM_SIZE_MAX[t.size] || '?'})</option>`).join("");
+  if(!myTeams.some(t => t.id === selectedTeamId)){
+    selectedTeamId = myTeams[0].id;
+  }
+  select.value = selectedTeamId;
+}
+
+function onCreateTeamSelectChange(){
+  const select = document.getElementById("createTeamSelect");
+  selectedTeamId = select ? select.value : null;
+}
+
+function goCreateTeamFromMatch(){
+  closeCreateModal();
+  setPage("teams");
+  openCreateTeamView();
 }
 
 function setFirstTo(btn, val){
@@ -2908,6 +2969,23 @@ function createMatch(){
     return;
   }
 
+  let matchTeam = null;
+  let coverBet = false;
+  if(selectedTeamSize !== "1v1"){
+    if(!selectedTeamId){
+      toast("Select a team for this team size (or create one)!");
+      return;
+    }
+    const team = teamsCache.find(t => t.id === selectedTeamId);
+    if(!team){
+      toast("This team no longer exists.");
+      return;
+    }
+    matchTeam = { id: team.id, name: team.name, members: team.members || [] };
+    const coverEl = document.getElementById("coverBetCheckbox");
+    coverBet = coverEl ? coverEl.checked : false;
+  }
+
   const newMatch = {
     id: "M-" + Math.floor(1000 + Math.random() * 9000),
     host: state.username,
@@ -2919,6 +2997,8 @@ function createMatch(){
     platform,
     weapon,
     teamSize: selectedTeamSize,
+    team: matchTeam,
+    coverBet,
     mode,
     firstTo: selectedFirstTo,
     killLead: killLeadEnabled ? selectedKillLead : null,
@@ -3265,6 +3345,8 @@ function render(){
             <div class="lobby-tag"><strong>${lobby.firstTo}</strong><span>First To</span></div>
             <div class="lobby-tag"><strong>${lobby.killLead ? lobby.killLead : "OFF"}</strong><span>Kill Lead</span></div>
             <div class="lobby-tag"><strong>${lobby.simpleEdit ? "ON" : "OFF"}</strong><span>Simple Edit</span></div>
+            ${lobby.team ? `<div class="lobby-tag"><strong>${escapeHTML(lobby.team.name)}</strong><span>Team</span></div>` : ''}
+            ${lobby.coverBet ? `<div class="lobby-tag"><strong style="color:var(--gold);">🪙 Host</strong><span>Covers Bet</span></div>` : ''}
           </div>
 
           <div class="lobby-stepper">
