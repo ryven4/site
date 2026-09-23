@@ -1000,8 +1000,21 @@ button:active{ transform:scale(.97) !important; }
    LOBBY
 ========================= */
 
-.lobby-layout{ display:grid; grid-template-columns:1fr; gap:18px; }
+.lobby-layout{ display:grid; grid-template-columns:1fr 320px; gap:18px; align-items:start; }
 .lobby-main{ border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; }
+
+.lobby-chat-panel{ border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; display:flex; flex-direction:column; height:600px; }
+.lobby-chat-head{ min-height:50px; padding:0 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); }
+.lobby-chat-head h3{ font-size:12px; color:#fff; font-weight:800; }
+.lobby-chat-head span{ font-size:8px; color:var(--green); font-weight:900; letter-spacing:1px; text-transform:uppercase; }
+.lobby-chat-messages{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
+.lobby-chat-msg{ display:flex; flex-direction:column; gap:2px; }
+.lobby-chat-msg.me{ align-items:flex-end; }
+.lobby-chat-msg-meta{ font-size:8px; color:var(--muted2); }
+.lobby-chat-msg-bubble{ max-width:85%; padding:8px 11px; border-radius:10px; background:var(--panel2); border:1px solid var(--line); font-size:11px; color:#e6edf3; line-height:1.4; }
+.lobby-chat-msg.me .lobby-chat-msg-bubble{ background:rgba(0,255,136,.1); border-color:rgba(0,255,136,.3); }
+.lobby-chat-form{ padding:12px; display:flex; gap:8px; border-top:1px solid var(--line); background:rgba(0,0,0,.2); }
+.lobby-chat-form input{ flex:1; min-width:0; height:38px; padding:0 12px; border:1px solid var(--line); border-radius:8px; outline:0; background:var(--bg); color:#fff; font-size:11px; }
 
 .lobby-header{ min-height:70px; padding:0 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); }
 .lobby-title strong{ display:block; font-size:16px; color:#fff; }
@@ -1971,6 +1984,28 @@ function initCloudSync(){
 
 const VICTORY_TIMER_MS = 15 * 60 * 1000;
 
+function formatCountdown(ms){
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return String(min).padStart(2, '0') + ":" + String(sec).padStart(2, '0');
+}
+
+setInterval(function(){
+  const el = document.getElementById("victoryCountdown");
+  if(!el) return;
+  const claimedAt = Number(el.getAttribute("data-claimed-at"));
+  if(!claimedAt) return;
+
+  const remaining = VICTORY_TIMER_MS - (Date.now() - claimedAt);
+  if(remaining <= 0){
+    el.textContent = "00:00";
+    if(checkVictoryTimers()){ save(); render(); }
+    return;
+  }
+  el.textContent = formatCountdown(remaining);
+}, 1000);
+
 function applyMatchResultForMe(match, type){
   match.processedBy = match.processedBy || [];
   if(match.processedBy.includes(state.username)) return false;
@@ -2108,6 +2143,49 @@ function uploadProof(matchId, inputEl){
   reader.readAsDataURL(file);
 }
 
+/* =========================================================
+   CHAT DE MATCH — un chat privé propre à chaque lobby
+========================================================= */
+
+function renderLobbyChatMessages(lobby){
+  const messages = lobby.chat || [];
+  if(messages.length === 0){
+    return `<div style="color:var(--muted); font-size:10px; text-align:center; padding:20px;">Aucun message pour l'instant. Dis bonjour !</div>`;
+  }
+  return messages.map(m => `
+    <div class="lobby-chat-msg ${m.user === state.username ? 'me' : ''}">
+      <div class="lobby-chat-msg-meta">${escapeHTML(m.user)} · ${m.time}</div>
+      <div class="lobby-chat-msg-bubble">${escapeHTML(m.text)}</div>
+    </div>
+  `).join("");
+}
+
+function sendLobbyMessage(e, matchId){
+  e.preventDefault();
+  const input = document.getElementById("lobbyChatInput");
+  const msg = input.value.trim();
+  if(!msg) return;
+
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+
+  match.chat = match.chat || [];
+  match.chat.push({
+    user: state.username,
+    text: msg,
+    time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+  });
+
+  input.value = "";
+  pushMatchToCloud(match);
+
+  const box = document.getElementById("lobbyChatMessages");
+  if(box){
+    box.innerHTML = renderLobbyChatMessages(match);
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
 function renderResultSection(lobby){
   const players = lobby.players || [];
   const opponent = players.find(p => p !== state.username);
@@ -2152,14 +2230,14 @@ function renderResultSection(lobby){
 
   if(lobby.victoryClaim){
     const remainingMs = Math.max(0, VICTORY_TIMER_MS - (Date.now() - lobby.victoryClaim.at));
-    const remainingMin = Math.ceil(remainingMs / 60000);
     const isClaimant = lobby.victoryClaim.by === state.username;
+    const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${lobby.victoryClaim.at}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
 
     if(isClaimant){
       return `
         <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
           <h3 style="color:#fff; margin-bottom:6px;">🕒 Victoire déclarée — en attente de confirmation</h3>
-          <p style="color:var(--muted); font-size:11px;">Confirmation automatique dans ${remainingMin} min si ton adversaire ne réagit pas.</p>
+          <p style="color:var(--muted); font-size:11px;">Confirmation automatique dans ${countdownHtml} si ton adversaire ne réagit pas.</p>
         </div>
       `;
     }
@@ -2167,7 +2245,7 @@ function renderResultSection(lobby){
     return `
       <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
         <h3 style="color:#fff; margin-bottom:6px;">🕒 Ton adversaire a déclaré la victoire</h3>
-        <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Si tu ne réagis pas dans ${remainingMin} min, sa victoire sera confirmée automatiquement.</p>
+        <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Si tu ne réagis pas dans ${countdownHtml}, sa victoire sera confirmée automatiquement.</p>
         <div style="display:flex; justify-content:center; gap:15px;">
           <button class="btn danger" onclick="declareResult('${lobby.id}', 'LOSS')">Confirmer ma défaite</button>
           <button class="btn green" onclick="declareResult('${lobby.id}', 'WIN')">Je conteste, j'ai gagné</button>
@@ -2570,6 +2648,7 @@ function createMatch(){
     victoryClaim: null,
     disputed: false,
     proofs: {},
+    chat: [],
     locked: false,
     completed: false,
     createdAt: Date.now()
@@ -2843,7 +2922,8 @@ function render(){
 
     const isHost = (lobby.host === state.username);
     const hasOpponent = (lobby.players.length > 1);
-    const opponentName = hasOpponent ? lobby.players.find(p => p !== state.username) : null;
+    const guestUsername = hasOpponent ? lobby.players.find(p => p !== lobby.host) : null;
+    const isGuest = hasOpponent && (state.username === guestUsername);
 
     const userReady = lobby.readies && lobby.readies[state.username];
     const bothReady = hasOpponent && lobby.readies && Object.keys(lobby.readies).length >= 2 && Object.values(lobby.readies).every(Boolean);
@@ -2933,7 +3013,7 @@ function render(){
               <div class="game-info-box">
                 <div class="game-info-row"><span>Statut</span><strong>${lobby.locked ? "Verrouillé" : (hasOpponent ? "Prêt ?" : "Attente")}</strong></div>
                 <div class="game-info-row"><span>Host</span><strong>${escapeHTML(lobby.host)}</strong></div>
-                <div class="game-info-row"><span>Guest</span><strong>${hasOpponent ? escapeHTML(opponentName) : "—"}</strong></div>
+                <div class="game-info-row"><span>Guest</span><strong>${hasOpponent ? escapeHTML(guestUsername) : "—"}</strong></div>
               </div>
             </div>
 
@@ -2944,17 +3024,17 @@ function render(){
               </div>
               ${hasOpponent ? `
                 <div class="player-row">
-                  <div class="avatar ${(!isHost || bothReady) ? 'clickable' : ''}" ${(!isHost || bothReady) ? `onclick="showPlayerStats('opponent')"` : ''} ${!isHost ? `style="${avatarStyleAttr(state.equippedAvatar)}"` : ''}>${!isHost ? avatarInnerHTML(state.equippedAvatar) : ((!isHost || bothReady) ? initials(opponentName) : "?")}</div>
+                  <div class="avatar ${(isGuest || bothReady) ? 'clickable' : ''}" ${(isGuest || bothReady) ? `onclick="showPlayerStats('guest')"` : ''} ${isGuest ? `style="${avatarStyleAttr(state.equippedAvatar)}"` : ''}>${isGuest ? avatarInnerHTML(state.equippedAvatar) : ((isGuest || bothReady) ? initials(guestUsername) : "?")}</div>
                   <div class="player-row-info">
                     <div class="slot-name-row">
-                      <div class="slot-name">${(!isHost || bothReady) ? escapeHTML(opponentName) : "Joueur masqué"}</div>
+                      <div class="slot-name">${(isGuest || bothReady) ? escapeHTML(guestUsername) : "Joueur masqué"}</div>
                     </div>
-                    <div class="slot-epic">${(!isHost || bothReady) ? "Epic: " + escapeHTML(lobby.opponentEpic || "Non renseigné") : "Identité masquée"}</div>
+                    <div class="slot-epic">${(isGuest || bothReady) ? "Epic: " + escapeHTML(lobby.opponentEpic || "Non renseigné") : "Identité masquée"}</div>
                     <div class="player-row-status">
-                      <span class="status-pill ${lobby.readies && lobby.readies[opponentName] ? 'ready' : 'waiting'}">${lobby.readies && lobby.readies[opponentName] ? "Prêt" : "Pas prêt"}</span>
+                      <span class="status-pill ${lobby.readies && lobby.readies[guestUsername] ? 'ready' : 'waiting'}">${lobby.readies && lobby.readies[guestUsername] ? "Prêt" : "Pas prêt"}</span>
                     </div>
                   </div>
-                  ${(!isHost || bothReady) ? `<button class="stats-icon-btn" onclick="showPlayerStats('opponent')" title="Voir les statistiques">📊</button>` : ''}
+                  ${(isGuest || bothReady) ? `<button class="stats-icon-btn" onclick="showPlayerStats('guest')" title="Voir les statistiques">📊</button>` : ''}
                 </div>
               ` : `
                 <div class="player-row" style="color:var(--muted2); font-size:10px; justify-content:center;">En attente d'un adversaire...</div>
@@ -2979,8 +3059,24 @@ function render(){
           ${lobby.locked ? renderResultSection(lobby) : ''}
 
         </div>
+
+        <div class="lobby-chat-panel">
+          <div class="lobby-chat-head">
+            <h3>Chat du match</h3>
+            <span>EN DIRECT</span>
+          </div>
+          <div class="lobby-chat-messages" id="lobbyChatMessages">${renderLobbyChatMessages(lobby)}</div>
+          <form class="lobby-chat-form" onsubmit="sendLobbyMessage(event, '${lobby.id}')">
+            <input type="text" id="lobbyChatInput" placeholder="Écris à ton adversaire..." autocomplete="off">
+            <button type="submit" class="btn green small">Envoyer</button>
+          </form>
+        </div>
+
       </div>
     `;
+
+    const lobbyChatBox = document.getElementById("lobbyChatMessages");
+    if(lobbyChatBox) lobbyChatBox.scrollTop = lobbyChatBox.scrollHeight;
   }
 
   else if(currentPage === "roue"){
@@ -3315,21 +3411,20 @@ function showPlayerStats(role){
   const lobby = state.matches.find(m => m.id === state.currentLobby);
   if(!lobby) return;
 
-  const isHost = (lobby.host === state.username);
   const hasOpponent = (lobby.players.length > 1);
-  const opponentName = hasOpponent ? lobby.players.find(p => p !== state.username) : null;
+  const guestUsername = hasOpponent ? lobby.players.find(p => p !== lobby.host) : null;
 
   let name, epic, stats, isSelf;
 
   if(role === "host"){
     name = lobby.host;
     epic = lobby.hostEpic;
-    isSelf = isHost;
+    isSelf = (state.username === lobby.host);
     stats = isSelf ? state.stats : (lobby.hostStats || { played:0, wins:0, losses:0 });
   } else {
-    name = opponentName;
+    name = guestUsername;
     epic = lobby.opponentEpic;
-    isSelf = !isHost;
+    isSelf = (state.username === guestUsername);
     stats = isSelf ? state.stats : (lobby.opponentStats || { played:0, wins:0, losses:0 });
   }
 
