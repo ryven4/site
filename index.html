@@ -493,6 +493,27 @@ button:active{ transform:scale(.97) !important; }
   box-shadow:0 0 15px rgba(255,71,87,.3);
 }
 
+.cancel-vote-btn{ position:relative; }
+.cancel-vote-badge{
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.18);
+  padding:2px 9px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:950;
+  letter-spacing:.5px;
+}
+.cancel-vote-btn.active{
+  color:var(--green);
+  background:rgba(0,255,136,.08);
+  border-color:rgba(0,255,136,.3);
+}
+.cancel-vote-btn.active .cancel-vote-badge{
+  background:rgba(0,255,136,.15);
+  border-color:rgba(0,255,136,.35);
+  color:var(--green);
+}
+
 .btn.blue{
   color:#fff;
   border:0;
@@ -1016,10 +1037,26 @@ button:active{ transform:scale(.97) !important; }
    LOBBY
 ========================= */
 
-.lobby-layout{ display:grid; grid-template-columns:1fr 320px; gap:18px; align-items:start; }
+.lobby-layout{ margin-right:418px; }
 .lobby-main{ border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; }
 
-.lobby-chat-panel{ border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; display:flex; flex-direction:column; height:600px; }
+.lobby-chat-panel{
+  border:1px solid var(--line);
+  background:var(--panel);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  position:fixed;
+  top:70px;
+  right:0;
+  bottom:0;
+  width:400px;
+  border-radius:0;
+  border-top:0;
+  border-right:0;
+  border-bottom:0;
+  z-index:15;
+}
 .lobby-chat-head{ min-height:50px; padding:0 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); }
 .lobby-chat-head h3{ font-size:12px; color:#fff; font-weight:800; }
 .lobby-chat-head span{ font-size:8px; color:var(--green); font-weight:900; letter-spacing:1px; text-transform:uppercase; }
@@ -1447,7 +1484,8 @@ button:active{ transform:scale(.97) !important; }
   .sidebar{ width:210px; }
   .main{ margin-left:210px; }
   .hero-side{ display:none; }
-  .lobby-layout{ grid-template-columns:1fr; }
+  .lobby-layout{ margin-right:0; }
+  .lobby-chat-panel{ position:static; width:auto; height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
   .home-grid{ margin-right:0; }
   .home-chat-panel{ position:static; width:auto; min-height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
   .matches-list{ grid-template-columns:1fr 1fr; }
@@ -3128,6 +3166,12 @@ function render(){
 
               ${!lobby.locked ? `
                 <button class="btn danger" onclick="leaveLobby()">Quitter le lobby</button>
+              ` : (!lobby.completed && !lobby.victoryClaim && !lobby.disputed) ? `
+                <button class="btn danger cancel-vote-btn ${(lobby.cancelVotes && lobby.cancelVotes[state.username]) ? 'active' : ''}" onclick="toggleCancelVote('${lobby.id}')">
+                  <span>${(lobby.cancelVotes && lobby.cancelVotes[state.username]) ? '✓ Annulation demandée' : 'Annuler le match'}</span>
+                  <span class="cancel-vote-badge">${cancelVoteCount(lobby)}/2</span>
+                </button>
+                <span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">MATCH VERROUILLÉ</span>
               ` : `
                 <span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">MATCH VERROUILLÉ</span>
               `}
@@ -3672,6 +3716,45 @@ function leaveLobby(){
   if(lobbyId) deleteMatchFromCloud(lobbyId);
   toast("Lobby quitté.");
   setPage("matches");
+}
+
+/* Annuler un match verrouillé (les 2 joueurs sont prêts) — nécessite le
+   consentement des DEUX joueurs (1/2 puis 2/2), un seul joueur ne peut pas
+   décider seul. Uniquement possible tant qu'aucun résultat n'a été déclaré
+   (pas de victoire réclamée, pas de litige, pas de match terminé). Dès
+   qu'un résultat est en jeu, ce bouton disparaît (voir le render du lobby). */
+function cancelVoteCount(match){
+  return Object.values(match.cancelVotes || {}).filter(Boolean).length;
+}
+
+function toggleCancelVote(matchId){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+  if(match.completed || match.victoryClaim || match.disputed){
+    toast("Un résultat est déjà en cours, impossible d'annuler.");
+    return;
+  }
+
+  match.cancelVotes = match.cancelVotes || {};
+  match.cancelVotes[state.username] = !match.cancelVotes[state.username];
+
+  const players = match.players || [];
+  const bothVoted = players.length > 1 && players.every(p => match.cancelVotes[p]);
+
+  if(bothVoted){
+    state.matches = state.matches.filter(m => m.id !== matchId);
+    if(state.currentLobby === matchId) state.currentLobby = null;
+    save();
+    deleteMatchFromCloud(matchId);
+    toast("Match annulé par les deux joueurs.");
+    setPage("matches");
+    return;
+  }
+
+  save();
+  pushMatchToCloud(match);
+  toast(match.cancelVotes[state.username] ? "Demande d'annulation envoyée. En attente de l'adversaire..." : "Demande d'annulation retirée.");
+  render();
 }
 
 function buyAvatar(id){
