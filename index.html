@@ -2031,6 +2031,7 @@ function initCloudSync(){
 
     let changed = applyPendingResultsForMe();
     if(checkVictoryTimers()) changed = true;
+    if(checkMatchLocks().length > 0) changed = true;
     if(changed) save();
 
     render();
@@ -2041,8 +2042,33 @@ function initCloudSync(){
   setInterval(function(){
     let changed = false;
     if(checkVictoryTimers()) changed = true;
+    if(checkMatchLocks().length > 0) changed = true;
     if(changed){ save(); render(); }
   }, 30000);
+}
+
+/* Locks a match as soon as BOTH sides are full and every joined player is
+   ready. Running this centrally (on every sync, not just inside the click
+   handler) avoids a race where two players ready up almost simultaneously
+   and each one's local check runs before it has seen the other's update —
+   which used to leave 2v2/3v3/4v4 matches stuck on "Ready?" forever. */
+function checkMatchLocks(){
+  const lockedIds = [];
+  (state.matches || []).forEach(match => {
+    if(match.locked || match.completed) return;
+    const hostPlayers = match.hostPlayers || [match.host];
+    const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+    const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+    if(hostPlayers.length < maxPerSide || guestPlayers.length < maxPerSide) return;
+    const allPlayers = [...hostPlayers, ...guestPlayers];
+    if(allPlayers.length === 0 || !match.readies) return;
+    if(allPlayers.every(p => match.readies[p])){
+      match.locked = true;
+      pushMatchToCloud(match);
+      lockedIds.push(match.id);
+    }
+  });
+  return lockedIds;
 }
 
 /* =========================================================
@@ -4129,25 +4155,16 @@ function toggleReady(matchId){
   if(!match) return;
   if(!match.readies) match.readies = {};
 
-  const hostPlayers = match.hostPlayers || [match.host];
-  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-  const allPlayers = [...hostPlayers, ...guestPlayers];
-
-  const isFullSquad = hostPlayers.length >= maxPerSide && guestPlayers.length >= maxPerSide && allPlayers.length > 0;
-  const wasAllReady = isFullSquad && allPlayers.every(p => match.readies[p]);
-
   match.readies[state.username] = !match.readies[state.username];
-
-  const isAllReadyNow = isFullSquad && allPlayers.every(p => match.readies[p]);
-
-  if(isAllReadyNow && !wasAllReady){
-    match.locked = true;
-    toast("Everyone is ready! Identities revealed — the match is LOCKED.");
-  }
 
   save();
   pushMatchToCloud(match);
+
+  const lockedIds = checkMatchLocks();
+  if(lockedIds.includes(matchId)){
+    toast("Everyone is ready! Identities revealed — the match is LOCKED.");
+  }
+
   render();
 }
 
