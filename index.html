@@ -993,6 +993,9 @@ button:active{ transform:scale(.97) !important; }
   padding-top:14px;
 }
 .stats-modal-history-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   color:var(--muted2);
   font-size:9px;
   font-weight:900;
@@ -1000,6 +1003,19 @@ button:active{ transform:scale(.97) !important; }
   text-transform:uppercase;
   margin-bottom:9px;
 }
+.view-all-link{
+  background:transparent;
+  border:0;
+  color:var(--green);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:1.2px;
+  text-transform:uppercase;
+  cursor:pointer;
+  padding:0;
+}
+.view-all-link:hover{ text-decoration:underline; }
+.full-history-empty{ color:var(--muted); font-size:11px; text-align:center; padding:30px 0; }
 
 .stats-history-row{
   display:flex;
@@ -2310,13 +2326,35 @@ button:active{ transform:scale(.97) !important; }
     </div>
 
     <div class="stats-modal-history" id="statsModalHistoryWrap" style="display:none;">
-      <div class="stats-modal-history-head">Recent Matches</div>
+      <div class="stats-modal-history-head">
+        <span>Recent Matches</span>
+        <button class="view-all-link" id="statsModalViewAllBtn" onclick="openFullHistoryModal()">View all</button>
+      </div>
       <div id="statsModalHistoryList"></div>
     </div>
 
   </div>
   <div class="modal-footer">
     <button class="btn green" onclick="closeStatsModal()">Close</button>
+  </div>
+</div>
+</div>
+
+<!-- =========================
+     FULL MATCH HISTORY MODAL
+========================= -->
+
+<div class="overlay" id="fullHistoryOverlay">
+<div class="modal" style="width:min(560px,100%);">
+  <div class="modal-head">
+    <h2 id="fullHistoryModalName">Match History</h2>
+    <button class="close" onclick="closeFullHistoryModal()">×</button>
+  </div>
+  <div class="modal-body">
+    <div id="fullHistoryList"></div>
+    <div style="text-align:center; margin-top:14px;">
+      <button class="btn ghost" id="fullHistoryLoadMoreBtn" onclick="loadMoreFullHistory()" style="display:none;">Load More</button>
+    </div>
   </div>
 </div>
 </div>
@@ -3879,6 +3917,72 @@ function getWinRate(){
   return Math.round((state.stats.wins / state.stats.played) * 100);
 }
 
+/* Historique de match d'UN joueur quelconque (pas juste soi-même), reconstruit
+   directement depuis state.matches (déjà synchronisé en entier depuis Firestore) —
+   pas besoin d'un historique séparé par joueur côté serveur. */
+function getPlayerMatchHistory(username){
+  if(!username) return [];
+  return (state.matches || [])
+    .filter(m => m && m.completed && m.results && m.results[username])
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map(m => ({
+      mode: m.mode,
+      teamSize: m.teamSize,
+      bet: m.bet,
+      result: m.results[username],
+      matchId: m.id,
+      date: m.createdAt
+    }));
+}
+
+let statsModalPlayerName = "";
+let fullHistoryVisibleCount = 20;
+
+function openFullHistoryModal(){
+  fullHistoryVisibleCount = 20;
+  const name = statsModalPlayerName;
+  const isSelf = name === state.username;
+  document.getElementById("fullHistoryModalName").textContent = (isSelf ? "Your" : escapeHTML(name) + "'s") + " Match History";
+  renderFullHistoryList();
+  document.getElementById("fullHistoryOverlay").classList.add("open");
+}
+
+function closeFullHistoryModal(){
+  document.getElementById("fullHistoryOverlay").classList.remove("open");
+}
+
+function renderFullHistoryList(){
+  const name = statsModalPlayerName;
+  const isSelf = name === state.username;
+  const all = isSelf ? (state.history || []) : getPlayerMatchHistory(name);
+  const list = document.getElementById("fullHistoryList");
+  const loadMoreBtn = document.getElementById("fullHistoryLoadMoreBtn");
+
+  if(!all.length){
+    list.innerHTML = `<div class="full-history-empty">No completed matches yet.</div>`;
+    loadMoreBtn.style.display = "none";
+    return;
+  }
+
+  const visible = all.slice(0, fullHistoryVisibleCount);
+  list.innerHTML = visible.map(h => `
+    <div class="stats-history-row ${h.matchId ? 'clickable-row' : ''}" ${h.matchId ? `onclick="closeFullHistoryModal(); closeStatsModal(); viewHistoryMatch('${h.matchId}');" title="View this match"` : ''}>
+      <div><span class="stats-history-mode">${escapeHTML(h.mode || "Match")}</span><span class="stats-history-meta">${escapeHTML(h.teamSize || "")}</span></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        ${h.date ? `<span class="stats-history-meta">${new Date(h.date).toLocaleDateString("en-US", { day:"numeric", month:"short" })}</span>` : ''}
+        <span class="stats-history-result ${h.result === 'WIN' ? 'win' : 'loss'}">${h.result === 'WIN' ? 'Win' : 'Loss'}</span>
+      </div>
+    </div>
+  `).join("");
+
+  loadMoreBtn.style.display = all.length > fullHistoryVisibleCount ? "inline-flex" : "none";
+}
+
+function loadMoreFullHistory(){
+  fullHistoryVisibleCount += 20;
+  renderFullHistoryList();
+}
+
 function openStatsModal(name, epic, stats, opts){
   opts = opts || {};
   const played = (stats && stats.played) || 0;
@@ -3926,16 +4030,21 @@ function openStatsModal(name, epic, stats, opts){
     badge.style.display = "none";
   }
 
+  statsModalPlayerName = name || "";
+
   const historyWrap = document.getElementById("statsModalHistoryWrap");
   const historyList = document.getElementById("statsModalHistoryList");
-  if(opts.isSelf && state.history && state.history.length){
+  const viewAllBtn = document.getElementById("statsModalViewAllBtn");
+  const hist = opts.isSelf ? (state.history || []) : getPlayerMatchHistory(name);
+  if(hist.length){
     historyWrap.style.display = "block";
-    historyList.innerHTML = state.history.slice(0, 5).map(h => `
+    historyList.innerHTML = hist.slice(0, 5).map(h => `
       <div class="stats-history-row ${h.matchId ? 'clickable-row' : ''}" ${h.matchId ? `onclick="closeStatsModal(); viewHistoryMatch('${h.matchId}');" title="View this match"` : ''}>
         <div><span class="stats-history-mode">${escapeHTML(h.mode || "Match")}</span><span class="stats-history-meta">${escapeHTML(h.teamSize || "")}</span></div>
         <span class="stats-history-result ${h.result === 'WIN' ? 'win' : 'loss'}">${h.result === 'WIN' ? 'Win' : 'Loss'}</span>
       </div>
     `).join("");
+    if(viewAllBtn) viewAllBtn.style.display = hist.length > 5 ? "inline" : "none";
   } else {
     historyWrap.style.display = "none";
     historyList.innerHTML = "";
