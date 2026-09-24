@@ -2078,7 +2078,7 @@ button:active{ transform:scale(.97) !important; }
           I'll cover my whole team's bet
         </label>
         <p style="margin-top:6px; font-size:9.5px; color:var(--muted); line-height:1.5;">
-          Only you risk coins on a loss. On a win, your teammates each get their bet back (not doubled) and you keep the rest of the winnings.
+          Only you risk coins on a loss. On a win, your teammates each get their normal bet back, and you get double everything you personally staked (your bet + what you covered for them).
         </p>
       </div>
 
@@ -2362,6 +2362,7 @@ function initCloudSync(){
     syncingFromRemote = false;
 
     let changed = applyPendingResultsForMe();
+    if(applyPendingCancelRefundsForMe()) changed = true;
     if(checkVictoryTimers()) changed = true;
     if(checkMatchLocks().length > 0) changed = true;
     if(changed) save();
@@ -2373,6 +2374,7 @@ function initCloudSync(){
 
   setInterval(function(){
     let changed = false;
+    if(applyPendingCancelRefundsForMe()) changed = true;
     if(checkVictoryTimers()) changed = true;
     if(checkMatchLocks().length > 0) changed = true;
     if(changed){ save(); render(); }
@@ -2387,16 +2389,22 @@ function initCloudSync(){
 function checkMatchLocks(){
   const lockedIds = [];
   (state.matches || []).forEach(match => {
-    if(match.locked || match.completed) return;
-    const hostPlayers = match.hostPlayers || [match.host];
-    const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-    const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-    if(hostPlayers.length < maxPerSide || guestPlayers.length < maxPerSide) return;
-    const allPlayers = [...hostPlayers, ...guestPlayers];
-    if(allPlayers.length === 0 || !match.readies) return;
-    if(allPlayers.every(p => match.readies[p])){
-      match.locked = true;
-      pushMatchToCloud(match);
+    if(match.completed) return;
+    if(!match.locked){
+      const hostPlayers = match.hostPlayers || [match.host];
+      const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+      const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+      if(hostPlayers.length < maxPerSide || guestPlayers.length < maxPerSide) return;
+      const allPlayers = [...hostPlayers, ...guestPlayers];
+      if(allPlayers.length === 0 || !match.readies) return;
+      if(allPlayers.every(p => match.readies[p])){
+        match.locked = true;
+        pushMatchToCloud(match);
+        lockedIds.push(match.id);
+      }
+    }
+    // Débite ma mise dès que le match est verrouillé (une seule fois, via escrowedBy).
+    if(match.locked && escrowStakeForMe(match) && !lockedIds.includes(match.id)){
       lockedIds.push(match.id);
     }
   });
@@ -2569,6 +2577,16 @@ function modUnbanUser(uid, username){
 function modDeleteMatch(id){
   if(!isAdmin()) return;
   if(!confirm(`Force delete match ${id}?`)) return;
+  const match = state.matches.find(m => m.id === id);
+  if(match && match.locked && !match.completed && (match.escrowedBy || []).length > 0){
+    // Des coins ont déjà été débités (escrow) : on rembourse au lieu de les faire disparaître.
+    match.cancelled = true;
+    processCancelRefundForMe(match);
+    save();
+    toast("Match cancelled (mod) — escrowed bets refunded.");
+    render();
+    return;
+  }
   state.matches = state.matches.filter(m => m.id !== id);
   if(state.currentLobby === id) state.currentLobby = null;
   save();
@@ -2577,15 +2595,24 @@ function modDeleteMatch(id){
   render();
 }
 
+/* Renvoie les deux camps (host/guest) d'un match, avec compat pour les
+   anciens matchs qui n'avaient qu'un simple `players` array. */
+function matchTeamsOf(match){
+  const hostPlayers = match.hostPlayers || [match.host];
+  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+  return { hostPlayers, guestPlayers };
+}
+
 function resolveDispute(matchId, winnerUsername){
   if(!isAdmin()) return;
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
-  const players = match.players || [];
-  const loserUsername = players.find(p => p !== winnerUsername);
-  if(!loserUsername) return;
+  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  const winners = hostPlayers.includes(winnerUsername) ? hostPlayers : guestPlayers;
+  const losers = hostPlayers.includes(winnerUsername) ? guestPlayers : hostPlayers;
+  if(winners.length === 0) return;
 
-  finalizeMatchResult(match, winnerUsername, 'WIN', loserUsername, 'LOSS');
+  finalizeMatchResult(match, winners, losers);
   toast("Dispute resolved: victory awarded to " + winnerUsername);
   render();
 }
@@ -2632,10 +2659,73 @@ function computePlayerBetInfo(match, username){
     winReward = baseBet;
   } else if(isCoveringHost){
     stake = roundToHalf(baseBet * teamSizeCount);
-    winReward = roundToHalf(baseBet * REWARD_MULT + baseBet * (teamSizeCount - 1));
+    winReward = roundToHalf(stake * REWARD_MULT);
   }
 
   return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
+}
+
+/* Débite la mise du joueur DÈS que le match se verrouille (les deux camps
+   sont prêts) — comme ça les coins "disparaissent" immédiatement, avant même
+   de connaître le résultat, au lieu d'attendre la fin du match. */
+function escrowStakeForMe(match){
+  if(!match || !match.locked) return false;
+  match.escrowedBy = match.escrowedBy || [];
+  if(match.escrowedBy.includes(state.username)) return false;
+
+  const hostPlayers = match.hostPlayers || [match.host];
+  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+  const amInMatch = hostPlayers.includes(state.username) || guestPlayers.includes(state.username);
+  if(!amInMatch) return false;
+
+  const info = computePlayerBetInfo(match, state.username);
+  const stake = Math.min(state.coins || 0, info.stake);
+  state.coins = roundToHalf((state.coins || 0) - stake);
+  match.escrowedBy.push(state.username);
+  match.escrowAmounts = match.escrowAmounts || {};
+  match.escrowAmounts[state.username] = stake;
+  save();
+  pushMatchToCloud(match);
+  if(stake > 0) toast(`🔒 ${formatCoins(stake)} coins locked in for this match.`);
+  return true;
+}
+
+/* Rembourse la mise qui avait été débitée à l'escrow si le match verrouillé
+   est finalement annulé (les deux camps sont d'accord) avant tout résultat. */
+function processCancelRefundForMe(match){
+  if(!match || !match.cancelled) return false;
+  match.refundedBy = match.refundedBy || [];
+  if(match.refundedBy.includes(state.username)) return false;
+
+  const wasEscrowed = (match.escrowedBy || []).includes(state.username);
+  if(wasEscrowed){
+    const amount = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
+    if(amount > 0){
+      state.coins = roundToHalf((state.coins || 0) + amount);
+      toast(`Match cancelled — your ${formatCoins(amount)} coin bet was refunded.`);
+    }
+  }
+  match.refundedBy.push(state.username);
+  save();
+  pushMatchToCloud(match);
+
+  if(state.currentLobby === match.id) state.currentLobby = null;
+
+  const everyone = match.players || [];
+  if(everyone.length > 0 && everyone.every(p => match.refundedBy.includes(p))){
+    deleteMatchFromCloud(match.id);
+    state.matches = state.matches.filter(m => m.id !== match.id);
+  }
+
+  return true;
+}
+
+function applyPendingCancelRefundsForMe(){
+  let changed = false;
+  (state.matches || []).forEach(match => {
+    if(processCancelRefundForMe(match)) changed = true;
+  });
+  return changed;
 }
 
 function applyMatchResultForMe(match, type){
@@ -2647,6 +2737,8 @@ function applyMatchResultForMe(match, type){
 
   state.stats.played += 1;
   if(type === 'WIN'){
+    // La mise a déjà été débitée au verrouillage du match (escrow) :
+    // on crédite donc le gain complet (mise incluse), pas juste le profit.
     const reward = info.winReward;
     state.stats.wins += 1;
     state.stats.streak = (state.stats.streak || 0) + 1;
@@ -2654,11 +2746,10 @@ function applyMatchResultForMe(match, type){
     state.coins = roundToHalf((state.coins || 0) + reward);
     toast(`Victory recorded! +1 Win · +${formatCoins(reward)} coins`);
   } else {
-    const loss = Math.min(state.coins || 0, info.stake);
+    // Rien à débiter ici : la mise a déjà disparu au moment du READY UP.
     state.stats.losses += 1;
     state.stats.streak = 0;
-    state.coins = roundToHalf((state.coins || 0) - loss);
-    toast(loss > 0 ? `Defeat recorded. -${formatCoins(loss)} coins` : `Defeat recorded. Your teammate covered the bet — no coins lost.`);
+    toast(info.stake > 0 ? `Defeat recorded. Your ${formatCoins(info.stake)} coin bet is gone.` : `Defeat recorded. Your teammate covered the bet — no coins lost.`);
   }
 
   state.history.unshift({
@@ -2698,24 +2789,28 @@ function checkVictoryTimers(){
     if(elapsed < VICTORY_TIMER_MS) return;
 
     const claimant = match.victoryClaim.by;
-    const players = match.players || [];
-    const opponent = players.find(p => p !== claimant);
-    finalizeMatchResult(match, claimant, 'WIN', opponent, 'LOSS');
+    const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+    const winners = hostPlayers.includes(claimant) ? hostPlayers : guestPlayers;
+    const losers = hostPlayers.includes(claimant) ? guestPlayers : hostPlayers;
+    finalizeMatchResult(match, winners, losers);
     changed = true;
   });
   return changed;
 }
 
-function finalizeMatchResult(match, userA, resultA, userB, resultB){
+/* Enregistre le résultat pour TOUT LE MONDE des deux équipes (pas juste
+   2 joueurs) — indispensable en 2v2/3v3/4v4 pour que chaque coéquipier
+   reçoive vraiment son gain ou sa perte. */
+function finalizeMatchResult(match, winners, losers){
   match.results = match.results || {};
-  match.results[userA] = resultA;
-  if(userB) match.results[userB] = resultB;
+  (winners || []).forEach(u => { match.results[u] = 'WIN'; });
+  (losers || []).forEach(u => { match.results[u] = 'LOSS'; });
   match.victoryClaim = null;
   match.disputed = false;
   match.completed = true;
 
-  if(userA === state.username) applyMatchResultForMe(match, resultA);
-  if(userB === state.username) applyMatchResultForMe(match, resultB);
+  if((winners || []).includes(state.username)) applyMatchResultForMe(match, 'WIN');
+  if((losers || []).includes(state.username)) applyMatchResultForMe(match, 'LOSS');
 
   if(state.currentLobby === match.id) state.currentLobby = null;
 
@@ -2725,27 +2820,34 @@ function finalizeMatchResult(match, userA, resultA, userB, resultB){
 function declareResult(matchId, type){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
-  const players = match.players || [];
-  const opponent = players.find(p => p !== state.username);
+  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  const myTeam = hostPlayers.includes(state.username) ? hostPlayers : guestPlayers;
+  const otherTeam = hostPlayers.includes(state.username) ? guestPlayers : hostPlayers;
 
   if(type === 'LOSS'){
-    finalizeMatchResult(match, state.username, 'LOSS', opponent, 'WIN');
+    finalizeMatchResult(match, otherTeam, myTeam);
     save();
     setPage("matches");
     return;
   }
 
   // type === 'WIN'
-  if(match.victoryClaim && match.victoryClaim.by && match.victoryClaim.by !== state.username){
+  if(match.victoryClaim && match.victoryClaim.by === state.username){
+    toast("You already declared your victory, waiting for your opponent.");
+    return;
+  }
+
+  if(match.victoryClaim && match.victoryClaim.by && myTeam.includes(match.victoryClaim.by)){
+    // Un coéquipier a déjà déclaré la victoire pour toute l'équipe — rien à faire de plus.
+    toast("Your teammate already declared victory — waiting for the other side.");
+    return;
+  }
+
+  if(match.victoryClaim && match.victoryClaim.by && !myTeam.includes(match.victoryClaim.by)){
     match.disputed = true;
     toast("You both declared victory — send proof to resolve the dispute.");
     pushMatchToCloud(match);
     render();
-    return;
-  }
-
-  if(match.victoryClaim && match.victoryClaim.by === state.username){
-    toast("You already declared your victory, waiting for your opponent.");
     return;
   }
 
@@ -2835,6 +2937,8 @@ function sendLobbyMessage(e, matchId){
 function renderResultSection(lobby){
   const players = lobby.players || [];
   const opponent = players.find(p => p !== state.username);
+  const { hostPlayers: rsHostPlayers, guestPlayers: rsGuestPlayers } = matchTeamsOf(lobby);
+  const myTeam = rsHostPlayers.includes(state.username) ? rsHostPlayers : rsGuestPlayers;
 
   if(lobby.completed){
     const myResult = (lobby.results || {})[state.username];
@@ -2876,7 +2980,7 @@ function renderResultSection(lobby){
 
   if(lobby.victoryClaim){
     const remainingMs = Math.max(0, VICTORY_TIMER_MS - (Date.now() - lobby.victoryClaim.at));
-    const isClaimant = lobby.victoryClaim.by === state.username;
+    const isClaimant = lobby.victoryClaim.by === state.username || myTeam.includes(lobby.victoryClaim.by);
     const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${lobby.victoryClaim.at}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
 
     if(isClaimant){
@@ -3943,9 +4047,9 @@ function render(){
   else if(currentPage === "matches"){
     const isMine = m => (m.host === state.username || (m.players || []).includes(state.username));
 
-    const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !isMine(m));
-    const mine = state.matches.filter(m => isMine(m) && !m.completed && !m.locked);
-    const ongoing = state.matches.filter(m => m.locked && !m.completed);
+    const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !isMine(m));
+    const mine = state.matches.filter(m => isMine(m) && !m.completed && !m.locked && !m.cancelled);
+    const ongoing = state.matches.filter(m => m.locked && !m.completed && !m.cancelled);
 
     let pool = currentMatchesTab === "available" ? available : currentMatchesTab === "mine" ? mine : ongoing;
 
@@ -4115,7 +4219,11 @@ function render(){
     const renderPlayerRow = (username) => {
       const isMe = username === state.username;
       const sameTeam = (isHost && hostPlayers.includes(username)) || (isGuest && guestPlayers.includes(username));
-      const revealed = isMe || bothReady || isAdmin() || sameTeam;
+      // isAdmin() reveals everything, but only when spectating — a moderator
+      // who is actually playing in this match still has identities hidden
+      // like everyone else until READY UP (or their own teammates, above).
+      const spectatingAsAdmin = isAdmin() && !isHost && !isGuest;
+      const revealed = isMe || bothReady || sameTeam || spectatingAsAdmin;
       const info = playerLiveInfo(username);
       const readyBool = lobby.readies && lobby.readies[username];
       return `
@@ -4183,6 +4291,11 @@ function render(){
           ${myBetInfo.covering ? `
             <div style="margin:-4px 0 16px; font-size:10px; color:var(--gold);">🪙 You're covering your whole team's bet — you risk it all, but win the biggest share.</div>
           ` : ''}
+          <div style="margin:-4px 0 16px; font-size:10px; color:var(--muted);">
+            ${(lobby.escrowedBy || []).includes(state.username)
+              ? "🔒 Your bet has already been deducted from your coins for this match."
+              : "Your bet will be deducted from your coins as soon as both sides hit READY UP."}
+          </div>
 
           <div class="lobby-stepper">
             ${steps.map((label, i) => `
@@ -5252,11 +5365,10 @@ function toggleCancelVote(matchId){
   const bothVoted = players.length > 1 && players.every(p => match.cancelVotes[p]);
 
   if(bothVoted){
-    state.matches = state.matches.filter(m => m.id !== matchId);
-    if(state.currentLobby === matchId) state.currentLobby = null;
-    save();
-    deleteMatchFromCloud(matchId);
+    match.cancelled = true;
     toast("Match cancelled by both players.");
+    processCancelRefundForMe(match);
+    save();
     setPage("matches");
     return;
   }
