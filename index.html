@@ -2648,7 +2648,11 @@ setInterval(function(){
 function computePlayerStake(match, username){
   const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
   const hostPlayers = match.hostPlayers || [match.host];
-  const teamSizeCount = hostPlayers.length || 1;
+  // On se base sur la taille d'équipe VOULUE (2v2/3v3/4v4), pas sur le
+  // nombre de joueurs déjà rejoints — sinon la mise affichée est fausse
+  // tant que le lobby n'est pas complet (ex: host seul avant que son
+  // mate rejoigne).
+  const teamSizeCount = TEAM_SIZE_MAX[match.teamSize] || hostPlayers.length || 1;
   const isHostSide = hostPlayers.includes(username);
   const isCoveredTeammate = !!(match.coverBet && isHostSide && username !== match.host && teamSizeCount > 1);
   const isCoveringHost = !!(match.coverBet && isHostSide && username === match.host && teamSizeCount > 1);
@@ -2667,19 +2671,19 @@ function computePlayerStake(match, username){
 function computePlayerBetInfo(match, username){
   const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
   const hostPlayers = match.hostPlayers || [match.host];
-  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-  const teamSizeCount = hostPlayers.length || 1;
+  const teamSizeCount = TEAM_SIZE_MAX[match.teamSize] || hostPlayers.length || 1;
   const isHostSide = hostPlayers.includes(username);
   const isCoveredTeammate = !!(match.coverBet && isHostSide && username !== match.host && teamSizeCount > 1);
   const isCoveringHost = !!(match.coverBet && isHostSide && username === match.host && teamSizeCount > 1);
 
-  const myTeam = isHostSide ? hostPlayers : guestPlayers;
-  const otherTeam = isHostSide ? guestPlayers : hostPlayers;
-
   const stake = computePlayerStake(match, username);
-  const otherTeamTotal = roundToHalf((otherTeam || []).reduce((sum, u) => sum + computePlayerStake(match, u), 0));
-  const winnersCount = (myTeam && myTeam.length) || 1;
-  const winReward = roundToHalf(stake + (otherTeamTotal / winnersCount));
+  // Chaque camp mise toujours maxPerSide × mise de base au total (peu
+  // importe qui a déjà rejoint, ou comment la mise est répartie en
+  // interne via le cover) : le gain se résume donc toujours à
+  // "je récupère ma mise + une part (mise de base) du pot adverse".
+  // Ça marche même avant que le lobby soit complet, contrairement à
+  // l'ancien calcul basé sur les joueurs déjà présents.
+  const winReward = roundToHalf(stake + baseBet);
 
   return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
 }
@@ -4067,8 +4071,11 @@ function render(){
     const isMine = m => (m.host === state.username || (m.players || []).includes(state.username));
 
     const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !isMine(m));
-    const mine = state.matches.filter(m => isMine(m) && !m.completed && !m.locked && !m.cancelled);
-    const ongoing = state.matches.filter(m => m.locked && !m.completed && !m.cancelled);
+    // "My Matches" doit garder mes matchs même une fois verrouillés (READY UP fait) —
+    // avant, un match verrouillé disparaissait de cet onglet et n'était visible que
+    // dans "In Progress", qui mélange ça avec les matchs des autres joueurs.
+    const mine = state.matches.filter(m => isMine(m) && !m.completed && !m.cancelled);
+    const ongoing = state.matches.filter(m => m.locked && !m.completed && !m.cancelled && !isMine(m));
 
     let pool = currentMatchesTab === "available" ? available : currentMatchesTab === "mine" ? mine : ongoing;
 
