@@ -2643,7 +2643,9 @@ setInterval(function(){
    en tenant compte du "Cover Bet" (le host peut couvrir la mise de
    toute son équipe : lui seul risque des coins, ses coéquipiers
    récupèrent quand même une mise symbolique en cas de victoire). */
-function computePlayerBetInfo(match, username){
+/* Mise réellement risquée par un joueur donné (sans se soucier du camp
+   adverse) — sert de brique de base à computePlayerBetInfo ci-dessous. */
+function computePlayerStake(match, username){
   const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
   const hostPlayers = match.hostPlayers || [match.host];
   const teamSizeCount = hostPlayers.length || 1;
@@ -2651,16 +2653,33 @@ function computePlayerBetInfo(match, username){
   const isCoveredTeammate = !!(match.coverBet && isHostSide && username !== match.host && teamSizeCount > 1);
   const isCoveringHost = !!(match.coverBet && isHostSide && username === match.host && teamSizeCount > 1);
 
-  let stake = baseBet;
-  let winReward = roundToHalf(baseBet * REWARD_MULT);
+  if(isCoveredTeammate) return 0;
+  if(isCoveringHost) return roundToHalf(baseBet * teamSizeCount);
+  return baseBet;
+}
 
-  if(isCoveredTeammate){
-    stake = 0;
-    winReward = baseBet;
-  } else if(isCoveringHost){
-    stake = roundToHalf(baseBet * teamSizeCount);
-    winReward = roundToHalf(stake * REWARD_MULT);
-  }
+/* Vrai partage du pot : chaque gagnant récupère d'abord ce qu'il a
+   lui-même misé, puis l'équipe adverse (le pot qu'elle a mis) est
+   répartie à parts égales entre les joueurs de l'équipe gagnante.
+   Exemple vérifié : 2v2, mise 10, je cover mon mate (je mise 20, lui 0),
+   en face 2 adversaires misent 10 chacun (pot adverse = 20) → je récupère
+   mes 20 + 20/2 = 30 ; mon mate récupère 0 + 20/2 = 10. */
+function computePlayerBetInfo(match, username){
+  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const hostPlayers = match.hostPlayers || [match.host];
+  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+  const teamSizeCount = hostPlayers.length || 1;
+  const isHostSide = hostPlayers.includes(username);
+  const isCoveredTeammate = !!(match.coverBet && isHostSide && username !== match.host && teamSizeCount > 1);
+  const isCoveringHost = !!(match.coverBet && isHostSide && username === match.host && teamSizeCount > 1);
+
+  const myTeam = isHostSide ? hostPlayers : guestPlayers;
+  const otherTeam = isHostSide ? guestPlayers : hostPlayers;
+
+  const stake = computePlayerStake(match, username);
+  const otherTeamTotal = roundToHalf((otherTeam || []).reduce((sum, u) => sum + computePlayerStake(match, u), 0));
+  const winnersCount = (myTeam && myTeam.length) || 1;
+  const winReward = roundToHalf(stake + (otherTeamTotal / winnersCount));
 
   return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
 }
@@ -3048,9 +3067,9 @@ if(!state.snipedMatches) state.snipedMatches = [];
 if(state.lastWheelSpin === undefined) state.lastWheelSpin = null;
 
 // Reset économie forcé (mode local/hors-ligne, sans compte Firebase) : une seule fois.
-if((state.ecoResetVersion || 0) < 2){
+if((state.ecoResetVersion || 0) < 3){
   state.coins = 20;
-  state.ecoResetVersion = 2;
+  state.ecoResetVersion = 3;
 }
 
 let currentPage = "home";
@@ -3098,7 +3117,7 @@ function initials(name){
 
 /* ÉCONOMIE — monnaie en pas de 0.5 (façon Better Player Win) */
 const REWARD_MULT = 2; // le vainqueur gagne toujours 2x sa mise, quel que soit le mode
-const ECO_RESET_VERSION = 2; // v2 : reset forcé des coins de tous les comptes existants à 20
+const ECO_RESET_VERSION = 3; // v3 : nouveau reset forcé des coins de tous les comptes existants à 20
 
 /* ROUE (Wheel) — un tour gratuit par jour */
 const WHEEL_SEGMENTS = [
@@ -4335,7 +4354,7 @@ function render(){
               ` : (!lobby.completed && !lobby.victoryClaim && !lobby.disputed) ? `
                 <button class="btn danger cancel-vote-btn ${(lobby.cancelVotes && lobby.cancelVotes[state.username]) ? 'active' : ''}" onclick="toggleCancelVote('${lobby.id}')">
                   <span>${(lobby.cancelVotes && lobby.cancelVotes[state.username]) ? '✓ Cancel Requested' : 'Cancel Match'}</span>
-                  <span class="cancel-vote-badge">${cancelVoteCount(lobby)}/2</span>
+                  <span class="cancel-vote-badge">${cancelVoteCount(lobby)}/${(lobby.players || []).length}</span>
                 </button>
                 <span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">MATCH LOCKED</span>
               ` : `
