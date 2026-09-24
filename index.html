@@ -6142,7 +6142,11 @@ async function doSignup(){
       customAvatar: null,
       snipes: 0,
       history: [],
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
+      discordId: null,
+      discordUsername: null,
+      discordAvatar: null,
+      epicLocked: false
     };
     await db.collection("users").doc(uid).set(profile);
   } catch(e){
@@ -6167,6 +6171,15 @@ async function doLogin(){
 }
 
 function logout(){
+  // On efface tout de suite les infos d'identité sensibles pour ne jamais
+  // les laisser traîner en mémoire / localStorage pour le prochain compte
+  // connecté sur ce navigateur.
+  state.discordId = null;
+  state.discordUsername = null;
+  state.discordAvatar = null;
+  state.epicLocked = false;
+  state.epic = "";
+  currentUid = null;
   if(auth) auth.signOut();
 }
 
@@ -6200,16 +6213,31 @@ async function loadProfileAndStart(uid){
       state.snipes = (profile.snipes !== undefined) ? profile.snipes : state.snipes;
       state.history = profile.history || state.history;
       state.lastWheelSpin = (profile.lastWheelSpin !== undefined) ? profile.lastWheelSpin : state.lastWheelSpin;
-      state.discordId = (profile.discordId !== undefined) ? profile.discordId : state.discordId;
-      state.discordUsername = (profile.discordUsername !== undefined) ? profile.discordUsername : state.discordUsername;
-      state.discordAvatar = (profile.discordAvatar !== undefined) ? profile.discordAvatar : state.discordAvatar;
-      state.epicLocked = (profile.epicLocked !== undefined) ? !!profile.epicLocked : state.epicLocked;
+      // IMPORTANT : ces champs ne doivent JAMAIS retomber sur une ancienne
+      // valeur en cache (state / localStorage) d'un compte précédemment
+      // connecté sur ce navigateur. Sinon, un compte tout neuf pourrait
+      // hériter du Discord/Epic déjà lié d'un autre compte et contourner
+      // la vérification. On force donc explicitement la valeur "vide" par
+      // défaut quand le profil Firestore ne l'a pas.
+      state.discordId = profile.discordId || null;
+      state.discordUsername = profile.discordUsername || null;
+      state.discordAvatar = profile.discordAvatar || null;
+      state.epicLocked = !!profile.epicLocked;
 
       // Reset économie forcé : tous les comptes existants repartent à 20 coins une seule fois.
       if((profile.ecoResetVersion || 0) < ECO_RESET_VERSION){
         state.coins = 20;
         save();
       }
+    } else {
+      // Pas encore de doc Firestore pour ce compte (ex: juste après un
+      // signup, avant propagation) : on ne garde surtout pas un éventuel
+      // Discord/Epic en cache d'un compte précédent sur ce navigateur.
+      state.discordId = null;
+      state.discordUsername = null;
+      state.discordAvatar = null;
+      state.epicLocked = false;
+      state.epic = "";
     }
   } catch(e){
     console.warn("Impossible de charger le profil :", e);
