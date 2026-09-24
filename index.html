@@ -4346,7 +4346,7 @@ function render(){
           <div style="margin:-4px 0 16px; font-size:10px; color:var(--muted);">
             ${(lobby.escrowedBy || []).includes(state.username)
               ? "🔒 Your bet has already been deducted from your coins for this match."
-              : "Your bet will be deducted from your coins as soon as both sides hit READY UP."}
+              : "Your bet will be deducted from your coins right away."}
           </div>
 
           <div class="lobby-stepper">
@@ -5234,6 +5234,16 @@ function joinMatch(id){
     if(guestPlayers.length >= maxPerSide){ toast("Match full!"); return; }
   }
 
+  // Même logique que la création : si je vais devoir payer en rejoignant
+  // (pas couvert par mon host), je dois avoir assez de coins AVANT de join.
+  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const willBeCovered = onHostTeam && match.coverBet && maxPerSide > 1;
+  const prospectiveStake = willBeCovered ? 0 : baseBet;
+  if((state.coins || 0) < prospectiveStake){
+    toast(`Not enough coins to join — this match needs ${formatCoins(prospectiveStake)}. You have ${formatCoins(state.coins || 0)}.`);
+    return;
+  }
+
   if(match.visibility === "private"){
     targetJoinMatchId = id;
     document.getElementById("joinPasscodeInput").value = "";
@@ -5274,10 +5284,25 @@ function executeJoin(match){
   match.opponentEpic = state.epic || "N/A";
   match.opponentStats = {...state.stats};
 
+  // Comme pour le host à la création : je paie ma mise DÈS que je rejoins
+  // le match, pas besoin d'attendre le verrouillage — sauf si mon host me
+  // couvre (cover bet), auquel cas je ne paie rien.
+  const info = computePlayerBetInfo(match, state.username);
+  match.escrowedBy = match.escrowedBy || [];
+  match.escrowAmounts = match.escrowAmounts || {};
+  if(!match.escrowedBy.includes(state.username)){
+    const stake = Math.min(state.coins || 0, info.stake);
+    state.coins = roundToHalf((state.coins || 0) - stake);
+    match.escrowedBy.push(state.username);
+    match.escrowAmounts[state.username] = stake;
+  }
+
   state.currentLobby = match.id;
   save();
   pushMatchToCloud(match);
-  toast(onHostTeam ? "You joined your team's match!" : "You joined the match! Identities stay hidden until everyone is ready.");
+  toast(info.stake > 0
+    ? `You joined the match! 🔒 ${formatCoins(info.stake)} coins locked in.`
+    : "You joined the match! Your host is covering your bet — you risk nothing.");
   setPage("lobby");
 }
 
@@ -5388,10 +5413,20 @@ function leaveMatchById(matchId, { silent } = {}){
   if(match.readies) delete match.readies[state.username];
   if(match.cancelVotes) delete match.cancelVotes[state.username];
 
+  // Je paie ma mise dès que je rejoins un match (voir executeJoin) : si je
+  // pars avant que le match soit verrouillé, je dois être remboursé.
+  let refunded = 0;
+  if((match.escrowedBy || []).includes(state.username)){
+    refunded = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
+    if(refunded > 0) state.coins = roundToHalf((state.coins || 0) + refunded);
+    match.escrowedBy = match.escrowedBy.filter(p => p !== state.username);
+    if(match.escrowAmounts) delete match.escrowAmounts[state.username];
+  }
+
   if(state.currentLobby === match.id) state.currentLobby = null;
   save();
   pushMatchToCloud(match);
-  if(!silent) toast("You left the match. It's still open for others to join.");
+  if(!silent) toast(refunded > 0 ? `You left the match. ${formatCoins(refunded)} coins refunded.` : "You left the match. It's still open for others to join.");
   return true;
 }
 
