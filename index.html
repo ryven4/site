@@ -1885,6 +1885,7 @@ button:active{ transform:scale(.97) !important; }
     <button data-page="teams"><span class="nav-icon">👥</span> Teams</button>
     <button data-page="tournaments"><span class="nav-icon">♛</span> Tournaments</button>
     <button data-page="shop"><span class="nav-icon">🛍️</span> Shop</button>
+    <button data-page="wallet"><span class="nav-icon">👛</span> Wallet</button>
     <button data-page="settings"><span class="nav-icon">⚙</span> Settings</button>
     <button data-page="moderation" id="navModeration" style="display:none;"><span class="nav-icon">🛡️</span> Moderation</button>
   </nav>
@@ -3282,8 +3283,15 @@ function roundToHalf(n){
   return Math.round((Number(n) || 0) * 2) / 2;
 }
 function formatCoins(n){
-  const v = roundToHalf(n);
-  return (v % 1 === 0) ? String(v) : v.toFixed(1);
+  // La plupart des montants (mises, gains) restent en pas de 0,5, mais les
+  // tips (voir Wallet) se calculent avec des centimes exacts (frais de 5%) :
+  // on affiche donc jusqu'à 2 décimales, sans zéro inutile à la fin.
+  const v = Math.round((Number(n) || 0) * 100) / 100;
+  if(Number.isInteger(v)) return String(v);
+  return v.toFixed(2).replace(/0$/, "").replace(/\.$/, "");
+}
+function roundToCents(n){
+  return Math.round((Number(n) || 0) * 100) / 100;
 }
 
 /* =========================================================
@@ -3726,7 +3734,7 @@ function toast(msg){
 }
 
 function pageTitle(page){
-  const titles = { home:"Home", matches:"Matches", lobby:"Lobby", roue:"Wheel", profile:"Profile", ranking:"Ranking", teams:"Teams", tournaments:"Tournaments", shop:"Shop", settings:"Settings", moderation:"Moderation" };
+  const titles = { home:"Home", matches:"Matches", lobby:"Lobby", roue:"Wheel", profile:"Profile", ranking:"Ranking", teams:"Teams", tournaments:"Tournaments", shop:"Shop", wallet:"Wallet", settings:"Settings", moderation:"Moderation" };
   return titles[page] || "Accueil";
 }
 
@@ -4959,6 +4967,40 @@ function render(){
     `;
   }
 
+  else if(currentPage === "wallet"){
+    container.innerHTML = `
+      <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+        <div style="color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:1px; font-weight:900;">Balance</div>
+        <div style="font-size:28px; font-weight:900; color:var(--brand); margin-top:4px; display:flex; align-items:center; gap:8px;">
+          <span class="coin-dot" style="width:22px;height:22px;"></span> ${formatCoins(state.coins || 0)}
+        </div>
+      </div>
+
+      <div class="matches-tabs" style="margin-bottom:18px;">
+        <button class="matches-tab active">
+          <span class="tab-dot"></span> Tips
+        </button>
+      </div>
+
+      <div class="setting-card" style="padding:20px;">
+        <div style="border:1px solid var(--brand); background:rgba(0,255,136,0.06); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin-bottom:20px;">
+          <strong style="color:var(--brand);">FYI:</strong> A 5% fee applies to every tip. Send ${formatCoins(1)} and the player receives ${formatCoins(roundToCents(1 - 1 * 0.05))}.
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
+          <div class="form-group">
+            <label>Amount</label>
+            <input type="number" class="input" id="tipAmount" min="0.01" step="0.01" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" class="input" id="tipUsername" placeholder="Player username" autocomplete="off">
+          </div>
+        </div>
+        <button class="btn green" onclick="sendTip()">Tip User</button>
+      </div>
+    `;
+  }
+
   else if(currentPage === "settings"){
     container.innerHTML = `
       <div class="settings-grid">
@@ -5732,6 +5774,67 @@ function applyPendingAvatar(){
   closeAvatarPicker();
   toast("Avatar applied!");
   render();
+}
+
+/* =========================================================
+   WALLET — envoyer des tips à d'autres joueurs (frais de 5%)
+========================================================= */
+function sendTip(){
+  const amountInput = document.getElementById("tipAmount");
+  const usernameInput = document.getElementById("tipUsername");
+  const rawAmount = amountInput ? parseFloat(amountInput.value) : NaN;
+  const targetUsername = usernameInput ? usernameInput.value.trim() : "";
+
+  if(isNaN(rawAmount) || rawAmount <= 0){
+    toast("Enter a valid amount to tip.");
+    return;
+  }
+  const amount = roundToCents(rawAmount);
+
+  if(!targetUsername){
+    toast("Enter the username you want to tip.");
+    return;
+  }
+  if(targetUsername.toLowerCase() === state.username.toLowerCase()){
+    toast("You can't tip yourself!");
+    return;
+  }
+  if((state.coins || 0) < amount){
+    toast(`Not enough coins. You have ${formatCoins(state.coins || 0)}.`);
+    return;
+  }
+
+  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === targetUsername.toLowerCase());
+  if(!target){
+    toast("This player doesn't exist.");
+    return;
+  }
+  if(!db){
+    toast("Can't send tips right now — try again in a moment.");
+    return;
+  }
+
+  const fee = roundToCents(amount * 0.05);
+  const netReceived = roundToCents(amount - fee);
+
+  state.coins = roundToCents((state.coins || 0) - amount);
+  save();
+
+  db.collection("users").doc(target.uid).update({
+    coins: firebase.firestore.FieldValue.increment(netReceived)
+  }).then(() => {
+    toast(`Tipped ${formatCoins(netReceived)} coins to ${target.username} (${formatCoins(fee)} fee).`);
+    if(amountInput) amountInput.value = "";
+    if(usernameInput) usernameInput.value = "";
+    render();
+  }).catch(err => {
+    console.warn(err);
+    // L'envoi a échoué côté destinataire : on rembourse l'expéditeur.
+    state.coins = roundToCents((state.coins || 0) + amount);
+    save();
+    toast("Error while sending the tip — you were refunded.");
+    render();
+  });
 }
 
 function saveSettings(){
