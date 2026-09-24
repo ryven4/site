@@ -293,16 +293,65 @@ button:active{ transform:scale(.97) !important; }
   backdrop-filter:blur(10px);
 }
 
+.topbar-left{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  min-width:0;
+  justify-self:start;
+}
+
 .page-title{
   color:#687483;
   font-size:12px;
   font-weight:650;
   text-transform:uppercase;
   letter-spacing:1px;
-  justify-self:start;
+  white-space:nowrap;
 }
 
 .page-title strong{ color:#fff; text-shadow:0 0 10px rgba(255,255,255,.2); }
+
+.topbar-search{ position:relative; width:190px; flex:none; }
+.topbar-search input{
+  width:100%;
+  height:34px;
+  padding:0 12px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  outline:0;
+  background:var(--bg);
+  color:#fff;
+  font-size:11px;
+}
+.topbar-search input::placeholder{ color:var(--muted2); }
+.topbar-search input:focus{ border-color:var(--brand); box-shadow:var(--glow-brand); }
+.topbar-search-results{
+  position:absolute;
+  top:calc(100% + 6px);
+  left:0;
+  width:250px;
+  max-height:320px;
+  overflow:auto;
+  background:var(--panel2);
+  border:1px solid var(--line2);
+  border-radius:10px;
+  box-shadow:var(--shadow);
+  z-index:60;
+  display:none;
+}
+.topbar-search-results.open{ display:block; }
+.topbar-search-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:9px 10px;
+  cursor:pointer;
+  font-size:11px;
+  color:#fff;
+}
+.topbar-search-item:hover{ background:rgba(255,255,255,.06); }
+.topbar-search-empty{ padding:14px; font-size:10px; color:var(--muted); text-align:center; }
 
 .top-center{
   display:flex;
@@ -443,6 +492,10 @@ button:active{ transform:scale(.97) !important; }
   max-width:1500px;
   margin:auto;
   padding:30px;
+  padding-right:390px;
+}
+.content.content-full{
+  padding-right:30px;
 }
 
 /* ===== FOOTER ===== */
@@ -714,7 +767,6 @@ button:active{ transform:scale(.97) !important; }
 
 .home-grid{
   margin-top:20px;
-  margin-right:418px;
 }
 
 .home-chat-panel{
@@ -724,7 +776,7 @@ button:active{ transform:scale(.97) !important; }
   top:70px;
   right:0;
   bottom:0;
-  width:400px;
+  width:350px;
   border-radius:0;
   border-top:0;
   border-right:0;
@@ -914,16 +966,26 @@ button:active{ transform:scale(.97) !important; }
 ========================= */
 
 .chat-box{ display:flex; flex-direction:column; flex:1; min-height:0; height:100%; }
-.chat-messages{ flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
-.chat-message{ display:flex; gap:10px; }
-.chat-avatar{ width:28px; height:28px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:7px; background:rgba(0,255,136,.14); border:1px solid rgba(0,255,136,.3); color:var(--brand-light); font-size:9px; font-weight:900; overflow:hidden; }
+.chat-messages{ flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:7px; }
+.chat-message{ display:flex; gap:7px; align-items:flex-start; }
+.mod-badge{ font-size:9px; }
+.mod-chat-delete{
+  flex:none; width:16px; height:16px; border-radius:5px;
+  border:1px solid rgba(255,71,87,.3); background:rgba(255,71,87,.1);
+  color:var(--red); font-size:9px; line-height:1; cursor:pointer;
+  opacity:.5;
+}
+.mod-chat-delete:hover{ opacity:1; }
+.chat-avatar{ width:20px; height:20px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:50%; background:rgba(0,255,136,.14); border:1px solid rgba(0,255,136,.3); color:var(--brand-light); font-size:8px; font-weight:900; overflow:hidden; margin-top:1px; }
 .chat-avatar svg, .chat-avatar img{ width:100%; height:100%; }
-.chat-meta{ display:flex; gap:8px; align-items:center; }
-.chat-meta strong{ font-size:11px; color:#fff; }
-.chat-meta span{ color:var(--muted2); font-size:9px; }
-.chat-content p{ color:#cbd5e1; margin-top:3px; font-size:11px; line-height:1.4; }
-.chat-form{ padding:12px; display:flex; gap:8px; border-top:1px solid var(--line); background:rgba(0,0,0,.2); }
-.chat-form input{ flex:1; min-width:0; height:38px; padding:0 12px; border:1px solid var(--line); border-radius:8px; outline:0; background:var(--bg); color:#fff; font-size:11px; }
+.chat-content{ min-width:0; }
+.chat-meta{ display:inline; }
+.chat-meta strong{ font-size:13.5px; color:#fff; }
+.chat-meta span{ display:none; }
+.chat-content p{ display:inline; color:#cbd5e1; font-size:13.5px; line-height:1.5; word-break:break-word; }
+.chat-content p::before{ content:" "; }
+.chat-form{ padding:9px; display:flex; gap:6px; border-top:1px solid var(--line); background:rgba(0,0,0,.2); }
+.chat-form input{ flex:1; min-width:0; height:36px; padding:0 10px; border:1px solid var(--line); border-radius:8px; outline:0; background:var(--bg); color:#fff; font-size:12px; }
 .chat-form input:focus{ border-color:var(--brand); box-shadow:var(--glow-brand); }
 
 /* =========================
@@ -1672,9 +1734,9 @@ button:active{ transform:scale(.97) !important; }
   .sidebar{ width:210px; }
   .main{ margin-left:210px; }
   .hero-side{ display:none; }
+  .content{ padding-right:30px; }
   .lobby-layout{ margin-right:0; }
   .lobby-chat-panel{ position:static; width:auto; height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
-  .home-grid{ margin-right:0; }
   .home-chat-panel{ position:static; width:auto; min-height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
   .matches-list{ grid-template-columns:1fr 1fr; }
 }
@@ -1687,8 +1749,10 @@ button:active{ transform:scale(.97) !important; }
   .main{ margin-left:0; }
   .topbar{ display:flex; flex-wrap:wrap; padding:10px 12px; height:auto; row-gap:8px; }
   .page-title{ display:none; }
-  .top-center{ order:1; width:100%; justify-content:center; }
-  .top-actions{ order:2; width:100%; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+  .topbar-left{ order:1; width:100%; }
+  .topbar-search{ width:100%; }
+  .top-center{ order:2; width:100%; justify-content:center; }
+  .top-actions{ order:3; width:100%; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
   .coin-chip, .snipe-chip{ height:38px; padding:0 10px; font-size:11px; }
   .top-actions .btn.green{ height:38px; padding:0 12px; font-size:11px; }
   .profile-chip{ height:38px; }
@@ -1817,7 +1881,6 @@ button:active{ transform:scale(.97) !important; }
     <button data-page="home" class="active"><span class="nav-icon">⌂</span> Home</button>
     <button data-page="matches"><span class="nav-icon">◈</span> Matches</button>
     <button data-page="roue"><span class="nav-icon">🎡</span> Wheel</button>
-    <button data-page="profile"><span class="nav-icon">◎</span> Profile</button>
     <button data-page="ranking"><span class="nav-icon">♜</span> Ranking</button>
     <button data-page="teams"><span class="nav-icon">👥</span> Teams</button>
     <button data-page="tournaments"><span class="nav-icon">♛</span> Tournaments</button>
@@ -1841,8 +1904,14 @@ button:active{ transform:scale(.97) !important; }
 <main class="main">
 
 <header class="topbar">
-  <div class="page-title">
-    PRIME TOKEN / <strong id="pageName">Home</strong>
+  <div class="topbar-left">
+    <div class="page-title">
+      PRIME TOKEN / <strong id="pageName">Home</strong>
+    </div>
+    <div class="topbar-search">
+      <input type="text" id="playerSearchInput" placeholder="Search a player..." autocomplete="off" oninput="onPlayerSearchInput()" onkeydown="onPlayerSearchKeydown(event)" onfocus="onPlayerSearchInput()">
+      <div class="topbar-search-results" id="playerSearchResults"></div>
+    </div>
   </div>
   <div class="top-center">
     <div class="coin-chip" onclick="setPage('shop')" title="View shop">
@@ -1867,6 +1936,19 @@ button:active{ transform:scale(.97) !important; }
 </header>
 
 <div class="content" id="content"></div>
+
+<div class="panel home-chat-panel" id="globalChatPanel">
+  <div class="panel-head"><h3>Global Chat</h3><span>LIVE</span></div>
+  <div class="panel-body" style="padding:0;">
+    <div class="chat-box">
+      <div class="chat-messages" id="chatMessages"></div>
+      <form class="chat-form" onsubmit="sendMessage(event)">
+        <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
+        <button type="submit" class="btn green small">Send</button>
+      </form>
+    </div>
+  </div>
+</div>
 
 <footer class="site-footer">
   <div class="footer-top">
@@ -1993,8 +2075,11 @@ button:active{ transform:scale(.97) !important; }
         </div>
         <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11px; font-weight:700; cursor:pointer;">
           <input type="checkbox" id="coverBetCheckbox" style="width:16px; height:16px;">
-          I want cover bet for all members in my team
+          I'll cover my whole team's bet
         </label>
+        <p style="margin-top:6px; font-size:9.5px; color:var(--muted); line-height:1.5;">
+          Only you risk coins on a loss. On a win, your teammates each get their bet back (not doubled) and you keep the rest of the winnings.
+        </p>
       </div>
 
       <div class="form-group full">
@@ -2159,6 +2244,24 @@ button:active{ transform:scale(.97) !important; }
   </div>
   <div class="snipe-modal-body" id="snipeModalBody">
     <!-- filled by renderSnipeModal() -->
+  </div>
+</div>
+</div>
+
+<!-- =========================
+     BUY CONFIRM MODAL
+========================= -->
+
+<div class="overlay" id="buyConfirmOverlay">
+<div class="modal" style="width:min(380px,100%);">
+  <div class="modal-head">
+    <h2 id="buyConfirmTitle">Confirm Purchase</h2>
+    <button class="close" onclick="closeBuyConfirm()">×</button>
+  </div>
+  <div style="padding:20px; font-size:12px; color:var(--muted); line-height:1.6;" id="buyConfirmMessage"></div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeBuyConfirm()">Cancel</button>
+    <button class="btn green" onclick="confirmBuyAction()">Yes, buy</button>
   </div>
 </div>
 </div>
@@ -2329,6 +2432,10 @@ function isSuperAdmin(){
   return state.username === SUPER_ADMIN;
 }
 
+function isUsernameAdmin(username){
+  return username === SUPER_ADMIN || moderatorUsernames.includes(username);
+}
+
 function initModeratorsSync(){
   if(!db) return;
   db.collection("config").doc("moderators").onSnapshot(function(docSnap){
@@ -2371,6 +2478,105 @@ function removeModerator(username){
   });
 }
 
+/* --- Pouvoirs modérateur : self-service coins/snipes --- */
+function modGiveSelfCoins(amount){
+  if(!isAdmin()) return;
+  const n = Number(amount);
+  if(!n || n <= 0) return;
+  state.coins = roundToHalf((state.coins || 0) + n);
+  save();
+  renderHeaderUI();
+  toast(`+${formatCoins(n)} coins (mod)`);
+  render();
+}
+
+function modGiveSelfCoinsCustom(){
+  if(!isAdmin()) return;
+  const input = document.getElementById("modCoinsInput");
+  const n = input ? parseFloat(input.value) : NaN;
+  if(!n || n <= 0){ toast("Enter a valid amount."); return; }
+  modGiveSelfCoins(n);
+  if(input) input.value = "";
+}
+
+function modGiveSelfSnipes(amount){
+  if(!isAdmin()) return;
+  const n = Number(amount);
+  if(!n || n <= 0) return;
+  state.snipes = (state.snipes || 0) + n;
+  save();
+  renderHeaderUI();
+  toast(`+${n} Snipes (mod)`);
+  render();
+}
+
+/* --- Pouvoirs modérateur : gestion des joueurs (ban / coins) --- */
+function modFindUser(query){
+  const q = (query || "").trim().toLowerCase();
+  if(!q) return [];
+  return allPlayersCache.filter(p => (p.username || "").toLowerCase().includes(q)).slice(0, 15);
+}
+
+function modSearchUsers(){
+  const input = document.getElementById("modUserSearch");
+  const q = input ? input.value : "";
+  const results = modFindUser(q);
+  const box = document.getElementById("modUserResults");
+  if(!box) return;
+  if(!q.trim()){
+    box.innerHTML = `<div style="color:var(--muted2); font-size:10px; padding:10px 0;">Type a username to search.</div>`;
+    return;
+  }
+  if(results.length === 0){
+    box.innerHTML = `<div style="color:var(--muted2); font-size:10px; padding:10px 0;">No player found.</div>`;
+    return;
+  }
+  box.innerHTML = results.map(p => `
+    <div class="stats-history-row">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="chat-avatar" style="${avatarStyleAttr(p.equippedAvatar || 'default')}">${avatarInnerHTML(p.equippedAvatar || 'default', p.username, p.customAvatar)}</div>
+        <div>
+          <span class="stats-history-mode">${escapeHTML(p.username)}${isUsernameAdmin(p.username) ? ' <span class="mod-badge">🛡️</span>' : ''}${p.banned ? ' <span style="color:var(--red); font-size:9px; font-weight:900;">BANNED</span>' : ''}</span>
+          <span class="stats-history-meta">${formatCoins(p.coins || 0)} coins · ${p.snipes || 0} snipes</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        ${p.banned
+          ? `<button class="btn green small" onclick="modUnbanUser('${p.uid}','${escapeHTML(p.username)}')">Unban</button>`
+          : `<button class="btn danger small" onclick="modBanUser('${p.uid}','${escapeHTML(p.username)}')" ${isUsernameAdmin(p.username) ? 'disabled title="Cannot ban a moderator"' : ''}>Ban</button>`
+        }
+      </div>
+    </div>
+  `).join("");
+}
+
+function modBanUser(uid, username){
+  if(!isAdmin() || !db || !uid) return;
+  if(!confirm(`Ban ${username} from Prime Token? They'll be signed out immediately and unable to log back in.`)) return;
+  db.collection("users").doc(uid).set({ banned:true }, { merge:true })
+    .then(() => { toast(`${username} banned.`); modSearchUsers(); })
+    .catch(err => { console.warn(err); toast("Error while banning."); });
+}
+
+function modUnbanUser(uid, username){
+  if(!isAdmin() || !db || !uid) return;
+  db.collection("users").doc(uid).set({ banned:false }, { merge:true })
+    .then(() => { toast(`${username} unbanned.`); modSearchUsers(); })
+    .catch(err => { console.warn(err); toast("Error while unbanning."); });
+}
+
+/* --- Pouvoirs modérateur : voir et gérer tous les matchs --- */
+function modDeleteMatch(id){
+  if(!isAdmin()) return;
+  if(!confirm(`Force delete match ${id}?`)) return;
+  state.matches = state.matches.filter(m => m.id !== id);
+  if(state.currentLobby === id) state.currentLobby = null;
+  save();
+  deleteMatchFromCloud(id);
+  toast("Match deleted (mod).");
+  render();
+}
+
 function resolveDispute(matchId, winnerUsername){
   if(!isAdmin()) return;
   const match = state.matches.find(m => m.id === matchId);
@@ -2406,27 +2612,53 @@ setInterval(function(){
   el.textContent = formatCountdown(remaining);
 }, 1000);
 
+/* Calcule la mise réelle et le gain d'un joueur donné pour un match,
+   en tenant compte du "Cover Bet" (le host peut couvrir la mise de
+   toute son équipe : lui seul risque des coins, ses coéquipiers
+   récupèrent quand même une mise symbolique en cas de victoire). */
+function computePlayerBetInfo(match, username){
+  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const hostPlayers = match.hostPlayers || [match.host];
+  const teamSizeCount = hostPlayers.length || 1;
+  const isHostSide = hostPlayers.includes(username);
+  const isCoveredTeammate = !!(match.coverBet && isHostSide && username !== match.host && teamSizeCount > 1);
+  const isCoveringHost = !!(match.coverBet && isHostSide && username === match.host && teamSizeCount > 1);
+
+  let stake = baseBet;
+  let winReward = roundToHalf(baseBet * REWARD_MULT);
+
+  if(isCoveredTeammate){
+    stake = 0;
+    winReward = baseBet;
+  } else if(isCoveringHost){
+    stake = roundToHalf(baseBet * teamSizeCount);
+    winReward = roundToHalf(baseBet * REWARD_MULT + baseBet * (teamSizeCount - 1));
+  }
+
+  return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
+}
+
 function applyMatchResultForMe(match, type){
   match.processedBy = match.processedBy || [];
   if(match.processedBy.includes(state.username)) return false;
   match.processedBy.push(state.username);
 
-  const bet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const info = computePlayerBetInfo(match, state.username);
 
   state.stats.played += 1;
   if(type === 'WIN'){
-    const reward = roundToHalf(bet * REWARD_MULT);
+    const reward = info.winReward;
     state.stats.wins += 1;
     state.stats.streak = (state.stats.streak || 0) + 1;
     if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
     state.coins = roundToHalf((state.coins || 0) + reward);
     toast(`Victory recorded! +1 Win · +${formatCoins(reward)} coins`);
   } else {
-    const loss = Math.min(state.coins || 0, bet);
+    const loss = Math.min(state.coins || 0, info.stake);
     state.stats.losses += 1;
     state.stats.streak = 0;
     state.coins = roundToHalf((state.coins || 0) - loss);
-    toast(`Defeat recorded. -${formatCoins(loss)} coins`);
+    toast(loss > 0 ? `Defeat recorded. -${formatCoins(loss)} coins` : `Defeat recorded. Your teammate covered the bet — no coins lost.`);
   }
 
   state.history.unshift({
@@ -2562,13 +2794,14 @@ function renderLobbyChatMessages(lobby){
   if(messages.length === 0){
     return `<div style="color:var(--muted); font-size:10px; text-align:center; padding:20px;">No messages yet. Say hi!</div>`;
   }
-  return messages.map(m => `
+  return messages.map((m, i) => `
     <div class="lobby-chat-msg ${m.user === state.username ? 'me' : ''}">
       ${chatAvatarHTML(m.user)}
       <div class="lobby-chat-msg-col">
-        <div class="lobby-chat-msg-meta">${escapeHTML(m.user)} · ${m.time}</div>
+        <div class="lobby-chat-msg-meta">${escapeHTML(m.user)}${isUsernameAdmin(m.user) ? ' <span class="mod-badge" title="Moderator">🛡️</span>' : ''} · ${m.time}</div>
         <div class="lobby-chat-msg-bubble">${escapeHTML(m.text)}</div>
       </div>
+      ${isAdmin() ? `<button class="mod-chat-delete" title="Delete message" onclick="modDeleteLobbyMessage('${lobby.id}', ${i})">✕</button>` : ''}
     </div>
   `).join("");
 }
@@ -3048,10 +3281,10 @@ function initPlayersSync(){
     const players = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      if(data && data.username) players.push(data);
+      if(data && data.username) players.push({ ...data, uid: docSnap.id });
     });
     allPlayersCache = players;
-    if(currentPage === "ranking") render();
+    if(currentPage === "ranking" || currentPage === "moderation") render();
   }, function(err){
     console.warn("Erreur de synchronisation des joueurs :", err);
   });
@@ -3509,7 +3742,7 @@ function initGlobalChatSync(){
   db.collection("global_chat").doc("main").onSnapshot(function(docSnap){
     const data = docSnap.exists ? docSnap.data() : null;
     globalChatCache = (data && Array.isArray(data.messages)) ? data.messages : [];
-    if(currentPage === "home") renderChat();
+    if(currentPage !== "lobby") renderChat();
   }, function(err){
     console.warn("Erreur de synchronisation du chat général :", err);
   });
@@ -3544,6 +3777,25 @@ function sendMessage(e){
   });
 }
 
+function modDeleteGlobalMessage(index){
+  if(!isAdmin() || !db) return;
+  const newMessages = globalChatCache.filter((_, i) => i !== index);
+  db.collection("global_chat").doc("main").set({ messages: newMessages }, { merge:true })
+    .then(() => toast("Message deleted."))
+    .catch(err => { console.warn(err); toast("Failed to delete message."); });
+}
+
+function modDeleteLobbyMessage(matchId, index){
+  if(!isAdmin()) return;
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+  match.chat = (match.chat || []).filter((_, i) => i !== index);
+  pushMatchToCloud(match);
+  const box = document.getElementById("lobbyChatMessages");
+  if(box) box.innerHTML = renderLobbyChatMessages(match);
+  toast("Message deleted.");
+}
+
 function renderChat(){
   const box = document.getElementById("chatMessages");
   if(!box) return;
@@ -3555,13 +3807,14 @@ function renderChat(){
     box.innerHTML = `<div style="color:var(--muted); font-size:10px; text-align:center; padding:20px;">No messages yet. Be the first to write!</div>`;
     return;
   }
-  box.innerHTML = globalChatCache.map(c => `
+  box.innerHTML = globalChatCache.map((c, i) => `
     <div class="chat-message">
       ${chatAvatarHTML(c.user)}
       <div class="chat-content">
-        <div class="chat-meta"><strong>${escapeHTML(c.user)}</strong><span>${escapeHTML(c.time || "")}</span></div>
+        <div class="chat-meta"><strong>${escapeHTML(c.user)}</strong>${isUsernameAdmin(c.user) ? ' <span class="mod-badge" title="Moderator">🛡️</span>' : ''}<span>${escapeHTML(c.time || "")}</span></div>
         <p>${escapeHTML(c.text)}</p>
       </div>
+      ${isAdmin() ? `<button class="mod-chat-delete" title="Delete message" onclick="modDeleteGlobalMessage(${i})">✕</button>` : ''}
     </div>
   `).join("");
   box.scrollTop = box.scrollHeight;
@@ -3592,9 +3845,74 @@ function renderHeaderUI(){
   if(modNav) modNav.style.display = isAdmin() ? "" : "none";
 }
 
+/* ===== TOPBAR PLAYER SEARCH ===== */
+
+function onPlayerSearchInput(){
+  const input = document.getElementById("playerSearchInput");
+  const box = document.getElementById("playerSearchResults");
+  if(!input || !box) return;
+  const q = input.value.trim().toLowerCase();
+  if(!q){ box.classList.remove("open"); box.innerHTML = ""; return; }
+
+  const results = (allPlayersCache || [])
+    .filter(p => p.username && p.username.toLowerCase().includes(q))
+    .slice(0, 8);
+
+  if(results.length === 0){
+    box.innerHTML = `<div class="topbar-search-empty">No players found.</div>`;
+    box.classList.add("open");
+    return;
+  }
+
+  box.innerHTML = results.map(p => `
+    <div class="topbar-search-item" onclick="selectPlayerSearchResult('${escapeHTML(p.username)}')">
+      ${chatAvatarHTML(p.username)}
+      <span>${escapeHTML(p.username)}</span>
+    </div>
+  `).join("");
+  box.classList.add("open");
+}
+
+function selectPlayerSearchResult(username){
+  const input = document.getElementById("playerSearchInput");
+  const box = document.getElementById("playerSearchResults");
+  if(input) input.value = "";
+  if(box){ box.classList.remove("open"); box.innerHTML = ""; }
+  showPlayerStats(username);
+}
+
+function onPlayerSearchKeydown(e){
+  if(e.key === "Enter"){
+    e.preventDefault();
+    const q = e.target.value.trim().toLowerCase();
+    if(!q) return;
+    const exact = (allPlayersCache || []).find(p => p.username && p.username.toLowerCase() === q);
+    const partial = exact || (allPlayersCache || []).find(p => p.username && p.username.toLowerCase().includes(q));
+    if(partial){ selectPlayerSearchResult(partial.username); }
+    else toast("No player found with that username.");
+  } else if(e.key === "Escape"){
+    const box = document.getElementById("playerSearchResults");
+    if(box) box.classList.remove("open");
+    e.target.blur();
+  }
+}
+
+document.addEventListener("click", function(e){
+  const wrap = document.querySelector(".topbar-search");
+  const box = document.getElementById("playerSearchResults");
+  if(!wrap || !box) return;
+  if(!wrap.contains(e.target)) box.classList.remove("open");
+});
+
 function render(){
   renderHeaderUI();
   const container = document.getElementById("content");
+
+  const globalChatPanel = document.getElementById("globalChatPanel");
+  const hideGlobalChat = (currentPage === "lobby");
+  if(globalChatPanel) globalChatPanel.style.display = hideGlobalChat ? "none" : "flex";
+  container.classList.toggle("content-full", hideGlobalChat);
+  if(!hideGlobalChat) renderChat();
 
   if(currentPage === "home"){
     container.innerHTML = `
@@ -3618,22 +3936,8 @@ function render(){
             </div>
           </div>
         </div>
-
-        <div class="panel home-chat-panel">
-          <div class="panel-head"><h3>Global Chat</h3><span>LIVE</span></div>
-          <div class="panel-body" style="padding:0;">
-            <div class="chat-box">
-              <div class="chat-messages" id="chatMessages"></div>
-              <form class="chat-form" onsubmit="sendMessage(event)">
-                <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
-                <button type="submit" class="btn green small">Send</button>
-              </form>
-            </div>
-          </div>
-        </div>
       </div>
     `;
-    renderChat();
   }
 
   else if(currentPage === "matches"){
@@ -3797,6 +4101,7 @@ function render(){
     const guestFull = guestPlayers.length >= maxPerSide;
     const allPlayers = [...hostPlayers, ...guestPlayers];
     const bothReady = hostFull && guestFull && allPlayers.length > 0 && allPlayers.every(p => lobby.readies && lobby.readies[p]);
+    const myBetInfo = computePlayerBetInfo(lobby, state.username);
 
     const userReady = lobby.readies && lobby.readies[state.username];
 
@@ -3809,7 +4114,8 @@ function render(){
 
     const renderPlayerRow = (username) => {
       const isMe = username === state.username;
-      const revealed = isMe || bothReady;
+      const sameTeam = (isHost && hostPlayers.includes(username)) || (isGuest && guestPlayers.includes(username));
+      const revealed = isMe || bothReady || isAdmin() || sameTeam;
       const info = playerLiveInfo(username);
       const readyBool = lobby.readies && lobby.readies[username];
       return `
@@ -3863,14 +4169,20 @@ function render(){
           <div class="match-economy" style="margin-bottom:16px;">
             <div class="eco-block in">
               <span>Your Bet</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(roundToHalf(lobby.bet !== undefined ? lobby.bet : 0.5))}</strong>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(myBetInfo.stake)}</strong>
             </div>
             <div class="eco-arrow">→</div>
             <div class="eco-block out">
-              <span>Winner Gets</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(roundToHalf((lobby.bet !== undefined ? lobby.bet : 0.5) * REWARD_MULT))}</strong>
+              <span>If You Win</span>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(myBetInfo.winReward)}</strong>
             </div>
           </div>
+          ${myBetInfo.covered ? `
+            <div style="margin:-4px 0 16px; font-size:10px; color:var(--gold);">🪙 Your host is covering your bet — you risk nothing, but win less than a full stake.</div>
+          ` : ''}
+          ${myBetInfo.covering ? `
+            <div style="margin:-4px 0 16px; font-size:10px; color:var(--gold);">🪙 You're covering your whole team's bet — you risk it all, but win the biggest share.</div>
+          ` : ''}
 
           <div class="lobby-stepper">
             ${steps.map((label, i) => `
@@ -3936,7 +4248,7 @@ function render(){
 
           ${hasOpponent && !bothReady ? `
             <div style="margin:0 20px 18px; padding:12px 15px; border:1px dashed var(--line); border-radius:10px; background:rgba(255,255,255,.02); font-size:10px; color:var(--muted);">
-              🔒 Identities (username + Epic Games) stay hidden until both players hit "READY UP".
+              🔒 Opponent identities (username + Epic Games) stay hidden until both sides hit "READY UP". Your own teammates are always visible to you.
             </div>
           ` : ''}
 
@@ -4354,6 +4666,7 @@ function render(){
     // teamsView === "list"
     const myInvites = teamsCache.filter(t => (t.pendingInvites || []).includes(state.username));
     const filtered = teamsCache
+      .filter(t => (t.members || []).includes(state.username))
       .filter(t => !teamSearchQuery || (t.name || "").toLowerCase().includes(teamSearchQuery.toLowerCase()))
       .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
@@ -4461,6 +4774,53 @@ function render(){
         ` : ''}
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">⚡ My Moderator Powers</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Give yourself coins or Snipes instantly. Only you can see and use this.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <button class="btn green small" onclick="modGiveSelfCoins(10)">+10 🪙</button>
+            <button class="btn green small" onclick="modGiveSelfCoins(100)">+100 🪙</button>
+            <button class="btn green small" onclick="modGiveSelfCoins(1000)">+1000 🪙</button>
+            <input type="number" class="input" id="modCoinsInput" placeholder="Custom amount" style="max-width:140px;">
+            <button class="btn green small" onclick="modGiveSelfCoinsCustom()">Give</button>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn danger small" onclick="modGiveSelfSnipes(10)">+10 🎯</button>
+            <button class="btn danger small" onclick="modGiveSelfSnipes(100)">+100 🎯</button>
+          </div>
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">🔨 Player Management</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Search any player to ban or unban them from the site.</p>
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <input type="text" class="input" id="modUserSearch" placeholder="Search by username" oninput="modSearchUsers()">
+          </div>
+          <div id="modUserResults">
+            <div style="color:var(--muted2); font-size:10px; padding:10px 0;">Type a username to search.</div>
+          </div>
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">🗺️ All Matches (${(state.matches || []).length})</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Every match on the site, public or private. Spectate to see full lobby details and chat, or force delete.</p>
+          ${(state.matches || []).length === 0 ? `
+            <div style="color:var(--muted2); font-size:11px; text-align:center; padding:20px;">No matches right now.</div>
+          ` : ''}
+          ${(state.matches || []).slice(0, 60).map(m => `
+            <div class="stats-history-row">
+              <div>
+                <span class="stats-history-mode">${escapeHTML(m.id)} · ${escapeHTML(m.mode || "—")}</span>
+                <span class="stats-history-meta">${escapeHTML(m.teamSize || "—")} · Host ${escapeHTML(m.host || "—")} · ${m.visibility === "private" ? "🔒 Private" : "Public"} · ${m.locked ? "In progress" : (m.completed ? "Completed" : "Open")} · Bet ${formatCoins(m.bet !== undefined ? m.bet : 0.5)}</span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button class="btn blue small" onclick="enterMatchLobby('${m.id}')">Spectate</button>
+                <button class="btn danger small" onclick="modDeleteMatch('${m.id}')">Delete</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
           <h3 style="margin-bottom:6px; font-size:14px;">🛡️ Pending Disputes (${disputes.length})</h3>
           <p style="color:var(--muted); font-size:11px; margin-bottom:18px;">Both players declared victory. Compare the proofs and decide manually.</p>
 
@@ -4538,7 +4898,36 @@ let snipeModalMatchId = null;
 const SNIPE_COST_COINS = 2;
 const SNIPE_BUNDLE_QTY = 20;
 
+/* ===== BUY CONFIRMATION MODAL ===== */
+let pendingBuyAction = null;
+
+function openBuyConfirm(title, message, actionFn){
+  pendingBuyAction = actionFn;
+  document.getElementById("buyConfirmTitle").textContent = title;
+  document.getElementById("buyConfirmMessage").textContent = message;
+  document.getElementById("buyConfirmOverlay").classList.add("open");
+}
+
+function closeBuyConfirm(){
+  document.getElementById("buyConfirmOverlay").classList.remove("open");
+  pendingBuyAction = null;
+}
+
+function confirmBuyAction(){
+  const fn = pendingBuyAction;
+  closeBuyConfirm();
+  if(typeof fn === "function") fn();
+}
+
 function buySnipe(){
+  openBuyConfirm(
+    "Buy Snipes",
+    `Do you really want to buy ${SNIPE_BUNDLE_QTY} Snipes for ${formatCoins(SNIPE_COST_COINS)} coins?`,
+    doBuySnipe
+  );
+}
+
+function doBuySnipe(){
   if(state.coins < SNIPE_COST_COINS){
     toast(`Not enough coins! ${SNIPE_BUNDLE_QTY} Snipes cost ${SNIPE_COST_COINS} coins.`);
     return;
@@ -4553,6 +4942,14 @@ function buySnipe(){
 const RESET_STATS_COST_COINS = 3;
 
 function buyResetStats(){
+  openBuyConfirm(
+    "Reset Stats",
+    `Do you really want to reset ALL your stats to 0-0 for ${formatCoins(RESET_STATS_COST_COINS)} coins? This cannot be undone.`,
+    doBuyResetStats
+  );
+}
+
+function doBuyResetStats(){
   if((state.coins || 0) < RESET_STATS_COST_COINS){
     toast(`Not enough coins! Reset Stats costs ${formatCoins(RESET_STATS_COST_COINS)} coins.`);
     return;
@@ -4788,16 +5185,46 @@ function toggleReady(matchId){
 
 function leaveLobby(){
   const lobby = state.matches.find(m => m.id === state.currentLobby);
-  if(lobby && lobby.locked){
+  if(!lobby){
+    state.currentLobby = null;
+    save();
+    setPage("matches");
+    return;
+  }
+  if(lobby.locked){
     toast("Can't leave a match in progress!");
     return;
   }
-  const lobbyId = lobby ? lobby.id : null;
-  if(lobby) state.matches = state.matches.filter(m => m.id !== lobby.id);
+
+  lobby.hostPlayers = lobby.hostPlayers || [lobby.host];
+  lobby.guestPlayers = lobby.guestPlayers || (lobby.players || []).filter(p => p !== lobby.host);
+
+  const isHost = lobby.hostPlayers.includes(state.username);
+  const isGuest = lobby.guestPlayers.includes(state.username);
+  const remainingHostPlayers = isHost ? lobby.hostPlayers.filter(p => p !== state.username) : lobby.hostPlayers;
+
+  // If the last host-side player leaves, the match has no owner left: cancel it entirely.
+  if(isHost && remainingHostPlayers.length === 0){
+    state.matches = state.matches.filter(m => m.id !== lobby.id);
+    state.currentLobby = null;
+    save();
+    deleteMatchFromCloud(lobby.id);
+    toast("Match cancelled.");
+    setPage("matches");
+    return;
+  }
+
+  // Otherwise, just remove this player from their side — the match stays open for others.
+  if(isHost) lobby.hostPlayers = remainingHostPlayers;
+  if(isGuest) lobby.guestPlayers = lobby.guestPlayers.filter(p => p !== state.username);
+  lobby.players = [...lobby.hostPlayers, ...lobby.guestPlayers];
+  if(lobby.readies) delete lobby.readies[state.username];
+  if(lobby.cancelVotes) delete lobby.cancelVotes[state.username];
+
   state.currentLobby = null;
   save();
-  if(lobbyId) deleteMatchFromCloud(lobbyId);
-  toast("Lobby left.");
+  pushMatchToCloud(lobby);
+  toast("You left the match. It's still open for others to join.");
   setPage("matches");
 }
 
@@ -4845,6 +5272,18 @@ function buyAvatar(id){
   if(!a) return;
   if(state.ownedAvatars.includes(id)){ toast("You already own this avatar!"); return; }
   if((state.coins || 0) < a.price){ toast("Not enough coins! Win matches to earn more."); return; }
+  openBuyConfirm(
+    "Buy Avatar",
+    `Do you really want to buy the avatar "${a.name}" for ${formatCoins(a.price)} coins?`,
+    () => doBuyAvatar(id)
+  );
+}
+
+function doBuyAvatar(id){
+  const a = getAvatar(id);
+  if(!a) return;
+  if(state.ownedAvatars.includes(id)){ toast("You already own this avatar!"); return; }
+  if((state.coins || 0) < a.price){ toast("Not enough coins! Win matches to earn more."); return; }
 
   state.coins = roundToHalf((state.coins || 0) - a.price);
   state.ownedAvatars.push(id);
@@ -4852,6 +5291,11 @@ function buyAvatar(id){
   renderHeaderUI();
   toast(`Avatar "${a.name}" unlocked!`);
   render();
+  const pickerOverlay = document.getElementById("avatarPickerOverlay");
+  if(pickerOverlay && pickerOverlay.classList.contains("open")){
+    pendingAvatarId = id;
+    renderAvatarPicker("shop");
+  }
 }
 
 function equipAvatar(id){
@@ -5111,6 +5555,15 @@ async function loadProfileAndStart(uid){
     const docSnap = await db.collection("users").doc(uid).get();
     if(docSnap.exists){
       const profile = docSnap.data();
+
+      if(profile.banned === true){
+        currentUid = null;
+        try{ await auth.signOut(); }catch(e){}
+        showAuthScreen();
+        alert("Your account has been banned from Prime Token.");
+        return;
+      }
+
       state.username = profile.username || state.username;
       state.epic = profile.epic || "";
       state.stats = profile.stats || state.stats;
