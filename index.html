@@ -2578,8 +2578,10 @@ function modDeleteMatch(id){
   if(!isAdmin()) return;
   if(!confirm(`Force delete match ${id}?`)) return;
   const match = state.matches.find(m => m.id === id);
-  if(match && match.locked && !match.completed && (match.escrowedBy || []).length > 0){
-    // Des coins ont déjà été débités (escrow) : on rembourse au lieu de les faire disparaître.
+  if(match && !match.completed && (match.escrowedBy || []).length > 0){
+    // Des coins ont déjà été débités (escrow, dès la création du match pour
+    // le host, ou au verrouillage pour tout le monde) : on rembourse au lieu
+    // de les faire disparaître, verrouillé ou non.
     match.cancelled = true;
     processCancelRefundForMe(match);
     save();
@@ -3823,8 +3825,14 @@ function createMatch(){
   let bet = betInput ? parseFloat(betInput.value) : 0.5;
   if(isNaN(bet) || bet < 0.5) bet = 0.5;
   bet = roundToHalf(bet);
-  if((state.coins || 0) < bet){
-    toast(`Not enough coins for a ${formatCoins(bet)} coin bet. You have ${formatCoins(state.coins || 0)}.`);
+
+  // Ce que JE (le host) vais devoir payer tout de suite à la création :
+  // ma mise normale, ou la mise de toute mon équipe si je cover.
+  const maxPerSide = TEAM_SIZE_MAX[selectedTeamSize] || 1;
+  const hostStake = coverBet ? roundToHalf(bet * maxPerSide) : bet;
+
+  if((state.coins || 0) < hostStake){
+    toast(`Not enough coins for a ${formatCoins(hostStake)} coin bet. You have ${formatCoins(state.coins || 0)}.`);
     return;
   }
 
@@ -3859,15 +3867,23 @@ function createMatch(){
     chat: [],
     locked: false,
     completed: false,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    // Le host paie sa mise (ou celle de toute son équipe s'il cover) DÈS la
+    // création du match, même si personne n'a encore rejoint — pas besoin
+    // d'attendre que le match se verrouille. Remboursé s'il annule le match
+    // avant qu'il se verrouille (voir leaveMatchById).
+    escrowedBy: [state.username],
+    escrowAmounts: { [state.username]: hostStake }
   };
+
+  state.coins = roundToHalf((state.coins || 0) - hostStake);
 
   state.matches.unshift(newMatch);
   state.currentLobby = newMatch.id;
   save();
   pushMatchToCloud(newMatch);
   closeCreateModal();
-  toast("Match created successfully!");
+  toast(hostStake > 0 ? `Match created! 🔒 ${formatCoins(hostStake)} coins locked in.` : "Match created successfully!");
   setPage("lobby");
 }
 
@@ -4313,7 +4329,7 @@ function render(){
           <div class="match-economy" style="margin-bottom:16px;">
             <div class="eco-block in">
               <span>Your Bet</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(myBetInfo.stake)}</strong>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(myBetInfo.baseBet)}</strong>
             </div>
             <div class="eco-arrow">→</div>
             <div class="eco-block out">
@@ -5349,11 +5365,19 @@ function leaveMatchById(matchId, { silent } = {}){
 
   // If the last host-side player leaves, the match has no owner left: cancel it entirely.
   if(isHost && remainingHostPlayers.length === 0){
+    // Rembourse la mise que le host avait payée dès la création du match
+    // (voir createMatch) — le match n'a jamais démarré, donc pas de raison
+    // de garder ses coins.
+    let refunded = 0;
+    if((match.escrowedBy || []).includes(state.username)){
+      refunded = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
+      if(refunded > 0) state.coins = roundToHalf((state.coins || 0) + refunded);
+    }
     state.matches = state.matches.filter(m => m.id !== match.id);
     if(state.currentLobby === match.id) state.currentLobby = null;
     save();
     deleteMatchFromCloud(match.id);
-    if(!silent) toast("Match cancelled.");
+    if(!silent) toast(refunded > 0 ? `Match cancelled. ${formatCoins(refunded)} coins refunded.` : "Match cancelled.");
     return true;
   }
 
