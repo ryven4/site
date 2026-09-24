@@ -3129,9 +3129,17 @@ let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {
   equippedAvatar: "default",
   customAvatar: null,
   snipes: 0,
-  snipedMatches: []
+  snipedMatches: [],
+  discordId: null,
+  discordUsername: null,
+  discordAvatar: null,
+  epicLocked: false
 };
 
+if(state.discordId === undefined) state.discordId = null;
+if(state.discordUsername === undefined) state.discordUsername = null;
+if(state.discordAvatar === undefined) state.discordAvatar = null;
+if(state.epicLocked === undefined) state.epicLocked = false;
 if(!state.history) state.history = [];
 if(!state.joinedAt) state.joinedAt = Date.now();
 if(state.stats.bestStreak === undefined) state.stats.bestStreak = state.stats.streak || 0;
@@ -3180,7 +3188,11 @@ function save(){
       snipes: state.snipes || 0,
       history: state.history,
       ecoResetVersion: ECO_RESET_VERSION,
-      lastWheelSpin: state.lastWheelSpin || null
+      lastWheelSpin: state.lastWheelSpin || null,
+      discordId: state.discordId || null,
+      discordUsername: state.discordUsername || null,
+      discordAvatar: state.discordAvatar || null,
+      epicLocked: !!state.epicLocked
     }, { merge:true }).catch(err => console.warn("Erreur sauvegarde profil :", err));
   }
 }
@@ -3197,6 +3209,69 @@ function initials(name){
 /* ÉCONOMIE — monnaie en pas de 0.5 (façon Better Player Win) */
 const REWARD_MULT = 2; // le vainqueur gagne toujours 2x sa mise, quel que soit le mode
 const ECO_RESET_VERSION = 3; // v3 : nouveau reset forcé des coins de tous les comptes existants à 20
+
+/* =========================================================
+   DISCORD — connexion obligatoire avant de pouvoir lier son
+   pseudo Epic (anti multi-comptes : un Discord = un seul
+   compte Prime Token).
+========================================================= */
+const DISCORD_CLIENT_ID = "1552708034113839124";
+const DISCORD_REDIRECT_URI = "https://ryven4.github.io/site/";
+
+function linkDiscord(){
+  const url = "https://discord.com/api/oauth2/authorize"
+    + "?client_id=" + encodeURIComponent(DISCORD_CLIENT_ID)
+    + "&redirect_uri=" + encodeURIComponent(DISCORD_REDIRECT_URI)
+    + "&response_type=token"
+    + "&scope=identify";
+  window.location.href = url;
+}
+
+/* Traite le retour de Discord (le token arrive dans le # de l'URL). Ne fait
+   rien si l'URL ne contient pas de token — donc sans danger à appeler à
+   chaque chargement de page. */
+async function handleDiscordOAuthRedirect(){
+  const hash = window.location.hash || "";
+  if(!hash.includes("access_token")) return;
+
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const accessToken = params.get("access_token");
+  // Nettoie l'URL tout de suite pour ne pas retraiter le même token si la
+  // personne rafraîchit la page.
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  if(!accessToken || !db || !currentUid) return;
+
+  try{
+    const res = await fetch("https://discord.com/api/users/@me", {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    if(!res.ok) throw new Error("Discord API error " + res.status);
+    const discordUser = await res.json();
+    const discordId = discordUser.id;
+    const discordUsername = discordUser.username
+      + (discordUser.discriminator && discordUser.discriminator !== "0" ? "#" + discordUser.discriminator : "");
+
+    // Anti multi-comptes : ce Discord ne doit être lié à AUCUN AUTRE compte.
+    const existing = await db.collection("users").where("discordId", "==", discordId).limit(5).get();
+    const usedByOther = existing.docs.some(d => d.id !== currentUid);
+    if(usedByOther){
+      toast("This Discord account is already linked to another Prime Token account.");
+      return;
+    }
+
+    state.discordId = discordId;
+    state.discordUsername = discordUsername;
+    state.discordAvatar = discordUser.avatar
+      ? ("https://cdn.discordapp.com/avatars/" + discordId + "/" + discordUser.avatar + ".png")
+      : null;
+    save();
+    toast("Discord linked: " + discordUsername);
+    render();
+  } catch(err){
+    console.warn("Erreur de liaison Discord :", err);
+    toast("Error while linking Discord. Please try again.");
+  }
+}
 
 /* ROUE (Wheel) — un tour gratuit par jour */
 const WHEEL_SEGMENTS = [
@@ -5002,8 +5077,29 @@ function render(){
   }
 
   else if(currentPage === "settings"){
+    const discordLinked = !!state.discordId;
+    const epicLocked = !!state.epicLocked;
+    const epicEditable = discordLinked && !epicLocked;
     container.innerHTML = `
       <div class="settings-grid">
+        <div class="setting-card" style="padding:20px;">
+          <h3 style="margin-bottom:15px; font-size:14px;">🔗 Link Discord</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">You must link your Discord account before you can set your Epic Games username. One Discord account can only be linked to one Prime Token account.</p>
+          ${discordLinked ? `
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--brand); background:rgba(0,255,136,0.06); border-radius:10px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                ${state.discordAvatar ? `<img src="${escapeHTML(state.discordAvatar)}" style="width:28px;height:28px;border-radius:50%;">` : ''}
+                <div>
+                  <strong style="display:block; font-size:12px; color:var(--brand);">✓ Connected</strong>
+                  <span style="font-size:11px; color:var(--muted);">${escapeHTML(state.discordUsername || '')}</span>
+                </div>
+              </div>
+              <button class="btn danger small" onclick="unlinkDiscord()">Unlink</button>
+            </div>
+          ` : `
+            <button class="btn" style="background:#5865F2; color:#fff;" onclick="linkDiscord()">Link Discord</button>
+          `}
+        </div>
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">Profile Settings</h3>
           <div class="form-group" style="margin-bottom:12px;">
@@ -5012,9 +5108,11 @@ function render(){
           </div>
           <div class="form-group" style="margin-bottom:15px;">
             <label>Epic Games Username</label>
-            <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Your Epic Username">
+            <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Your Epic Username" ${epicEditable ? '' : 'disabled style="opacity:.5; cursor:not-allowed;"'}>
+            ${!discordLinked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Link your Discord above to unlock this field.</span>` : ''}
+            ${discordLinked && epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">🔒 Locked — you can only set this once. Open a ticket on our Discord to request a change.</span>` : ''}
           </div>
-          <button class="btn green" onclick="saveSettings()">Save</button>
+          <button class="btn green" onclick="saveSettings()" ${epicEditable ? '' : 'disabled title="Locked"'}>Save</button>
         </div>
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">Account</h3>
@@ -5852,10 +5950,36 @@ function sendTip(){
 }
 
 function saveSettings(){
+  if(!state.discordId){
+    toast("Link your Discord account first.");
+    return;
+  }
+  if(state.epicLocked){
+    toast("Your Epic username is locked. Open a ticket on our Discord to request a change.");
+    return;
+  }
   const e = document.getElementById("settingEpic").value.trim();
+  if(!e){
+    toast("Enter your Epic username.");
+    return;
+  }
   state.epic = e;
+  // Une fois enregistré, le pseudo Epic ne peut plus être changé depuis le
+  // site — il faut passer par un ticket Discord pour éviter les abus
+  // (usurper le pseudo d'un autre joueur, changer sans vérification, etc).
+  state.epicLocked = true;
   save();
-  toast("Saved!");
+  toast("Saved! Your Epic username is now locked.");
+  render();
+}
+
+function unlinkDiscord(){
+  if(!confirm("Unlink your Discord account? You'll need to link a Discord account again before making any changes that require it.")) return;
+  state.discordId = null;
+  state.discordUsername = null;
+  state.discordAvatar = null;
+  save();
+  toast("Discord unlinked.");
   render();
 }
 
@@ -5976,6 +6100,10 @@ async function loadProfileAndStart(uid){
       state.snipes = (profile.snipes !== undefined) ? profile.snipes : state.snipes;
       state.history = profile.history || state.history;
       state.lastWheelSpin = (profile.lastWheelSpin !== undefined) ? profile.lastWheelSpin : state.lastWheelSpin;
+      state.discordId = (profile.discordId !== undefined) ? profile.discordId : state.discordId;
+      state.discordUsername = (profile.discordUsername !== undefined) ? profile.discordUsername : state.discordUsername;
+      state.discordAvatar = (profile.discordAvatar !== undefined) ? profile.discordAvatar : state.discordAvatar;
+      state.epicLocked = (profile.epicLocked !== undefined) ? !!profile.epicLocked : state.epicLocked;
 
       // Reset économie forcé : tous les comptes existants repartent à 20 coins une seule fois.
       if((profile.ecoResetVersion || 0) < ECO_RESET_VERSION){
@@ -5995,6 +6123,7 @@ async function loadProfileAndStart(uid){
   initPlayersSync();
   initGlobalChatSync();
   initTeamsSync();
+  handleDiscordOAuthRedirect();
 }
 
 if(auth){
