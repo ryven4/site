@@ -5327,6 +5327,20 @@ function quitMatch(id){
   if(leaveMatchById(id)) render();
 }
 
+/* Un match "d'équipe" ne stocke qu'un instantané de la team (match.team)
+   pris à la création. Si un mate a rejoint la team APRÈS la création du
+   match (ou juste avant, avec un léger délai de synchro), cet instantané
+   peut être périmé et ne pas encore le contenir — il spawnerait alors côté
+   adverse par erreur. On vérifie donc la liste À JOUR de la team dans
+   teamsCache en priorité, et on ne retombe sur l'instantané que si la team
+   n'existe plus (supprimée entre-temps). */
+function isOnHostTeam(match, username){
+  if(!match || !match.team) return false;
+  const liveTeam = (teamsCache || []).find(t => t.id === match.team.id);
+  const members = liveTeam ? (liveTeam.members || []) : (match.team.members || []);
+  return members.includes(username);
+}
+
 function joinMatch(id){
   const match = state.matches.find(m => m.id === id);
   if(!match) return;
@@ -5341,7 +5355,7 @@ function joinMatch(id){
     return;
   }
 
-  const onHostTeam = match.team && (match.team.members || []).includes(state.username);
+  const onHostTeam = isOnHostTeam(match, state.username);
   if(onHostTeam){
     if(hostPlayers.length >= maxPerSide){ toast("Your team's side is already full!"); return; }
   } else {
@@ -5385,7 +5399,7 @@ function executeJoin(match){
   match.hostPlayers = match.hostPlayers || [match.host];
   match.guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
 
-  const onHostTeam = match.team && (match.team.members || []).includes(state.username);
+  const onHostTeam = isOnHostTeam(match, state.username);
   if(onHostTeam){
     match.hostPlayers.push(state.username);
   } else {
