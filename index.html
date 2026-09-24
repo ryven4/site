@@ -4650,10 +4650,10 @@ function render(){
           <!-- END OF MATCH RESULTS SECTION -->
           ${lobby.locked ? renderResultSection(lobby) : ''}
 
-          ${(spectatingAsAdmin && !lobby.completed && !lobby.cancelled) ? `
+          ${(isAdmin() && !lobby.completed && !lobby.cancelled) ? `
             <div style="margin:0 20px 18px; padding:16px; border:1px solid rgba(169,112,255,.4); border-radius:12px; background:rgba(169,112,255,.08);">
               <h3 style="color:var(--purple); margin-bottom:4px; font-size:13px;">🛡️ Moderator Override</h3>
-              <p style="color:var(--muted); font-size:10px; margin-bottom:14px;">Only visible to you as a moderator spectating this match. Force-assign victory to either side — this settles the match and coins immediately, no player action needed.</p>
+              <p style="color:var(--muted); font-size:10px; margin-bottom:14px;">Only visible to you as a moderator (even in your own matches). Force-assign victory to either side — this settles the match and coins immediately, no player action needed.</p>
               <div style="display:flex; gap:12px; flex-wrap:wrap;">
                 <button class="btn" style="flex:1; min-width:180px; background:var(--purple2); border-color:var(--purple); color:#fff;" onclick="modForceAssignWin('${lobby.id}', 'host')" ${hostPlayers.length === 0 ? 'disabled' : ''}>
                   🛡️ Force Win — HOST (${escapeHTML(hostPlayers.join(", ") || "—")})
