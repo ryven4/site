@@ -4952,7 +4952,11 @@ function render(){
     const userReady = lobby.readies && lobby.readies[state.username];
     // Le nom du host ne doit pas fuiter dans le mini panneau de statut tant
     // que les identités ne sont pas révélées (même règle que les player-rows).
-    const hostNameRevealed = isHost || bothReady || isAdmin();
+    // isAdmin() seul ne suffit pas : un modérateur qui JOUE lui-même dans ce
+    // match (host ou guest) doit avoir les identités cachées comme tout le
+    // monde tant que tout le monde n'est pas prêt — seul un modérateur qui
+    // regarde sans jouer (spectateur) voit tout direct.
+    const hostNameRevealed = isHost || bothReady || (isAdmin() && !isHost && !isGuest);
 
     const stepIndex = !hasOpponent ? 0 : (!lobby.locked ? 1 : 2);
     const steps = ["Waiting", "Ready?", "Result"];
