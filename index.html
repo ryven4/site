@@ -2566,11 +2566,12 @@ function modSearchUsers(){
         <div class="chat-avatar" style="${avatarStyleAttr(p.equippedAvatar || 'default')}">${avatarInnerHTML(p.equippedAvatar || 'default', p.username, p.customAvatar)}</div>
         <div>
           <span class="stats-history-mode">${escapeHTML(p.username)}${isUsernameAdmin(p.username) ? ' <span class="mod-badge">🛡️</span>' : ''}${p.banned ? ' <span style="color:var(--red); font-size:9px; font-weight:900;">BANNED</span>' : ''}</span>
-          <span class="stats-history-meta">${formatCoins(p.coins || 0)} coins · ${p.snipes || 0} snipes</span>
+          <span class="stats-history-meta">${formatCoins(p.coins || 0)} coins · ${p.snipes || 0} snipes${p.epicLocked ? ' · 🔒 Epic locked (' + escapeHTML(p.epic || '—') + ')' : ''}</span>
           ${p.banned && p.banReason ? `<span class="stats-history-meta" style="color:var(--red);">Reason: ${escapeHTML(p.banReason)}</span>` : ''}
         </div>
       </div>
       <div style="display:flex; gap:6px;">
+        ${p.epicLocked ? `<button class="btn small" onclick="modResetEpicLock('${p.uid}','${escapeHTML(p.username)}')">Unlock Epic</button>` : ''}
         ${p.banned
           ? `<button class="btn green small" onclick="modUnbanUser('${p.uid}','${escapeHTML(p.username)}')">Unban</button>`
           : `<button class="btn danger small" onclick="modBanUser('${p.uid}','${escapeHTML(p.username)}')" ${isUsernameAdmin(p.username) ? 'disabled title="Cannot ban a moderator"' : ''}>Ban</button>`
@@ -2578,6 +2579,14 @@ function modSearchUsers(){
       </div>
     </div>
   `).join("");
+}
+
+function modResetEpicLock(uid, username){
+  if(!isAdmin() || !db || !uid) return;
+  if(!confirm(`Unlock ${username}'s Epic username so they can set a new one?`)) return;
+  db.collection("users").doc(uid).set({ epicLocked:false }, { merge:true })
+    .then(() => { toast(`${username}'s Epic username is now unlocked.`); modSearchUsers(); })
+    .catch(err => { console.warn(err); toast("Error while unlocking."); });
 }
 
 let pendingBanUid = null;
