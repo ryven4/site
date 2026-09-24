@@ -2516,6 +2516,60 @@ function deleteMatchFromCloud(id){
     .catch(err => console.warn("Erreur de suppression du match :", err));
 }
 
+/* Petit "ting" joué avec le Web Audio API (pas besoin de fichier audio externe) —
+   pour prévenir même quand on est alt-tab sur Fortnite : quelqu'un rejoint
+   notre match, ou quelqu'un coche Victoire dans un match auquel on participe. */
+let _tingAudioCtx = null;
+function playTingSound(){
+  try{
+    if(!_tingAudioCtx) _tingAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _tingAudioCtx;
+    if(ctx.state === "suspended") ctx.resume();
+    const now = ctx.currentTime;
+    [{ freq: 1046.5, start: 0, dur: .18 }, { freq: 1568, start: .1, dur: .32 }].forEach(n => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = n.freq;
+      gain.gain.setValueAtTime(0, now + n.start);
+      gain.gain.linearRampToValueAtTime(0.3, now + n.start + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + n.start);
+      osc.stop(now + n.start + n.dur + 0.05);
+    });
+  }catch(e){ console.warn("Son indisponible :", e); }
+}
+
+// Snapshot du dernier état connu de chaque match, pour détecter les
+// changements pertinents (nouveau joueur / victoire déclarée) d'un cycle
+// Firestore à l'autre, sans déclencher de faux "ting" au premier chargement.
+let matchNotifySnapshots = {};
+function checkMatchNotifications(matches){
+  matches.forEach(m => {
+    if(!m || !m.id) return;
+    const { hostPlayers, guestPlayers } = matchTeamsOf(m);
+    const amHost = hostPlayers.includes(state.username);
+    const amParticipant = amHost || guestPlayers.includes(state.username);
+    const guestCount = guestPlayers.length;
+    const hasClaim = !!(m.victoryClaim && m.victoryClaim.by);
+
+    const prev = matchNotifySnapshots[m.id];
+    if(prev){
+      if(amHost && guestCount > prev.guestCount){
+        playTingSound();
+        toast("🔔 A player joined your match!");
+      }
+      if(amParticipant && hasClaim && !prev.hasClaim && m.victoryClaim.by !== state.username){
+        playTingSound();
+        toast("🔔 Your opponent declared victory!");
+      }
+    }
+    matchNotifySnapshots[m.id] = { guestCount, hasClaim };
+  });
+}
+
 function initCloudSync(){
   if(!db) return;
   db.collection("matches").doc("shared").delete().catch(() => {}); // nettoyage de l'ancien système de synchro
@@ -2527,6 +2581,7 @@ function initCloudSync(){
       const data = docSnap.data();
       if(data && data.id) remoteMatches.push(data);
     });
+    checkMatchNotifications(remoteMatches);
     state.matches = remoteMatches;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     syncingFromRemote = false;
@@ -3682,18 +3737,22 @@ const WHEEL_SEGMENTS = [
   { type:"snipes", amount:1,   label:"+1 🎯",   color:"#3a0d10" },
 ];
 
+const WHEEL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
 function canSpinWheelToday(){
   // Les modérateurs peuvent tourner la roue autant de fois qu'ils veulent
   // (pratique pour tester les gains, ou juste un petit privilège de mod).
   if(isAdmin()) return true;
   if(!state.lastWheelSpin) return true;
-  return new Date(state.lastWheelSpin).toDateString() !== new Date().toDateString();
+  // Vrai cooldown de 24h glissantes depuis le dernier spin (et non plus un
+  // simple changement de date calendaire, qui laissait tourner la roue deux
+  // fois très proches l'une de l'autre à cheval sur minuit).
+  return (Date.now() - state.lastWheelSpin) >= WHEEL_COOLDOWN_MS;
 }
 
 function wheelTimeUntilReset(){
-  const next = new Date();
-  next.setHours(24,0,0,0);
-  const ms = Math.max(0, next.getTime() - Date.now());
+  const next = (state.lastWheelSpin || 0) + WHEEL_COOLDOWN_MS;
+  const ms = Math.max(0, next - Date.now());
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h}h ${String(m).padStart(2,'0')}m`;
