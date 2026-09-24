@@ -2713,6 +2713,30 @@ function resolveDispute(matchId, winnerUsername){
   render();
 }
 
+/* Override modérateur : depuis le panel Spectate, un modérateur peut
+   attribuer directement la victoire à un camp (host ou guest), même si
+   le match n'est pas verrouillé, pas en dispute, et même sans que les
+   joueurs aient déclaré quoi que ce soit. À utiliser avec précaution —
+   d'où la confirmation et la couleur distincte (violet) dans l'UI. */
+function modForceAssignWin(matchId, side){
+  if(!isAdmin()) return;
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+  if(match.completed){ toast("This match is already completed."); return; }
+
+  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  const winners = side === "host" ? hostPlayers : guestPlayers;
+  const losers = side === "host" ? guestPlayers : hostPlayers;
+  if(winners.length === 0){ toast("That side has no player."); return; }
+
+  if(!confirm(`[MODERATOR OVERRIDE] Force victory for ${side.toUpperCase()} (${winners.join(", ")}) on match ${matchId}?\n\nThis immediately settles coins and cannot be undone from here.`)) return;
+
+  finalizeMatchResult(match, winners, losers);
+  save();
+  toast(`🛡️ Moderator override: victory forced for ${winners.join(", ")}.`);
+  setPage("moderation");
+}
+
 function formatCountdown(ms){
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
   const min = Math.floor(totalSec / 60);
@@ -4448,6 +4472,10 @@ function render(){
     const maxPerSide = TEAM_SIZE_MAX[lobby.teamSize] || 1;
     const isHost = hostPlayers.includes(state.username);
     const isGuest = guestPlayers.includes(state.username);
+    // Un modérateur qui regarde un match dont il ne fait pas partie (Spectate
+    // depuis le panel modération) — c'est LUI seul qui doit voir le panel
+    // d'override de victoire, jamais un joueur normal du match.
+    const spectatingAsAdmin = isAdmin() && !isHost && !isGuest;
     const hasOpponent = guestPlayers.length > 0;
     const hostFull = hostPlayers.length >= maxPerSide;
     const guestFull = guestPlayers.length >= maxPerSide;
@@ -4621,6 +4649,21 @@ function render(){
 
           <!-- END OF MATCH RESULTS SECTION -->
           ${lobby.locked ? renderResultSection(lobby) : ''}
+
+          ${(spectatingAsAdmin && !lobby.completed && !lobby.cancelled) ? `
+            <div style="margin:0 20px 18px; padding:16px; border:1px solid rgba(169,112,255,.4); border-radius:12px; background:rgba(169,112,255,.08);">
+              <h3 style="color:var(--purple); margin-bottom:4px; font-size:13px;">🛡️ Moderator Override</h3>
+              <p style="color:var(--muted); font-size:10px; margin-bottom:14px;">Only visible to you as a moderator spectating this match. Force-assign victory to either side — this settles the match and coins immediately, no player action needed.</p>
+              <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                <button class="btn" style="flex:1; min-width:180px; background:var(--purple2); border-color:var(--purple); color:#fff;" onclick="modForceAssignWin('${lobby.id}', 'host')" ${hostPlayers.length === 0 ? 'disabled' : ''}>
+                  🛡️ Force Win — HOST (${escapeHTML(hostPlayers.join(", ") || "—")})
+                </button>
+                <button class="btn" style="flex:1; min-width:180px; background:var(--purple2); border-color:var(--purple); color:#fff;" onclick="modForceAssignWin('${lobby.id}', 'guest')" ${guestPlayers.length === 0 ? 'disabled' : ''}>
+                  🛡️ Force Win — GUEST (${escapeHTML(guestPlayers.join(", ") || "—")})
+                </button>
+              </div>
+            </div>
+          ` : ''}
 
         </div>
 
