@@ -3135,6 +3135,10 @@ function declareResult(matchId, type){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
   const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  if(!hostPlayers.includes(state.username) && !guestPlayers.includes(state.username)){
+    toast("You're only spectating this match — you can't submit a result.");
+    return;
+  }
   const myTeam = hostPlayers.includes(state.username) ? hostPlayers : guestPlayers;
   const otherTeam = hostPlayers.includes(state.username) ? guestPlayers : hostPlayers;
 
@@ -3253,6 +3257,7 @@ function renderResultSection(lobby){
   const opponent = players.find(p => p !== state.username);
   const { hostPlayers: rsHostPlayers, guestPlayers: rsGuestPlayers } = matchTeamsOf(lobby);
   const myTeam = rsHostPlayers.includes(state.username) ? rsHostPlayers : rsGuestPlayers;
+  const isParticipant = rsHostPlayers.includes(state.username) || rsGuestPlayers.includes(state.username);
 
   if(lobby.completed){
     const myResult = (lobby.results || {})[state.username];
@@ -3274,6 +3279,14 @@ function renderResultSection(lobby){
   }
 
   if(lobby.disputed){
+    if(!isParticipant){
+      return `
+        <div style="padding:20px; background:rgba(255,171,64,.06); border-top:1px solid var(--line); text-align:center;">
+          <h3 style="color:#ffab40; margin-bottom:6px;">⚠️ Dispute in progress</h3>
+          <p style="color:var(--muted); font-size:11px;">Both players declared victory. A moderator will review proofs and decide.</p>
+        </div>
+      `;
+    }
     const myProof = (lobby.proofs || {})[state.username];
     const oppProof = opponent ? (lobby.proofs || {})[opponent] : null;
     return `
@@ -3304,6 +3317,15 @@ function renderResultSection(lobby){
     const isClaimant = lobby.victoryClaim.by === state.username || myTeam.includes(lobby.victoryClaim.by);
     const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${lobby.victoryClaim.at}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
 
+    if(!isParticipant){
+      return `
+        <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
+          <h3 style="color:#fff; margin-bottom:6px;">🕒 Victory declared — awaiting confirmation</h3>
+          <p style="color:var(--muted); font-size:11px;">Automatically confirmed in ${countdownHtml} if the opponent doesn't respond.</p>
+        </div>
+      `;
+    }
+
     if(isClaimant){
       return `
         <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
@@ -3321,6 +3343,15 @@ function renderResultSection(lobby){
           <button class="btn danger" onclick="declareResult('${lobby.id}', 'LOSS')">Confirm My Defeat</button>
           <button class="btn green" onclick="declareResult('${lobby.id}', 'WIN')">I Dispute, I Won</button>
         </div>
+      </div>
+    `;
+  }
+
+  if(!isParticipant){
+    return `
+      <div style="padding:20px; background:rgba(0,255,136,.05); border-top:1px solid var(--line); text-align:center;">
+        <h3 style="color:#fff; margin-bottom:6px;">🔒 Match Locked</h3>
+        <p style="color:var(--muted); font-size:11px;">Waiting for the players to submit their result.</p>
       </div>
     `;
   }
