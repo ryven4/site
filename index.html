@@ -2267,6 +2267,26 @@ button:active{ transform:scale(.97) !important; }
 </div>
 
 <!-- =========================
+     MOD: BAN REASON MODAL
+========================= -->
+<div class="overlay" id="banReasonOverlay">
+<div class="modal" style="width:min(420px,100%);">
+  <div class="modal-head">
+    <h2 id="banReasonTitle">Ban Player</h2>
+    <button class="close" onclick="closeBanReasonModal()">×</button>
+  </div>
+  <div style="padding:20px;">
+    <label style="display:block; font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Reason for ban</label>
+    <textarea id="banReasonInput" class="input" rows="4" placeholder="e.g. Cheating, toxic behavior, scamming another player..." style="width:100%; resize:vertical; font-family:inherit; height:auto;"></textarea>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeBanReasonModal()">Cancel</button>
+    <button class="btn danger" onclick="confirmModBan()">Ban Player</button>
+  </div>
+</div>
+</div>
+
+<!-- =========================
      AVATAR PICKER MODAL
 ========================= -->
 
@@ -2546,6 +2566,7 @@ function modSearchUsers(){
         <div>
           <span class="stats-history-mode">${escapeHTML(p.username)}${isUsernameAdmin(p.username) ? ' <span class="mod-badge">🛡️</span>' : ''}${p.banned ? ' <span style="color:var(--red); font-size:9px; font-weight:900;">BANNED</span>' : ''}</span>
           <span class="stats-history-meta">${formatCoins(p.coins || 0)} coins · ${p.snipes || 0} snipes</span>
+          ${p.banned && p.banReason ? `<span class="stats-history-meta" style="color:var(--red);">Reason: ${escapeHTML(p.banReason)}</span>` : ''}
         </div>
       </div>
       <div style="display:flex; gap:6px;">
@@ -2558,17 +2579,50 @@ function modSearchUsers(){
   `).join("");
 }
 
+let pendingBanUid = null;
+let pendingBanUsername = null;
+
 function modBanUser(uid, username){
   if(!isAdmin() || !db || !uid) return;
-  if(!confirm(`Ban ${username} from Prime Token? They'll be signed out immediately and unable to log back in.`)) return;
-  db.collection("users").doc(uid).set({ banned:true }, { merge:true })
-    .then(() => { toast(`${username} banned.`); modSearchUsers(); })
+  pendingBanUid = uid;
+  pendingBanUsername = username;
+  document.getElementById("banReasonTitle").textContent = `Ban ${username}`;
+  document.getElementById("banReasonInput").value = "";
+  document.getElementById("banReasonOverlay").classList.add("open");
+}
+
+function closeBanReasonModal(){
+  document.getElementById("banReasonOverlay").classList.remove("open");
+  pendingBanUid = null;
+  pendingBanUsername = null;
+}
+
+function confirmModBan(){
+  if(!isAdmin() || !db || !pendingBanUid) return;
+  const reason = document.getElementById("banReasonInput").value.trim();
+  if(!reason){
+    toast("Please enter a reason for the ban.");
+    return;
+  }
+  const uid = pendingBanUid;
+  const username = pendingBanUsername;
+  db.collection("users").doc(uid).set({
+    banned: true,
+    banReason: reason,
+    bannedBy: state.username,
+    bannedAt: Date.now()
+  }, { merge:true })
+    .then(() => {
+      toast(`${username} banned.`);
+      closeBanReasonModal();
+      modSearchUsers();
+    })
     .catch(err => { console.warn(err); toast("Error while banning."); });
 }
 
 function modUnbanUser(uid, username){
   if(!isAdmin() || !db || !uid) return;
-  db.collection("users").doc(uid).set({ banned:false }, { merge:true })
+  db.collection("users").doc(uid).set({ banned:false, banReason:null }, { merge:true })
     .then(() => { toast(`${username} unbanned.`); modSearchUsers(); })
     .catch(err => { console.warn(err); toast("Error while unbanning."); });
 }
@@ -2775,15 +2829,21 @@ function applyMatchResultForMe(match, type){
     // La mise a déjà été débitée au verrouillage du match (escrow) :
     // on crédite donc le gain complet (mise incluse), pas juste le profit.
     const reward = info.winReward;
+    // Le "profit" (ce qu'on a vraiment gagné, hors mise récupérée) sert au
+    // suivi global Total Earned / Highest Match Earnings, façon BetterPlayerWin.
+    const profit = roundToHalf(reward - info.stake);
     state.stats.wins += 1;
     state.stats.streak = (state.stats.streak || 0) + 1;
     if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
+    state.stats.totalEarned = roundToHalf((state.stats.totalEarned || 0) + profit);
+    if(profit > (state.stats.highestMatchEarning || 0)) state.stats.highestMatchEarning = profit;
     state.coins = roundToHalf((state.coins || 0) + reward);
     toast(`Victory recorded! +1 Win · +${formatCoins(reward)} coins`);
   } else {
     // Rien à débiter ici : la mise a déjà disparu au moment du READY UP.
     state.stats.losses += 1;
     state.stats.streak = 0;
+    state.stats.totalEarned = roundToHalf((state.stats.totalEarned || 0) - info.stake);
     toast(info.stake > 0 ? `Defeat recorded. Your ${formatCoins(info.stake)} coin bet is gone.` : `Defeat recorded. Your teammate covered the bet — no coins lost.`);
   }
 
@@ -3062,7 +3122,7 @@ let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {
   chat:[],
   history:[],
   joinedAt: Date.now(),
-  stats:{ played:0, wins:0, losses:0, streak:0, bestStreak:0 },
+  stats:{ played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 },
   coins: 20,
   ownedAvatars: ["default"],
   equippedAvatar: "default",
@@ -3074,6 +3134,8 @@ let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {
 if(!state.history) state.history = [];
 if(!state.joinedAt) state.joinedAt = Date.now();
 if(state.stats.bestStreak === undefined) state.stats.bestStreak = state.stats.streak || 0;
+if(state.stats.totalEarned === undefined) state.stats.totalEarned = 0;
+if(state.stats.highestMatchEarning === undefined) state.stats.highestMatchEarning = 0;
 if(state.coins === undefined) state.coins = 20;
 if(!state.ownedAvatars) state.ownedAvatars = ["default"];
 if(!state.equippedAvatar) state.equippedAvatar = "default";
@@ -3299,7 +3361,7 @@ function playerLiveInfo(username){
   const p = allPlayersCache.find(pl => pl.username === username);
   return {
     epic: (p && p.epic) || "",
-    stats: (p && p.stats) || { played:0, wins:0, losses:0, streak:0, bestStreak:0 },
+    stats: (p && p.stats) || { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 },
     equippedAvatar: (p && p.equippedAvatar) || "default",
     customAvatar: (p && p.customAvatar) || null
   };
@@ -4560,6 +4622,8 @@ function render(){
     const losses = state.stats.losses || 0;
     const streak = state.stats.streak || 0;
     const bestStreak = state.stats.bestStreak || 0;
+    const totalEarned = state.stats.totalEarned || 0;
+    const highestMatchEarning = state.stats.highestMatchEarning || 0;
     const winrate = getWinRate();
 
     const joinedLabel = new Date(state.joinedAt).toLocaleDateString("en-US", { day:"numeric", month:"long", year:"numeric" });
@@ -4579,6 +4643,14 @@ function render(){
       </div>
 
       <div class="profile-stats-grid">
+        <div class="profile-stat-tile">
+          <span>Total Earned</span>
+          <strong class="${totalEarned >= 0 ? 'green' : 'red'}"><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(totalEarned)}</strong>
+        </div>
+        <div class="profile-stat-tile">
+          <span>Highest Match Earnings</span>
+          <strong class="yellow"><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(highestMatchEarning)}</strong>
+        </div>
         <div class="profile-stat-tile">
           <span>Matches Played</span>
           <strong>${played}</strong>
@@ -5120,7 +5192,7 @@ function doBuyResetStats(){
     return;
   }
   state.coins = roundToHalf((state.coins || 0) - RESET_STATS_COST_COINS);
-  state.stats = { played:0, wins:0, losses:0, streak:0, bestStreak:0 };
+  state.stats = { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 };
   state.history = [];
   save();
   renderHeaderUI();
@@ -5722,7 +5794,7 @@ async function doSignup(){
     const profile = {
       username,
       epic: "",
-      stats: { played:0, wins:0, losses:0, streak:0, bestStreak:0 },
+      stats: { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 },
       coins: 20,
       ownedAvatars: ["default"],
       equippedAvatar: "default",
@@ -5769,13 +5841,17 @@ async function loadProfileAndStart(uid){
         currentUid = null;
         try{ await auth.signOut(); }catch(e){}
         showAuthScreen();
-        alert("Your account has been banned from Prime Token.");
+        alert(profile.banReason
+          ? `Your account has been banned from Prime Token.\n\nReason: ${profile.banReason}`
+          : "Your account has been banned from Prime Token.");
         return;
       }
 
       state.username = profile.username || state.username;
       state.epic = profile.epic || "";
       state.stats = profile.stats || state.stats;
+      if(state.stats.totalEarned === undefined) state.stats.totalEarned = 0;
+      if(state.stats.highestMatchEarning === undefined) state.stats.highestMatchEarning = 0;
       state.coins = (profile.coins !== undefined) ? profile.coins : state.coins;
       state.ownedAvatars = profile.ownedAvatars || state.ownedAvatars;
       state.equippedAvatar = profile.equippedAvatar || state.equippedAvatar;
