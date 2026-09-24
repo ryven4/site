@@ -4950,6 +4950,9 @@ function render(){
     const myBetInfo = computePlayerBetInfo(lobby, state.username);
 
     const userReady = lobby.readies && lobby.readies[state.username];
+    // Le nom du host ne doit pas fuiter dans le mini panneau de statut tant
+    // que les identités ne sont pas révélées (même règle que les player-rows).
+    const hostNameRevealed = isHost || bothReady || isAdmin();
 
     const stepIndex = !hasOpponent ? 0 : (!lobby.locked ? 1 : 2);
     const steps = ["Waiting", "Ready?", "Result"];
@@ -4973,9 +4976,9 @@ function render(){
           <div class="avatar ${revealed ? 'clickable' : ''}" ${revealed ? `onclick="showPlayerStats('${username}')"` : ''} ${revealed ? `style="${avatarStyleAttr(isMe ? state.equippedAvatar : info.equippedAvatar)}"` : ''}>${revealed ? avatarInnerHTML(isMe ? state.equippedAvatar : info.equippedAvatar, username, isMe ? state.customAvatar : info.customAvatar) : "?"}</div>
           <div class="player-row-info">
             <div class="slot-name-row">
-              <div class="slot-name">${revealed ? escapeHTML(username) : "Hidden Player"}</div>
+              <div class="slot-name">${revealed ? escapeHTML(username) : "Anonymous Player"}</div>
             </div>
-            <div class="slot-epic">${revealed ? "Epic: " + escapeHTML(info.epic || "Not set") : "Identity hidden"}</div>
+            <div class="slot-epic">${revealed ? "Epic: " + escapeHTML(info.epic || "Not set") : "Hidden until Ready Up"}</div>
             <div class="player-row-status">
               <span class="status-pill ${readyBool ? 'ready' : 'waiting'}">${readyBool ? "Ready" : "Not ready"}</span>
             </div>
@@ -5089,7 +5092,7 @@ function render(){
 
               <div class="game-info-box">
                 <div class="game-info-row"><span>Status</span><strong>${lobby.locked ? "Locked" : (hasOpponent ? "Ready?" : "Waiting")}</strong></div>
-                <div class="game-info-row"><span>Host</span><strong>${escapeHTML(lobby.host)}</strong></div>
+                <div class="game-info-row"><span>Host</span><strong>${hostNameRevealed ? escapeHTML(lobby.host) : "Hidden"}</strong></div>
                 <div class="game-info-row"><span>Guests</span><strong>${hasOpponent ? guestPlayers.length : 0}/${maxPerSide}</strong></div>
               </div>
             </div>
