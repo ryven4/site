@@ -1304,7 +1304,18 @@ button:active{ transform:scale(.97) !important; }
 
 .slot-name-row{ display:flex; align-items:center; gap:7px; }
 .slot-name{ font-size:11px; font-weight:800; color:#fff; }
-.slot-epic{ color:var(--muted); margin-top:2px; font-size:9px; }
+.slot-epic{ color:var(--muted); margin-top:2px; font-size:9px; display:flex; align-items:center; gap:5px; }
+.epic-copy-btn{
+  border:0;
+  background:transparent;
+  color:var(--muted2);
+  font-size:11px;
+  line-height:1;
+  padding:2px 3px;
+  cursor:pointer;
+  border-radius:5px;
+}
+.epic-copy-btn:hover{ color:var(--green); background:rgba(0,255,136,.1); }
 
 .avatar.clickable{ cursor:pointer; }
 .avatar.clickable:hover{ box-shadow:var(--glow-cyan); transform:scale(1.06); }
@@ -4378,6 +4389,40 @@ function toast(msg){
   window.toastTimer = setTimeout(() => el.classList.remove("show"), 2300);
 }
 
+function copyEpicToClipboard(epicName){
+  if(!epicName) return;
+  const done = () => toast(`📋 Copied "${epicName}" to clipboard!`);
+  const fail = () => toast("Couldn't copy — copy it manually: " + epicName);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(epicName).then(done).catch(() => {
+      // Repli si l'API clipboard est bloquée (contexte non sécurisé, permission, etc.)
+      try{
+        const ta = document.createElement("textarea");
+        ta.value = epicName;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        done();
+      }catch(e){ fail(); }
+    });
+  } else {
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = epicName;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      done();
+    }catch(e){ fail(); }
+  }
+}
+
 function pageTitle(page){
   const titles = { home:"Home", matches:"Matches", lobby:"Lobby", roue:"Wheel", profile:"Profile", ranking:"Ranking", teams:"Teams", tournaments:"Tournaments", shop:"Shop", wallet:"Wallet", settings:"Settings", moderation:"Moderation" };
   return titles[page] || "Accueil";
@@ -5109,7 +5154,11 @@ function render(){
             <div class="slot-name-row">
               <div class="slot-name">${revealed ? escapeHTML(username) : "Anonymous Player"}</div>
             </div>
-            <div class="slot-epic">${revealed ? "Epic: " + escapeHTML(info.epic || "Not set") : "Hidden until Ready Up"}</div>
+            <div class="slot-epic">
+              ${revealed
+                ? `<span>Epic: ${escapeHTML(info.epic || "Not set")}</span>${info.epic ? `<button class="epic-copy-btn" onclick="event.stopPropagation(); copyEpicToClipboard('${escapeHTML(info.epic)}')" title="Copy Epic username">📋</button>` : ''}`
+                : "Hidden until Ready Up"}
+            </div>
             <div class="player-row-status">
               <span class="status-pill ${readyBool ? 'ready' : 'waiting'}">${readyBool ? "Ready" : "Not ready"}</span>
             </div>
@@ -5307,7 +5356,12 @@ function render(){
       const rad = (mid - 90) * Math.PI / 180; // -90 : 0° = haut du cercle (comme le pointeur)
       const x = Math.cos(rad) * labelRadius;
       const y = Math.sin(rad) * labelRadius;
-      return `<div class="wheel-seg-label" style="left:calc(50% + ${x.toFixed(2)}px); top:calc(50% + ${y.toFixed(2)}px);"><span>${seg.label}</span></div>`;
+      // Les étiquettes sont DANS .wheel-dial, qui tourne (wheelRotation) —
+      // sans contre-rotation, leur texte tournait avec la roue et se
+      // retrouvait à l'envers/en miroir selon l'angle où la roue s'arrête.
+      // On annule cette rotation sur le <span> pour que le texte reste
+      // toujours parfaitement droit, quel que soit l'angle du disque.
+      return `<div class="wheel-seg-label" style="left:calc(50% + ${x.toFixed(2)}px); top:calc(50% + ${y.toFixed(2)}px);"><span style="display:inline-block; transform:rotate(${(-wheelRotation).toFixed(2)}deg);">${seg.label}</span></div>`;
     }).join("");
 
     const gradientStops = WHEEL_SEGMENTS.map((seg, i) =>
