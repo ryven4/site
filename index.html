@@ -4280,7 +4280,11 @@ function render(){
   }
 
   else if(currentPage === "matches"){
-    const isMine = m => (m.host === state.username || (m.players || []).includes(state.username));
+    // Un membre de la team utilisée pour créer un match d'équipe doit voir
+    // ce match dans "My Matches" dès sa création, pas dans "Available" comme
+    // s'il s'agissait du match d'un inconnu — même s'il n'a pas encore
+    // formellement rejoint (et donc pas encore payé sa mise).
+    const isMine = m => (m.host === state.username || (m.players || []).includes(state.username) || isOnHostTeam(m, state.username));
 
     const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !isMine(m));
     // "My Matches" doit garder mes matchs même une fois verrouillés (READY UP fait) —
@@ -4362,6 +4366,10 @@ function render(){
           const R = 24, C = 2 * Math.PI * R;
           const dash = C * pct;
           const isOwn = isMine(m);
+          // Sur un match d'équipe, un coéquipier peut apparaître dans "mine"
+          // (via isOnHostTeam) sans avoir encore formellement rejoint / payé
+          // sa mise — il faut donc encore lui proposer "Join", pas "View My Lobby".
+          const alreadyJoined = m.host === state.username || (m.players || []).includes(state.username);
           const statusClass = m.locked ? "locked" : (m.visibility === "private" ? "private" : "open");
           const statusLabel = m.locked ? "IN PROGRESS" : (m.visibility === "private" ? "PRIVATE" : "OPEN");
 
@@ -4407,8 +4415,10 @@ function render(){
               </div>
               <div class="match-actions-v2">
                 ${isOwn
-                  ? `<button class="btn blue" onclick="enterMatchLobby('${m.id}')">View My Lobby</button>
-                     ${!m.locked ? `<button class="btn danger small" onclick="quitMatch('${m.id}')">Quit Match</button>` : ''}`
+                  ? (alreadyJoined
+                      ? `<button class="btn blue" onclick="enterMatchLobby('${m.id}')">View My Lobby</button>
+                         ${!m.locked ? `<button class="btn danger small" onclick="quitMatch('${m.id}')">Quit Match</button>` : ''}`
+                      : `<button class="btn blue" onclick="joinMatch('${m.id}')">Join Team Match</button>`)
                   : m.locked
                     ? `<button class="btn ghost" disabled>Match Locked</button>`
                     : `<button class="btn blue" onclick="joinMatch('${m.id}')">Join Match</button>
@@ -5169,7 +5179,10 @@ function render(){
       container.innerHTML = `<div class="empty"><strong>Access Denied</strong><span>This page is reserved for moderators.</span></div>`;
     } else {
       const disputes = state.matches.filter(m => m.disputed && !m.completed);
-      const resolved = state.matches.filter(m => m.completed && m.proofs && Object.keys(m.proofs).length > 0).slice(0, 10);
+      const resolved = state.matches
+        .filter(m => m.completed && m.proofs && Object.keys(m.proofs).length > 0)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .slice(0, 5);
 
       container.innerHTML = `
         ${isSuperAdmin() ? `
@@ -5287,7 +5300,7 @@ function render(){
 
         ${resolved.length > 0 ? `
           <div class="setting-card" style="padding:20px;">
-            <h3 style="margin-bottom:15px; font-size:14px;">Resolved Disputes History</h3>
+            <h3 style="margin-bottom:15px; font-size:14px;">Resolved Disputes History (last 5)</h3>
             ${resolved.map(m => {
               const winner = Object.entries(m.results || {}).find(([, r]) => r === 'WIN');
               return `
