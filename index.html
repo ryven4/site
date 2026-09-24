@@ -2477,6 +2477,88 @@ function initModeratorsSync(){
   });
 }
 
+/* =========================================================
+   ANTI CONTOURNEMENT DE BAN — liste noire globale d'identités.
+   Quand un joueur est banni, son pseudo Epic (le plus dur à
+   recréer, contrairement à un compte Discord) et son Discord ID
+   sont ajoutés ici. On bloque ensuite toute tentative de les
+   réutiliser sur un NOUVEAU compte site (voir saveSettings() et
+   handleDiscordOAuthRedirect()).
+========================================================= */
+let bannedEpicUsernames = [];
+let bannedDiscordIds = [];
+let bannedDeviceFingerprints = [];
+
+function initBannedIdentitiesSync(){
+  if(!db) return;
+  db.collection("config").doc("bannedIdentities").onSnapshot(function(docSnap){
+    const data = docSnap.exists ? docSnap.data() : null;
+    bannedEpicUsernames = (data && Array.isArray(data.epicUsernames)) ? data.epicUsernames : [];
+    bannedDiscordIds = (data && Array.isArray(data.discordIds)) ? data.discordIds : [];
+    bannedDeviceFingerprints = (data && Array.isArray(data.deviceFingerprints)) ? data.deviceFingerprints : [];
+  }, function(err){
+    console.warn("Erreur d'écoute de la liste noire :", err);
+  });
+}
+
+/* Calcule une empreinte quasi unique de ce navigateur/appareil, pour
+   reconnaître un joueur banni qui revient avec un nouveau compte Discord
+   et un nouveau pseudo Epic (les deux sont faciles à changer — l'appareil
+   utilisé, beaucoup moins). Combine plusieurs signaux techniques (rendu
+   canvas/WebGL, résolution, fuseau horaire, etc.) puis les hache en
+   SHA-256 pour obtenir un identifiant stable et non réversible. */
+async function computeDeviceFingerprint(){
+  try{
+    const parts = [];
+    parts.push(navigator.userAgent || "");
+    parts.push(navigator.language || "");
+    parts.push(String(navigator.hardwareConcurrency || ""));
+    parts.push(navigator.platform || "");
+    parts.push(String(screen.width) + "x" + String(screen.height) + "x" + String(screen.colorDepth));
+    try{ parts.push(Intl.DateTimeFormat().resolvedOptions().timeZone || ""); }catch(e){}
+
+    // Empreinte canvas : le rendu d'un même dessin/texte varie légèrement
+    // selon le GPU/driver/police du système — signal fort et stable pour
+    // un même appareil/navigateur, quasi impossible à faire coïncider
+    // entre deux machines différentes.
+    try{
+      const canvas = document.createElement("canvas");
+      canvas.width = 220; canvas.height = 30;
+      const ctx = canvas.getContext("2d");
+      ctx.textBaseline = "top";
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(0, 0, 220, 30);
+      ctx.fillStyle = "#069";
+      ctx.fillText("PrimeToken-fp-🔒", 2, 2);
+      parts.push(canvas.toDataURL());
+    } catch(e){}
+
+    // Empreinte WebGL (carte graphique) si disponible.
+    try{
+      const glCanvas = document.createElement("canvas");
+      const gl = glCanvas.getContext("webgl") || glCanvas.getContext("experimental-webgl");
+      if(gl){
+        const dbgInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if(dbgInfo){
+          parts.push(gl.getParameter(dbgInfo.UNMASKED_VENDOR_WEBGL) || "");
+          parts.push(gl.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL) || "");
+        }
+      }
+    } catch(e){}
+
+    const raw = parts.join("###");
+    if(!window.crypto || !window.crypto.subtle) return null;
+    const enc = new TextEncoder().encode(raw);
+    const hashBuf = await crypto.subtle.digest("SHA-256", enc);
+    const hashArr = Array.from(new Uint8Array(hashBuf));
+    return hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
+  } catch(e){
+    console.warn("Erreur de calcul d'empreinte :", e);
+    return null;
+  }
+}
+
 function addModerator(){
   if(!isSuperAdmin()) return;
   const input = document.getElementById("newModeratorInput");
@@ -2646,12 +2728,32 @@ function confirmModBan(){
   }
   const uid = pendingBanUid;
   const username = pendingBanUsername;
-  db.collection("users").doc(uid).set({
-    banned: true,
-    banReason: reason,
-    bannedBy: state.username,
-    bannedAt: Date.now()
-  }, { merge:true })
+
+  db.collection("users").doc(uid).get().then(docSnap => {
+    const profile = docSnap.exists ? docSnap.data() : {};
+    const epicLower = (profile.epic || "").trim().toLowerCase();
+    const discordId = profile.discordId || null;
+    const fingerprint = profile.deviceFingerprint || null;
+
+    return db.collection("users").doc(uid).set({
+      banned: true,
+      banReason: reason,
+      bannedBy: state.username,
+      bannedAt: Date.now()
+    }, { merge:true }).then(() => {
+      // On mémorise le pseudo Epic, le Discord ID ET l'empreinte appareil
+      // de ce compte dans la liste noire globale, pour bloquer un futur
+      // compte qui réutiliserait l'un des trois (voir saveSettings() /
+      // handleDiscordOAuthRedirect() / loadProfileAndStart()).
+      const blacklistUpdate = {};
+      if(epicLower) blacklistUpdate.epicUsernames = firebase.firestore.FieldValue.arrayUnion(epicLower);
+      if(discordId) blacklistUpdate.discordIds = firebase.firestore.FieldValue.arrayUnion(discordId);
+      if(fingerprint) blacklistUpdate.deviceFingerprints = firebase.firestore.FieldValue.arrayUnion(fingerprint);
+      if(Object.keys(blacklistUpdate).length > 0){
+        return db.collection("config").doc("bannedIdentities").set(blacklistUpdate, { merge:true }).catch(()=>{});
+      }
+    });
+  })
     .then(() => {
       toast(`${username} banned.`);
       closeBanReasonModal();
@@ -2662,7 +2764,25 @@ function confirmModBan(){
 
 function modUnbanUser(uid, username){
   if(!isAdmin() || !db || !uid) return;
-  db.collection("users").doc(uid).set({ banned:false, banReason:null }, { merge:true })
+
+  db.collection("users").doc(uid).get().then(docSnap => {
+    const profile = docSnap.exists ? docSnap.data() : {};
+    const epicLower = (profile.epic || "").trim().toLowerCase();
+    const discordId = profile.discordId || null;
+    const fingerprint = profile.deviceFingerprint || null;
+
+    return db.collection("users").doc(uid).set({ banned:false, banReason:null }, { merge:true }).then(() => {
+      // On retire aussi ce joueur de la liste noire — un unban doit vraiment
+      // lever tous les blocages liés à ce compte.
+      const blacklistUpdate = {};
+      if(epicLower) blacklistUpdate.epicUsernames = firebase.firestore.FieldValue.arrayRemove(epicLower);
+      if(discordId) blacklistUpdate.discordIds = firebase.firestore.FieldValue.arrayRemove(discordId);
+      if(fingerprint) blacklistUpdate.deviceFingerprints = firebase.firestore.FieldValue.arrayRemove(fingerprint);
+      if(Object.keys(blacklistUpdate).length > 0){
+        return db.collection("config").doc("bannedIdentities").set(blacklistUpdate, { merge:true }).catch(()=>{});
+      }
+    });
+  })
     .then(() => { toast(`${username} unbanned.`); modSearchUsers(); })
     .catch(err => { console.warn(err); toast("Error while unbanning."); });
 }
@@ -3321,6 +3441,32 @@ async function handleDiscordOAuthRedirect(){
       toast("This Discord account is already linked to another Prime Token account.");
       return;
     }
+
+    // Anti contournement de ban : ce Discord ID est-il dans la liste noire
+    // (attaché à un compte précédemment banni) ? On lit la liste fraîche
+    // depuis Firestore (pas le cache local) pour être sûr de ne pas rater
+    // un ban tout juste posé par un modérateur.
+    try{
+      const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
+      const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
+      const blacklistedDiscordIds = (blacklist && Array.isArray(blacklist.discordIds)) ? blacklist.discordIds : [];
+      if(blacklistedDiscordIds.includes(discordId)){
+        // On banne direct ce nouveau compte aussi — même Discord qu'un
+        // compte déjà banni, donc très probablement la même personne.
+        if(currentUid){
+          db.collection("users").doc(currentUid).set({
+            banned: true,
+            banReason: "Ban evasion: linked Discord account already banned on another Prime Token account.",
+            bannedBy: "system",
+            bannedAt: Date.now()
+          }, { merge:true }).catch(()=>{});
+        }
+        toast("This Discord account is linked to a banned Prime Token account. You have been banned.");
+        try{ await auth.signOut(); }catch(e){}
+        showAuthScreen();
+        return;
+      }
+    } catch(e){ console.warn("Erreur de vérification de la liste noire :", e); }
 
     state.discordId = discordId;
     state.discordUsername = discordUsername;
@@ -6105,7 +6251,7 @@ function sendTip(){
   });
 }
 
-function saveSettings(){
+async function saveSettings(){
   if(!state.discordId){
     toast("Link your Discord account first.");
     return;
@@ -6119,6 +6265,32 @@ function saveSettings(){
     toast("Enter your Epic username.");
     return;
   }
+
+  // Anti contournement de ban : ce pseudo Epic (le plus dur à changer,
+  // contrairement à un simple compte Discord) est-il celui d'un compte déjà
+  // banni ? On relit la liste noire fraîche depuis Firestore pour être sûr.
+  if(db){
+    try{
+      const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
+      const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
+      const blacklistedEpic = (blacklist && Array.isArray(blacklist.epicUsernames)) ? blacklist.epicUsernames : [];
+      if(blacklistedEpic.includes(e.toLowerCase())){
+        if(currentUid){
+          db.collection("users").doc(currentUid).set({
+            banned: true,
+            banReason: "Ban evasion: Epic Games username already used by a banned Prime Token account.",
+            bannedBy: "system",
+            bannedAt: Date.now()
+          }, { merge:true }).catch(()=>{});
+        }
+        toast("This Epic Games username belongs to a banned Prime Token account. You have been banned.");
+        try{ await auth.signOut(); }catch(err){}
+        showAuthScreen();
+        return;
+      }
+    } catch(err){ console.warn("Erreur de vérification de la liste noire :", err); }
+  }
+
   state.epic = e;
   // Une fois enregistré, le pseudo Epic ne peut plus être changé depuis le
   // site — il faut passer par un ticket Discord pour éviter les abus
@@ -6244,19 +6416,49 @@ async function loadProfileAndStart(uid){
 
   try{
     const docSnap = await db.collection("users").doc(uid).get();
-    if(docSnap.exists){
-      const profile = docSnap.data();
+    const profile = docSnap.exists ? docSnap.data() : null;
 
-      if(profile.banned === true){
-        currentUid = null;
-        try{ await auth.signOut(); }catch(e){}
-        showAuthScreen();
-        alert(profile.banReason
-          ? `Your account has been banned from Prime Token.\n\nReason: ${profile.banReason}`
-          : "Your account has been banned from Prime Token.");
-        return;
+    if(profile && profile.banned === true){
+      currentUid = null;
+      try{ await auth.signOut(); }catch(e){}
+      showAuthScreen();
+      alert(profile.banReason
+        ? `Your account has been banned from Prime Token.\n\nReason: ${profile.banReason}`
+        : "Your account has been banned from Prime Token.");
+      return;
+    }
+
+    // Anti contournement de ban (empreinte navigateur/appareil) : vérifié
+    // pour TOUT compte qui se connecte, même un compte tout juste créé
+    // (son doc Firestore peut ne pas encore exister au moment du signup).
+    // Si cet appareil est associé à un compte déjà banni, on bannit aussi
+    // ce compte-ci immédiatement, avant même de charger quoi que ce soit.
+    try{
+      const fp = await computeDeviceFingerprint();
+      if(fp){
+        const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
+        const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
+        const blacklistedFingerprints = (blacklist && Array.isArray(blacklist.deviceFingerprints)) ? blacklist.deviceFingerprints : [];
+        if(blacklistedFingerprints.includes(fp)){
+          currentUid = null;
+          try{ await auth.signOut(); }catch(e){}
+          showAuthScreen();
+          db.collection("users").doc(uid).set({
+            banned: true,
+            banReason: "Ban evasion: this browser/device is associated with a previously banned Prime Token account.",
+            bannedBy: "system",
+            bannedAt: Date.now()
+          }, { merge:true }).catch(()=>{});
+          alert("This device has already been banned from Prime Token.");
+          return;
+        }
+        // On mémorise l'empreinte sur ce compte pour pouvoir la blacklister
+        // plus tard si jamais il se fait bannir.
+        db.collection("users").doc(uid).set({ deviceFingerprint: fp }, { merge:true }).catch(()=>{});
       }
+    } catch(e){ console.warn("Erreur de vérification d'empreinte :", e); }
 
+    if(profile){
       state.username = profile.username || state.username;
       state.epic = profile.epic || "";
       state.stats = profile.stats || state.stats;
@@ -6304,6 +6506,7 @@ async function loadProfileAndStart(uid){
   render();
   initCloudSync();
   initModeratorsSync();
+  initBannedIdentitiesSync();
   initPlayersSync();
   initGlobalChatSync();
   initTeamsSync();
