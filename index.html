@@ -2688,6 +2688,16 @@ function computePlayerBetInfo(match, username){
   return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
 }
 
+/* Pot total du match = ce que l'équipe gagnante récupère collectivement
+   (affichage uniquement, ex: 2v2 à 0,5 → 4 joueurs à 0,5 = pot de 2).
+   Ne sert jamais au règlement réel (voir computePlayerBetInfo pour la
+   répartition individuelle exacte, y compris cover bet). */
+function matchTotalPot(match){
+  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+  return roundToHalf(2 * maxPerSide * baseBet);
+}
+
 /* Débite la mise du joueur DÈS que le match se verrouille (les deux camps
    sont prêts) — comme ça les coins "disparaissent" immédiatement, avant même
    de connaître le résultat, au lieu d'attendre la fin du match. */
@@ -4142,14 +4152,14 @@ function render(){
           </div>
         ` : pool.map(m => {
           const entry = roundToHalf(m.bet !== undefined ? m.bet : 0.5);
-          const earn = roundToHalf(entry * REWARD_MULT);
+          const earn = matchTotalPot(m);
           const elapsed = Date.now() - (m.createdAt || Date.now());
           const remainingMs = Math.max(0, MATCH_TTL_MS - elapsed);
           const remainingMin = Math.ceil(remainingMs / 60000);
           const pct = Math.max(0, Math.min(1, remainingMs / MATCH_TTL_MS));
           const R = 24, C = 2 * Math.PI * R;
           const dash = C * pct;
-          const isOwn = m.host === state.username;
+          const isOwn = isMine(m);
           const statusClass = m.locked ? "locked" : (m.visibility === "private" ? "private" : "open");
           const statusLabel = m.locked ? "IN PROGRESS" : (m.visibility === "private" ? "PRIVATE" : "OPEN");
 
@@ -4308,7 +4318,7 @@ function render(){
             <div class="eco-arrow">→</div>
             <div class="eco-block out">
               <span>If You Win</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(myBetInfo.winReward)}</strong>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(matchTotalPot(lobby))}</strong>
             </div>
           </div>
           ${myBetInfo.covered ? `
@@ -5184,16 +5194,7 @@ function enterMatchLobby(id){
 }
 
 function quitMatch(id){
-  const match = state.matches.find(m => m.id === id);
-  if(!match) return;
-  if(match.locked){ toast("Can't leave a match in progress!"); return; }
-
-  state.matches = state.matches.filter(m => m.id !== id);
-  if(state.currentLobby === id) state.currentLobby = null;
-  save();
-  deleteMatchFromCloud(id);
-  toast("Match left.");
-  render();
+  if(leaveMatchById(id)) render();
 }
 
 function joinMatch(id){
@@ -5322,49 +5323,60 @@ function toggleReady(matchId){
   render();
 }
 
-function leaveLobby(){
-  const lobby = state.matches.find(m => m.id === state.currentLobby);
-  if(!lobby){
-    state.currentLobby = null;
+/* Logique partagée pour "Leave Lobby" (depuis la page Lobby) et "Quit Match"
+   (depuis la carte dans Matches) : si je suis le dernier joueur du côté
+   host, le match est annulé ; sinon je suis juste retiré et le match reste
+   ouvert pour les autres. Avant, "Quit Match" supprimait TOUJOURS tout le
+   match, même pour un simple coéquipier qui se retirait. */
+function leaveMatchById(matchId, { silent } = {}){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match){
+    if(state.currentLobby === matchId) state.currentLobby = null;
     save();
-    setPage("matches");
-    return;
+    return true;
   }
-  if(lobby.locked){
-    toast("Can't leave a match in progress!");
-    return;
+  if(match.locked){
+    if(!silent) toast("Can't leave a match in progress!");
+    return false;
   }
 
-  lobby.hostPlayers = lobby.hostPlayers || [lobby.host];
-  lobby.guestPlayers = lobby.guestPlayers || (lobby.players || []).filter(p => p !== lobby.host);
+  match.hostPlayers = match.hostPlayers || [match.host];
+  match.guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
 
-  const isHost = lobby.hostPlayers.includes(state.username);
-  const isGuest = lobby.guestPlayers.includes(state.username);
-  const remainingHostPlayers = isHost ? lobby.hostPlayers.filter(p => p !== state.username) : lobby.hostPlayers;
+  const isHost = match.hostPlayers.includes(state.username);
+  const isGuest = match.guestPlayers.includes(state.username);
+  const remainingHostPlayers = isHost ? match.hostPlayers.filter(p => p !== state.username) : match.hostPlayers;
 
   // If the last host-side player leaves, the match has no owner left: cancel it entirely.
   if(isHost && remainingHostPlayers.length === 0){
-    state.matches = state.matches.filter(m => m.id !== lobby.id);
-    state.currentLobby = null;
+    state.matches = state.matches.filter(m => m.id !== match.id);
+    if(state.currentLobby === match.id) state.currentLobby = null;
     save();
-    deleteMatchFromCloud(lobby.id);
-    toast("Match cancelled.");
-    setPage("matches");
-    return;
+    deleteMatchFromCloud(match.id);
+    if(!silent) toast("Match cancelled.");
+    return true;
   }
 
   // Otherwise, just remove this player from their side — the match stays open for others.
-  if(isHost) lobby.hostPlayers = remainingHostPlayers;
-  if(isGuest) lobby.guestPlayers = lobby.guestPlayers.filter(p => p !== state.username);
-  lobby.players = [...lobby.hostPlayers, ...lobby.guestPlayers];
-  if(lobby.readies) delete lobby.readies[state.username];
-  if(lobby.cancelVotes) delete lobby.cancelVotes[state.username];
+  if(isHost) match.hostPlayers = remainingHostPlayers;
+  if(isGuest) match.guestPlayers = match.guestPlayers.filter(p => p !== state.username);
+  match.players = [...match.hostPlayers, ...match.guestPlayers];
+  if(match.readies) delete match.readies[state.username];
+  if(match.cancelVotes) delete match.cancelVotes[state.username];
 
-  state.currentLobby = null;
+  if(state.currentLobby === match.id) state.currentLobby = null;
   save();
-  pushMatchToCloud(lobby);
-  toast("You left the match. It's still open for others to join.");
-  setPage("matches");
+  pushMatchToCloud(match);
+  if(!silent) toast("You left the match. It's still open for others to join.");
+  return true;
+}
+
+function leaveLobby(){
+  if(!state.currentLobby){
+    setPage("matches");
+    return;
+  }
+  if(leaveMatchById(state.currentLobby)) setPage("matches");
 }
 
 /* Annuler un match verrouillé (les 2 joueurs sont prêts) — nécessite le
