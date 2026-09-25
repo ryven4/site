@@ -1566,8 +1566,8 @@ button:active{ transform:scale(.97) !important; }
 .snipe-modal-body{ padding:22px; display:flex; flex-direction:column; align-items:center; gap:16px; }
 
 .snipe-card{
-  width:220px;
-  height:280px;
+  width:240px;
+  min-height:280px;
   border-radius:16px;
   position:relative;
   overflow:hidden;
@@ -1578,6 +1578,7 @@ button:active{ transform:scale(.97) !important; }
 }
 
 .snipe-card.back{
+  height:280px;
   background:linear-gradient(160deg, #1c2c4a, #0a1220);
   border:1px solid var(--line2);
 }
@@ -1598,18 +1599,21 @@ button:active{ transform:scale(.97) !important; }
   background:linear-gradient(180deg, rgba(0,255,136,.08), var(--panel) 55%);
   border:1px solid rgba(0,255,136,.35);
   flex-direction:column;
-  padding:20px 16px;
+  padding:22px 16px 18px;
   text-align:center;
   gap:6px;
 }
 .snipe-card-avatar{ width:80px; height:80px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; font-weight:950; font-size:26px; color:#040906; margin-bottom:6px; }
 .snipe-card-avatar svg, .snipe-card-avatar img{ width:100%; height:100%; }
-.snipe-card-name{ font-size:15px; font-weight:950; color:#fff; }
+.snipe-card-name{ font-size:15px; font-weight:950; color:#fff; display:flex; align-items:center; justify-content:center; gap:6px; }
 .snipe-card-epic{ font-size:10px; color:var(--muted); margin-top:2px; }
-.snipe-card-stats{ margin-top:10px; display:flex; gap:8px; width:100%; }
-.snipe-card-stats div{ flex:1; padding:8px 4px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); }
-.snipe-card-stats strong{ display:block; font-size:13px; color:#fff; }
+.snipe-card-rank{ margin-top:6px; }
+.snipe-card-stats{ margin-top:12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+.snipe-card-stats div{ padding:9px 4px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); }
+.snipe-card-stats strong{ display:block; font-size:14px; color:#fff; }
 .snipe-card-stats span{ display:block; font-size:8px; color:var(--muted2); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+.snipe-card-substats{ margin-top:8px; width:100%; display:flex; justify-content:space-between; gap:10px; font-size:10.5px; color:var(--muted); padding:0 2px; }
+.snipe-card-substats strong{ color:#fff; font-weight:700; }
 
 .snipe-modal-hint{ text-align:center; color:var(--muted); font-size:11px; }
 .snipe-modal-actions{ display:flex; gap:10px; width:100%; }
@@ -8857,16 +8861,24 @@ function renderSnipeModal(){
   const losses = (info.stats && info.stats.losses) || 0;
   const played = (info.stats && info.stats.played) || 0;
   const winrate = played ? Math.round((wins / played) * 100) : 0;
+  const bestStreak = (info.stats && info.stats.bestStreak) || 0;
+  const totalEarned = (info.stats && info.stats.totalEarned) || 0;
 
   body.innerHTML = `
     <div class="snipe-card revealed">
       <div class="snipe-card-avatar" style="${avatarStyleAttr(info.equippedAvatar)}">${avatarInnerHTML(info.equippedAvatar, match.host, info.customAvatar)}</div>
-      <div class="snipe-card-name">${escapeHTML(match.host)}</div>
+      <div class="snipe-card-name">${vipNameHTML(match.host)}</div>
       <div class="snipe-card-epic">Epic: ${escapeHTML(info.epic || "Not set")}</div>
+      <div class="snipe-card-rank">${rankPillHTML(match.host)}</div>
       <div class="snipe-card-stats">
         <div><strong>${wins}</strong><span>Wins</span></div>
-        <div><strong>${played}</strong><span>Played</span></div>
+        <div><strong>${losses}</strong><span>Losses</span></div>
         <div><strong>${winrate}%</strong><span>Winrate</span></div>
+        <div><strong>${played}</strong><span>Played</span></div>
+      </div>
+      <div class="snipe-card-substats">
+        <span>Best streak <strong>${bestStreak}</strong></span>
+        <span>Total earned <strong>${formatEur(totalEarned)}</strong></span>
       </div>
     </div>
     <div class="snipe-modal-actions">
