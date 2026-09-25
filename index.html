@@ -2332,6 +2332,28 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
 
 .settings-grid .setting-card h3{ display:flex; align-items:center; gap:8px; font-weight:600; }
 
+/* Wallet — Withdraw */
+.wd-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:14px; }
+.wd-card{ padding:20px !important; }
+.wd-title{ display:flex; align-items:center; gap:8px; font-size:15px; font-weight:600; color:#fff; margin-bottom:12px; }
+.wd-rows{ display:flex; flex-direction:column; }
+.wd-row{ display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px; }
+.wd-row span{ color:var(--muted); }
+.wd-row strong{ display:flex; align-items:center; gap:6px; color:#fff; }
+.wd-row em{ font-style:normal; font-weight:500; color:var(--muted); }
+.wd-input-row{ display:flex; gap:8px; }
+.wd-btn{ width:100%; margin-top:12px; height:44px; }
+.wd-locked{ margin-top:16px; }
+.wd-locked p{ margin-top:10px; font-size:13px; color:var(--muted); line-height:1.5; }
+.wd-locked strong{ color:#fff; }
+.wd-bar{ height:8px; border-radius:8px; background:var(--panel3); overflow:hidden; }
+.wd-bar > div{ height:100%; background:var(--gold); border-radius:8px; }
+.wd-steps{ padding-left:20px; display:flex; flex-direction:column; gap:9px; font-size:13px; color:#c9ced6; line-height:1.5; }
+.wd-steps b{ color:#fff; }
+.wd-discord{ width:100%; margin-top:16px; text-decoration:none; background:rgba(88,101,242,.12) !important; border-color:rgba(88,101,242,.45) !important; color:#c9cdfb !important; }
+.wd-msg{ margin:0; padding:12px 14px; border-radius:10px; background:var(--bg); border:1px solid var(--line2); font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; color:#e3e6ea; white-space:pre-wrap; }
+@media(max-width:900px){ .wd-grid{ grid-template-columns:1fr; } }
+
 /* ===== Tournois ===== */
 .tn-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
 .tn-card{ border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; }
@@ -3981,30 +4003,33 @@ async function modResetEconomyAll(){
   }
 }
 
-function modGivePlayerCoins(){
+/* Coeur partagé entre "Give Coins" et "Remove Coins" : applique un montant
+   signé (positif = crédit, négatif = débit) au solde d'un joueur, même
+   hors ligne, et resynchronise l'état local si le mod se cible lui-même. */
+function modApplyCoinAdjustment(username, signedAmount, opts){
+  opts = opts || {};
   if(!isAdmin() || !db) return;
-  const userInput = document.getElementById("modGiveCoinsUsername");
-  const amountInput = document.getElementById("modGiveCoinsAmount");
-  const username = userInput ? userInput.value.trim() : "";
-  const rawAmount = amountInput ? parseFloat(amountInput.value) : NaN;
-
   if(!username){ toast("Enter a username."); return; }
-  if(isNaN(rawAmount) || rawAmount === 0){ toast("Enter a valid amount."); return; }
-  const amount = roundToCents(rawAmount);
+  if(isNaN(signedAmount) || signedAmount === 0){ toast("Enter a valid amount."); return; }
+  const amount = roundToCents(signedAmount);
 
   const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
   if(!target){ toast("This player doesn't exist."); return; }
 
+  if(amount < 0 && roundToCents((target.coins || 0) + amount) < 0){
+    toast(`${target.username} only has ${formatCoins(target.coins || 0)} coins.`);
+    return;
+  }
+
   db.collection("users").doc(target.uid).update({
     coins: firebase.firestore.FieldValue.increment(amount)
   }).then(() => {
-    toast(`${amount > 0 ? '🎁 +' : ''}${formatCoins(amount)} coins ${amount > 0 ? 'given to' : 'removed from'} ${target.username}.`);
-    if(userInput) userInput.value = "";
-    if(amountInput) amountInput.value = "";
-    // Si le mod se donne des coins à lui-même via ce champ, son propre
-    // solde ne se rafraîchit pas tout seul dans ce cas précis (c'est un
-    // update() Firestore, pas un save() local) : on force le state local
-    // à jour pour qu'il n'écrase pas ce changement à son prochain save().
+    toast(`${amount > 0 ? '🎁 +' : '➖'}${formatCoins(Math.abs(amount))} coins ${amount > 0 ? 'given to' : 'removed from'} ${target.username}.`);
+    if(opts.onDone) opts.onDone();
+    // Si le mod se cible lui-même via ce champ, son propre solde ne se
+    // rafraîchit pas tout seul dans ce cas précis (c'est un update()
+    // Firestore, pas un save() local) : on force le state local à jour
+    // pour qu'il n'écrase pas ce changement à son prochain save().
     if(target.uid === currentUid){
       state.coins = roundToCents((state.coins || 0) + amount);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -4013,6 +4038,38 @@ function modGivePlayerCoins(){
   }).catch(err => {
     console.warn(err);
     toast("Error while updating this player's coins.");
+  });
+}
+
+function modGivePlayerCoins(){
+  const userInput = document.getElementById("modGiveCoinsUsername");
+  const amountInput = document.getElementById("modGiveCoinsAmount");
+  const username = userInput ? userInput.value.trim() : "";
+  const rawAmount = amountInput ? parseFloat(amountInput.value) : NaN;
+  if(isNaN(rawAmount)){ toast("Enter a valid amount."); return; }
+  modApplyCoinAdjustment(username, Math.abs(rawAmount), {
+    onDone: () => { if(userInput) userInput.value = ""; if(amountInput) amountInput.value = ""; }
+  });
+}
+
+async function modRemovePlayerCoins(){
+  const userInput = document.getElementById("modGiveCoinsUsername");
+  const amountInput = document.getElementById("modGiveCoinsAmount");
+  const username = userInput ? userInput.value.trim() : "";
+  const rawAmount = amountInput ? parseFloat(amountInput.value) : NaN;
+  if(!username){ toast("Enter a username."); return; }
+  if(isNaN(rawAmount) || rawAmount === 0){ toast("Enter a valid amount."); return; }
+  const amount = Math.abs(rawAmount);
+
+  const ok = await siteConfirm(`Remove ${formatCoins(amount)} coins from ${username}? This is applied right away, even if they're offline.`, {
+    title: "Remove coins",
+    okLabel: "Remove coins",
+    danger: true
+  });
+  if(!ok) return;
+
+  modApplyCoinAdjustment(username, -amount, {
+    onDone: () => { if(userInput) userInput.value = ""; if(amountInput) amountInput.value = ""; }
   });
 }
 
@@ -7709,12 +7766,15 @@ function render(){
         <button class="matches-tab t-available ${walletTab === 'deposit' ? 'active' : ''}" onclick="setWalletTab('deposit')">
           <span class="tab-dot"></span> Deposit
         </button>
+        <button class="matches-tab ${walletTab === 'withdraw' ? 'active' : ''}" onclick="setWalletTab('withdraw')">
+          <span class="tab-dot"></span> Withdraw
+        </button>
         <button class="matches-tab t-mine ${walletTab === 'tips' ? 'active' : ''}" onclick="setWalletTab('tips')">
           <span class="tab-dot"></span> Tips
         </button>
       </div>
 
-      ${walletTab === 'deposit' ? depositShopHTML() : `
+      ${walletTab === 'deposit' ? depositShopHTML() : walletTab === 'withdraw' ? withdrawHTML() : `
       <div class="setting-card" style="padding:20px;">
         <div style="border:1px solid var(--brand); background:rgba(0,255,136,0.06); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin-bottom:20px;">
           <strong style="color:var(--brand);">FYI:</strong> ${isVIP()
@@ -7850,12 +7910,13 @@ function render(){
         </div>` : ``}
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
-          <h3 style="margin-bottom:6px; font-size:14px;">${icon('gift')} Give Coins to a Player</h3>
-          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Enter a username and an amount — it's credited to their account right away, even if they're offline.</p>
+          <h3 style="margin-bottom:6px; font-size:14px;">${icon('gift')} Give or Remove Coins</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Enter a username and an amount (always positive), then give or remove — it's applied right away, even if they're offline.</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <input type="text" class="input" id="modGiveCoinsUsername" placeholder="Player username" style="flex:1; min-width:160px;">
-            <input type="number" class="input" id="modGiveCoinsAmount" placeholder="Amount" step="0.5" style="max-width:140px;">
-            <button class="btn green" style="flex:none;" onclick="modGivePlayerCoins()">Give Coins</button>
+            <input type="number" class="input" id="modGiveCoinsAmount" placeholder="Amount" step="0.5" min="0" style="max-width:140px;">
+            <button class="btn green" style="flex:none;" onclick="modGivePlayerCoins()">${icon('gift')} Give Coins</button>
+            <button class="btn danger" style="flex:none;" onclick="modRemovePlayerCoins()">${icon('x')} Remove Coins</button>
           </div>
         </div>
 
@@ -9397,6 +9458,87 @@ const DEPOSIT_PACKS = [
   { coins:50,  color:"#a970ff", badge:"Best value" },
 ];
 function setWalletTab(tab){ walletTab = tab; render(); }
+/* =========================================================
+   WALLET — WITHDRAW : les retraits se font à la main via un ticket
+   Discord (minimum 15 €, 1 coin = 1 €). Le site prépare juste la
+   demande ; les coins sont retirés par un modérateur une fois le
+   virement fait (outil "Give Coins" avec un montant négatif).
+========================================================= */
+const WITHDRAW_MIN = 15;
+function withdrawHTML(){
+  const bal = state.coins || 0;
+  const can = bal >= WITHDRAW_MIN;
+  const pct = Math.min(100, Math.round(bal / WITHDRAW_MIN * 100));
+  return `
+    <div class="wd-grid">
+      <div class="setting-card wd-card">
+        <div class="wd-title">${icon('wallet')} Withdraw your coins</div>
+        <div class="wd-rows">
+          <div class="wd-row"><span>Available</span><strong>${coinIcon(14)}${formatCoins(bal)} <em>= ${formatEur(bal * COIN_PRICE_EUR)}</em></strong></div>
+          <div class="wd-row"><span>Minimum withdrawal</span><strong>${formatEur(WITHDRAW_MIN)}</strong></div>
+          <div class="wd-row"><span>Rate</span><strong>1 coin = 1 €</strong></div>
+        </div>
+        ${can ? `
+          <div class="form-group" style="margin-top:14px;">
+            <label>Amount to withdraw (€)</label>
+            <div class="wd-input-row">
+              <input type="number" class="input" id="withdrawAmount" min="${WITHDRAW_MIN}" max="${Math.floor(bal)}" step="1" value="${Math.floor(bal)}">
+              <button class="btn" onclick="document.getElementById('withdrawAmount').value='${Math.floor(bal)}'">Max</button>
+            </div>
+          </div>
+          <button class="btn green wd-btn" onclick="requestWithdraw()">${icon('discord')} Request withdrawal</button>
+        ` : `
+          <div class="wd-locked">
+            <div class="wd-bar"><div style="width:${pct}%;"></div></div>
+            <p>You need at least <strong>${formatEur(WITHDRAW_MIN)}</strong> (${WITHDRAW_MIN} coins) to withdraw — <strong>${formatCoins(Math.max(0, WITHDRAW_MIN - bal))}</strong> coins to go.</p>
+          </div>
+        `}
+      </div>
+      <div class="setting-card wd-card">
+        <div class="wd-title">${icon('info')} How it works</div>
+        <ol class="wd-steps">
+          <li><b>Request</b> your withdrawal here (minimum ${formatEur(WITHDRAW_MIN)}).</li>
+          <li><b>Open a ticket</b> on our Discord and paste the message we prepare for you.</li>
+          <li>A staff member <b>verifies</b> your balance and sends your payment.</li>
+          <li>The withdrawn coins are then <b>removed</b> from your balance.</li>
+        </ol>
+        <a class="btn wd-discord" href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer">${icon('discord')} Open our Discord</a>
+      </div>
+    </div>`;
+}
+
+function requestWithdraw(){
+  const el = document.getElementById("withdrawAmount");
+  const amount = el ? Math.floor(parseFloat(el.value)) : NaN;
+  const bal = state.coins || 0;
+  if(isNaN(amount) || amount < WITHDRAW_MIN){ toast(`The minimum withdrawal is ${formatEur(WITHDRAW_MIN)}.`); return; }
+  if(amount > bal){ toast("You don't have that many coins."); return; }
+  const msg = `Withdrawal request\nUsername: ${state.username}\nEpic: ${state.epic || "—"}\nAmount: ${amount} coins (${formatEur(amount * COIN_PRICE_EUR)})`;
+  const body = document.getElementById("depositModalBody");
+  body.innerHTML = `
+    <p style="font-size:14px; color:#c9ced6; line-height:1.6; margin-bottom:12px;">Open a ticket on our Discord and paste this message. A staff member will handle your withdrawal of <strong style="color:#fff;">${formatEur(amount * COIN_PRICE_EUR)}</strong>.</p>
+    <pre class="wd-msg" id="withdrawMsg">${escapeHTML(msg)}</pre>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn" style="flex:1;" onclick="copyWithdrawMsg()">${icon('copy')} Copy message</button>
+      <a class="btn" style="flex:1; background:#5865F2; border-color:#5865F2; color:#fff; text-decoration:none;" href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer">${icon('discord')} Open a ticket</a>
+    </div>`;
+  const head = document.querySelector("#depositOverlay .modal-head h2");
+  if(head) head.innerHTML = `${icon('wallet')} Withdraw`;
+  document.getElementById("depositOverlay").classList.add("open");
+}
+function copyWithdrawMsg(){
+  const text = (document.getElementById("withdrawMsg") || {}).textContent || "";
+  const done = () => toast("Message copied — paste it in your Discord ticket.");
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done){
+  const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand("copy"); done(); }catch(e){ toast("Couldn't copy — select the text manually."); }
+  ta.remove();
+}
+
+
 function formatEur(n){ return (Math.round(n*100)/100).toLocaleString("fr-FR",{minimumFractionDigits:2, maximumFractionDigits:2}) + " €"; }
 function chestSVG(c){
   return `<svg class="dc-chest" viewBox="0 0 140 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -9444,6 +9586,8 @@ function depositCustomAmount(){
   openDepositModal(n);
 }
 function openDepositModal(coins){
+  const head = document.querySelector("#depositOverlay .modal-head h2");
+  if(head) head.innerHTML = `${icon('wallet')} Deposit`;
   const body = document.getElementById("depositModalBody");
   body.innerHTML = `
     <div style="text-align:center;">
