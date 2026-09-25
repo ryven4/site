@@ -2332,6 +2332,170 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
 
 .settings-grid .setting-card h3{ display:flex; align-items:center; gap:8px; font-weight:600; }
 
+/* ===== Roue v2 ===== */
+.wheel-layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:center; }
+.wheel-stage{ display:flex; justify-content:center; padding:10px 0 20px; }
+.wheel-outer{ position:relative; width:400px !important; height:400px !important; max-width:86vw !important; max-height:86vw !important; }
+.wheel-rim{
+  position:absolute; inset:0; border-radius:50%;
+  background:radial-gradient(circle, #15181d 0 86%, #0d0f12 86% 100%);
+  box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 24px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.wheel-bulb{ position:absolute; width:7px; height:7px; margin:-3.5px 0 0 -3.5px; border-radius:50%; background:#f2b642; opacity:.9; }
+.wheel-bulb.b{ background:#3a3f47; }
+.wheel-outer:has(.spinning) .wheel-bulb{ animation:bulbBlink .5s steps(1) infinite; }
+.wheel-outer:has(.spinning) .wheel-bulb.b{ animation-delay:.25s; }
+@keyframes bulbBlink{ 0%{ background:#f2b642; } 50%{ background:#3a3f47; } }
+.wheel-dial{
+  position:absolute !important; inset:26px !important; width:auto !important; height:auto !important;
+  border:0 !important; border-radius:50%; background:none !important; box-shadow:none !important; overflow:visible;
+}
+.wheel-svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.wheel-dividers line{ stroke:rgba(255,255,255,.10); stroke-width:.6; }
+.wheel-edge{ fill:none; stroke:rgba(255,255,255,.08); stroke-width:1; }
+.wheel-hub-ring{ fill:#0e1013; stroke:rgba(255,255,255,.08); stroke-width:1; }
+.wheel-seg-label{ width:70px !important; }
+.wheel-seg-label .wsl{ display:inline-flex !important; flex-direction:column; align-items:center; gap:3px; }
+.wheel-seg-label .wsl b{ font-size:17px; font-weight:800; color:#fff; letter-spacing:-.01em; line-height:1; }
+.wheel-seg-label .wsl i{ font-style:normal; display:flex; align-items:center; font-size:15px; }
+.wheel-seg-label .wsl .ic{ font-size:17px; color:#c9b8ff; }
+.wheel-pointer{ display:none !important; }
+.wheel-pointer-svg{ position:absolute; top:-8px; left:50%; width:36px; height:44px; transform:translateX(-50%); z-index:6; filter:drop-shadow(0 4px 6px rgba(0,0,0,.5)); }
+.wheel-center-btn{
+  position:absolute !important; left:50% !important; top:50% !important; transform:none !important; margin:-48px 0 0 -48px !important;
+  width:96px !important; height:96px !important; border-radius:50% !important;
+  border:5px solid #0e1013 !important; background:var(--green) !important; color:#06140d !important;
+  font-size:17px !important; font-weight:800 !important; letter-spacing:.06em !important;
+  display:flex !important; align-items:center; justify-content:center;
+  box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 8px 20px rgba(0,0,0,.45) !important;
+  filter:none !important; opacity:1 !important; z-index:7;
+}
+.wheel-center-btn:not(:disabled):hover{ background:#3ff0a0 !important; }
+.wheel-center-btn:disabled{ background:#1e2329 !important; color:var(--muted) !important; cursor:not-allowed; }
+.wheel-center-btn:disabled .ic{ font-size:26px; }
+.wheel-center-btn.spinning{ background:#1e2329 !important; color:var(--green) !important; animation:none !important; }
+.wheel-side{ display:flex; flex-direction:column; gap:12px; }
+.wheel-card{ padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.wheel-card-label{ display:block; font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted2); margin-bottom:8px; }
+.wheel-status-card strong{ display:block; font-size:18px; font-weight:700; color:#fff; }
+.wheel-status-card.ready strong{ color:var(--green); }
+.wheel-status-card p{ margin-top:4px; font-size:13px; color:var(--muted); }
+.wheel-rewards{ display:flex; flex-direction:column; gap:6px; }
+.wheel-reward{ display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:9px; background:var(--panel2); border:1px solid var(--line); }
+.wheel-reward-ico{ width:30px; height:30px; flex:none; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--panel3); }
+.wheel-reward-ico.coins{ background:rgba(31,227,139,.1); }
+.wheel-reward-ico.avatar{ background:rgba(169,112,255,.14); color:#c9b8ff; }
+.wheel-reward-ico .ic{ font-size:17px; }
+.wheel-reward-name{ flex:1; font-size:13px; font-weight:600; color:#e8ebef; }
+.wheel-reward-chance{ font-size:12px; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums; }
+.wheel-emoji{ line-height:1; display:inline-flex; }
+@media(max-width:1180px){ .wheel-layout{ grid-template-columns:1fr; } .wheel-side{ max-width:460px; margin:0 auto; width:100%; } }
+@media(max-width:560px){
+  .wheel-outer{ width:320px !important; height:320px !important; }
+  .wheel-dial{ inset:20px !important; }
+  .wheel-seg-label .wsl b{ font-size:14px; }
+  .wheel-center-btn{ width:76px !important; height:76px !important; margin:-38px 0 0 -38px !important; font-size:14px !important; }
+}
+
+/* ===== Fenêtre profil (style BPW) ===== */
+.pf-modal{ position:relative; width:min(600px,100%); padding:18px; max-height:92vh; }
+.pf-close{ position:absolute; top:26px; right:26px; z-index:2; }
+.pf-hero{ display:flex; align-items:center; gap:18px; padding:20px; border:1px solid var(--line); border-radius:14px;
+  background:radial-gradient(80% 120% at 0% 0%, rgba(31,227,139,.08), transparent 60%), var(--panel2); }
+.pf-avatar-wrap{ position:relative; flex:none; }
+.pf-avatar{ width:96px; height:96px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;
+  font-size:30px; font-weight:700; color:var(--text); box-shadow:0 0 0 3px var(--panel2), 0 0 0 5px rgba(255,255,255,.1); }
+.pf-avatar img, .pf-avatar svg{ width:100%; height:100%; object-fit:cover; }
+.pf-avatar-edit{ position:absolute; right:0; bottom:2px; width:28px; height:28px; border-radius:50%; border:3px solid var(--panel2);
+  background:var(--green); color:#06140d; display:flex; align-items:center; justify-content:center; font-size:13px; padding:0; }
+.pf-id{ flex:1; min-width:0; display:flex; flex-direction:column; gap:7px; }
+.pf-name-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-right:28px; }
+.pf-name{ font-size:21px; font-weight:700; color:#fff; letter-spacing:-.01em; }
+.pf-badge{ display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; }
+.pf-badge.vip{ background:rgba(242,182,66,.14); color:var(--gold); border:1px solid rgba(242,182,66,.35); }
+.pf-badges{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.pf-icon-badge{ width:26px; height:26px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; font-size:15px; background:var(--panel3); border:1px solid var(--line2); }
+.pf-icon-badge.discord{ color:#8f99ff; }
+.pf-icon-badge.mod{ color:#8fb8ff; }
+.pf-meta{ display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
+.pf-meta b{ color:#e3e6ea; font-weight:600; }
+.pf-meta .epic-copy-btn{ vertical-align:-2px; }
+.pf-hero-action{ align-self:flex-end; flex:none; }
+.pf-tip{ color:var(--gold) !important; border-color:rgba(242,182,66,.4) !important; }
+.pf-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+.pf-tile{ padding:12px 10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); text-align:center; min-width:0; }
+.pf-tile > span{ display:block; font-size:10px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--muted2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pf-tile > strong{ display:flex; align-items:center; justify-content:center; gap:6px; margin-top:6px; font-size:18px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+.pf-tile > strong.green{ color:var(--green); } .pf-tile > strong.red{ color:var(--red); } .pf-tile > strong.gold{ color:var(--gold); }
+.pf-bar{ height:4px; margin:8px auto 0; max-width:120px; border-radius:4px; background:var(--panel3); overflow:hidden; }
+.pf-bar > div{ height:100%; background:var(--green); border-radius:4px; }
+.pf-recent{ margin-top:12px; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--panel2); }
+.pf-recent-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.pf-recent-head h3{ font-size:14px; font-weight:600; color:#fff; }
+.pf-row{ display:grid; grid-template-columns:40px 1.4fr .8fr .8fr 90px; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; font-size:13px; }
+.pf-row + .pf-row{ margin-top:4px; }
+.pf-row:not(.pf-row-head){ background:var(--panel); border:1px solid var(--line); }
+.pf-row.clickable{ cursor:pointer; } .pf-row.clickable:hover{ border-color:rgba(255,255,255,.16); }
+.pf-row-head span{ font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted2); }
+.pf-game{ width:26px; height:22px; border-radius:6px; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; background:var(--panel3); color:var(--text); }
+.pf-row-head .pf-game, .pf-row-head span:first-child{ background:none; width:auto; }
+.pf-mode{ color:#fff; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pf-size{ color:var(--muted); }
+.pf-entry{ display:inline-flex; align-items:center; gap:5px; color:#e3e6ea; font-variant-numeric:tabular-nums; }
+.pf-result{ justify-self:start; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; }
+.pf-result.win{ color:var(--green); background:rgba(31,227,139,.12); }
+.pf-result.loss{ color:#ff7b86; background:rgba(240,82,95,.12); }
+.pf-empty{ padding:18px; text-align:center; font-size:13px; color:var(--muted); }
+@media(max-width:560px){
+  .pf-hero{ flex-wrap:wrap; padding:16px; }
+  .pf-avatar{ width:72px; height:72px; }
+  .pf-hero-action{ width:100%; }
+  .pf-grid{ grid-template-columns:repeat(2,1fr); }
+  .pf-row{ grid-template-columns:32px 1fr 60px 80px; }
+  .pf-size{ display:none; } .pf-row-head span:nth-child(3){ display:none; }
+}
+
+/* Menu du compte (avatar en haut à droite) */
+.user-menu-wrap{ position:relative; }
+.profile-chip{ padding-right:10px; }
+.user-menu-caret{ font-size:15px; color:var(--muted); margin-left:2px; transition:transform .15s ease; }
+.user-menu-wrap.open .user-menu-caret{ transform:rotate(180deg); }
+.user-menu-wrap.open .profile-chip{ border-color:rgba(255,255,255,.22); background:var(--panel2); }
+.user-menu{
+  position:absolute; top:calc(100% + 8px); right:0; z-index:80; width:240px; padding:6px;
+  background:var(--panel2); border:1px solid var(--line2); border-radius:12px;
+  box-shadow:0 16px 40px rgba(0,0,0,.5);
+  display:none;
+}
+.user-menu.open{ display:block; animation:userMenuIn .12s ease; }
+@keyframes userMenuIn{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:none; } }
+.user-menu-head{
+  width:100%; display:flex; align-items:center; gap:10px; padding:10px; border:0; border-radius:8px;
+  background:transparent; color:var(--text); text-align:left;
+}
+.user-menu-head:hover{ background:rgba(255,255,255,.05); }
+.user-menu-vip{ width:34px; height:34px; flex:none; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--panel3); font-size:18px; }
+.user-menu-vip:not(.on) .ic-crown{ color:var(--muted2); }
+.user-menu-head-txt{ display:flex; flex-direction:column; min-width:0; }
+.user-menu-head-txt strong{ font-size:13px; font-weight:600; color:#fff; }
+.user-menu-head-txt span{ font-size:11px; color:var(--muted); margin-top:1px; }
+.user-menu-sep{ height:1px; background:var(--line); margin:5px 4px; }
+.user-menu-item{
+  width:100%; display:flex; align-items:center; gap:10px; height:36px; padding:0 10px; border:0; border-radius:7px;
+  background:transparent; color:#d5d9df; font-size:13px; font-weight:500; text-align:left;
+}
+.user-menu-item .ic{ font-size:16px; color:var(--muted); }
+.user-menu-item:hover{ background:rgba(255,255,255,.06); color:#fff; }
+.user-menu-item:hover .ic{ color:var(--text); }
+.user-menu-item.danger, .user-menu-item.danger .ic{ color:#ff7b86; }
+.user-menu-item.danger:hover{ background:rgba(240,82,95,.1); }
+
+/* Fenêtre de confirmation intégrée */
+.site-confirm .modal-head h2 .ic-danger{ color:var(--red); }
+.site-confirm-msg{ font-size:14px; line-height:1.6; color:#c9ced6; }
+.site-confirm-label{ display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:var(--muted); }
+#siteConfirmOverlay{ z-index:300; }
+
 /* ===== RANKING (podium + liste) ===== */
 .rk-stage{
   position:relative; display:grid; grid-template-columns:1fr 1.15fr 1fr; align-items:end; gap:18px;
@@ -2556,7 +2720,6 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
     <button data-page="tournaments" title="Tournaments"><span class="nav-icon"><i data-ic="trophy"></i></span> <span class="nav-text">Tournaments</span></button>
     <button data-page="shop" title="Shop"><span class="nav-icon"><i data-ic="bag"></i></span> <span class="nav-text">Shop</span></button>
     <button data-page="wallet" title="Wallet"><span class="nav-icon"><i data-ic="wallet"></i></span> <span class="nav-text">Wallet</span></button>
-    <button data-page="settings" title="Settings"><span class="nav-icon"><i data-ic="settings"></i></span> <span class="nav-text">Settings</span></button>
     <button data-page="moderation" id="navModeration" style="display:none;" title="Moderation"><span class="nav-icon"><i data-ic="shield"></i></span> <span class="nav-text">Moderation</span></button>
   </nav>
 
@@ -2598,15 +2761,19 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
   </div>
   <div class="top-actions">
     <button class="btn green" onclick="openCreateModal()">+ Create Match</button>
-    <button class="profile-chip" onclick="setPage('profile')" title="View my profile">
-      <div class="profile-chip-avatar js-user-avatar" id="topAvatar">P</div>
-      <div class="profile-chip-info">
-        <div style="display:flex; align-items:center;">
-          <i data-ic="crown" id="topVipBadge" class="ic-crown" title="VIP" style="display:none; margin-right:5px;"></i><strong id="topUsername">Player</strong>
+    <div class="user-menu-wrap" id="userMenuWrap">
+      <button class="profile-chip" id="userMenuBtn" onclick="toggleUserMenu(event)" title="My account" aria-haspopup="true" aria-expanded="false">
+        <div class="profile-chip-avatar js-user-avatar" id="topAvatar">P</div>
+        <div class="profile-chip-info">
+          <div style="display:flex; align-items:center;">
+            <i data-ic="crown" id="topVipBadge" class="ic-crown" title="VIP" style="display:none; margin-right:5px;"></i><strong id="topUsername">Player</strong>
+          </div>
+          <span id="topRecord"><b>0V</b> · <i>0D</i> · 0%</span>
         </div>
-        <span id="topRecord"><b>0V</b> · <i>0D</i> · 0%</span>
-      </div>
-    </button>
+        <i data-ic="chevronDown" class="user-menu-caret"></i>
+      </button>
+      <div class="user-menu" id="userMenu" role="menu"></div>
+    </div>
   </div>
 </header>
 
@@ -2875,45 +3042,9 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
 ========================= -->
 
 <div class="overlay" id="statsOverlay">
-<div class="modal stats-modal-card" style="width:min(430px,100%);">
-  <div class="modal-head">
-    <h2 id="statsModalName">Player</h2>
-    <button class="close" onclick="closeStatsModal()">×</button>
-  </div>
-  <div class="modal-body stats-modal-body">
-
-    <div class="stats-modal-top">
-      <div class="stats-modal-avatar" id="statsModalAvatar">?</div>
-      <div class="stats-modal-id">
-        <div class="stats-modal-epic" id="statsModalEpic">Epic: —</div>
-        <span class="stats-modal-badge" id="statsModalStreakBadge" style="display:none;"><i data-ic="flame"></i> <b id="statsModalStreakVal">0</b> win streak</span>
-      </div>
-    </div>
-
-    <div class="stats-modal-grid">
-      <div class="quick-stat"><span>Matches Played</span><strong id="statsModalPlayed">0</strong></div>
-      <div class="quick-stat"><span>Wins</span><strong class="green" id="statsModalWins">0</strong></div>
-      <div class="quick-stat"><span>Losses</span><strong class="red" id="statsModalLosses">0</strong></div>
-      <div class="quick-stat"><span>Best Streak</span><strong id="statsModalBestStreak">0</strong></div>
-    </div>
-
-    <div class="stats-modal-winrate">
-      <div class="stats-modal-winrate-head"><span>Winrate</span><strong id="statsModalWinrate">0%</strong></div>
-      <div class="stats-modal-bar"><div class="stats-modal-bar-fill" id="statsModalBarFill" style="width:0%"></div></div>
-    </div>
-
-    <div class="stats-modal-history" id="statsModalHistoryWrap" style="display:none;">
-      <div class="stats-modal-history-head">
-        <span>Recent Matches</span>
-        <button class="view-all-link" id="statsModalViewAllBtn" onclick="openFullHistoryModal()">View all</button>
-      </div>
-      <div id="statsModalHistoryList"></div>
-    </div>
-
-  </div>
-  <div class="modal-footer">
-    <button class="btn green" onclick="closeStatsModal()">Close</button>
-  </div>
+<div class="modal pf-modal">
+  <button class="close pf-close" onclick="closeStatsModal()" aria-label="Close">×</button>
+  <div id="statsModalBody"></div>
 </div>
 </div>
 
@@ -3013,6 +3144,29 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
   <div class="modal-footer">
     <button class="btn" onclick="closeCheaterReportModal()">Cancel</button>
     <button class="btn danger" onclick="confirmCheaterReport()"><i data-ic="flag"></i> Confirm Report</button>
+  </div>
+</div>
+</div>
+
+<!-- =========================
+     CONFIRMATION (remplace les confirm() du navigateur)
+========================= -->
+<div class="overlay" id="siteConfirmOverlay">
+<div class="modal site-confirm" style="width:min(420px,100%);">
+  <div class="modal-head">
+    <h2 id="siteConfirmTitle">Are you sure?</h2>
+    <button class="close" onclick="closeSiteConfirm(false)">×</button>
+  </div>
+  <div style="padding:20px;">
+    <p id="siteConfirmMessage" class="site-confirm-msg"></p>
+    <div id="siteConfirmInputWrap" style="display:none; margin-top:14px;">
+      <label id="siteConfirmInputLabel" class="site-confirm-label"></label>
+      <input type="text" class="input" id="siteConfirmInput" autocomplete="off">
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeSiteConfirm(false)">Cancel</button>
+    <button class="btn danger" id="siteConfirmOk" onclick="closeSiteConfirm(true)">Confirm</button>
   </div>
 </div>
 </div>
@@ -3156,6 +3310,9 @@ const ICONS = {
   sparkles:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
   info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   chevronRight:'<path d="m9 18 6-6-6-6"/>',
+  chevronDown:'<path d="m6 9 6 6 6-6"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+  history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   chevronLeft:'<path d="m15 18-6-6 6-6"/>',
   user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   userX:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/>',
@@ -3192,6 +3349,58 @@ function hydrateIcons(root){
   });
 }
 hydrateIcons();
+
+/* =========================================================
+   CONFIRMATION INTÉGRÉE — siteConfirm(message, options) renvoie une
+   promesse (true = confirmé). Remplace les confirm()/prompt() du
+   navigateur, qui s'affichaient en haut de la page.
+   options : { title, okLabel, danger (true par défaut), requireText }
+========================================================= */
+let siteConfirmResolve = null;
+function siteConfirm(message, opts){
+  opts = opts || {};
+  const danger = opts.danger !== false;
+  document.getElementById("siteConfirmTitle").innerHTML =
+    `${icon(danger ? 'alert' : 'info', danger ? 'ic-danger' : '')} ${escapeHTML(opts.title || "Are you sure?")}`;
+  document.getElementById("siteConfirmMessage").innerHTML = escapeHTML(message || "").replace(/\n/g, "<br>");
+  const okBtn = document.getElementById("siteConfirmOk");
+  okBtn.textContent = opts.okLabel || "Confirm";
+  okBtn.className = "btn " + (danger ? "danger" : "green");
+  const wrap = document.getElementById("siteConfirmInputWrap");
+  const input = document.getElementById("siteConfirmInput");
+  input.value = "";
+  if(opts.requireText){
+    wrap.style.display = "";
+    document.getElementById("siteConfirmInputLabel").textContent = `Type ${opts.requireText} to confirm`;
+    okBtn.disabled = true;
+    input.oninput = () => { okBtn.disabled = input.value.trim() !== opts.requireText; };
+  } else {
+    wrap.style.display = "none";
+    okBtn.disabled = false;
+    input.oninput = null;
+  }
+  if(siteConfirmResolve) siteConfirmResolve(false);
+  document.getElementById("siteConfirmOverlay").classList.add("open");
+  setTimeout(() => (opts.requireText ? input : okBtn).focus(), 30);
+  return new Promise(resolve => { siteConfirmResolve = resolve; });
+}
+function closeSiteConfirm(ok){
+  const okBtn = document.getElementById("siteConfirmOk");
+  if(ok && okBtn.disabled) return;
+  document.getElementById("siteConfirmOverlay").classList.remove("open");
+  const r = siteConfirmResolve;
+  siteConfirmResolve = null;
+  if(r) r(!!ok);
+}
+document.addEventListener("keydown", e => {
+  if(!siteConfirmResolve) return;
+  if(e.key === "Escape") closeSiteConfirm(false);
+  if(e.key === "Enter") closeSiteConfirm(true);
+});
+document.getElementById("siteConfirmOverlay").addEventListener("mousedown", e => {
+  if(e.target.id === "siteConfirmOverlay") closeSiteConfirm(false);
+});
+
 
 /* =========================================================
    FIREBASE — base de données partagée (matchs en temps réel)
@@ -3580,8 +3789,7 @@ function modGiveSelfSnipes(amount){
 async function modResetEconomyAll(){
   if(!isSuperAdmin()){ toast("Only the owner can reset the economy."); return; }
   if(!db){ toast("Database unavailable."); return; }
-  if(!confirm("Reset ALL players to 0 coins, 0 snipes and remove every VIP?\n\nThis cannot be undone.")) return;
-  if(prompt('Type RESET to confirm') !== "RESET"){ toast("Reset cancelled."); return; }
+  if(!(await siteConfirm("Reset ALL players to 0 coins, 0 snipes and remove every VIP?\n\nThis cannot be undone.", { title:"Reset the economy", okLabel:"Reset everyone", requireText:"RESET" }))){ toast("Reset cancelled."); return; }
   try{
     const snap = await db.collection("users").get();
     const docs = snap.docs;
@@ -3763,7 +3971,7 @@ function modSearchEpicUsers(){
 /* Délie le compte Discord d'un joueur (seuls les modérateurs peuvent le
    faire désormais — un joueur ne peut plus se délier lui-même, ça servait
    à changer de compte pour contourner un ban). */
-function modUnlinkPlayerDiscord(){
+async function modUnlinkPlayerDiscord(){
   if(!isAdmin() || !db) return;
   const userInput = document.getElementById("modDiscordUsername");
   const username = userInput ? userInput.value.trim() : "";
@@ -3771,7 +3979,7 @@ function modUnlinkPlayerDiscord(){
 
   const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
   if(!target){ toast("This player doesn't exist."); return; }
-  if(!confirm(`Unlink ${target.username}'s Discord account?`)) return;
+  if(!(await siteConfirm(`Unlink ${target.username}'s Discord account?`, { title:"Unlink Discord", okLabel:"Unlink" }))) return;
 
   db.collection("users").doc(target.uid).update({
     discordId: null,
@@ -3793,9 +4001,9 @@ function modUnlinkPlayerDiscord(){
   });
 }
 
-function modResetEpicLock(uid, username){
+async function modResetEpicLock(uid, username){
   if(!isAdmin() || !db || !uid) return;
-  if(!confirm(`Unlock ${username}'s Epic username so they can set a new one?`)) return;
+  if(!(await siteConfirm(`Unlock ${username}'s Epic username so they can set a new one?`, { title:"Reset Epic username", okLabel:"Unlock", danger:false }))) return;
   db.collection("users").doc(uid).set({ epicLocked:false }, { merge:true })
     .then(() => { toast(`${username}'s Epic username is now unlocked.`); modSearchUsers(); modSearchEpicUsers(); })
     .catch(err => { console.warn(err); toast("Error while unlocking."); });
@@ -3924,10 +4132,10 @@ function confirmCheaterReport(){
 
 /* Modérateur : classe le signalement sans sanction (match débloqué, le
    déroulement normal du résultat reprend). */
-function modDismissCheaterReport(matchId){
+async function modDismissCheaterReport(matchId){
   const match = state.matches.find(m => m.id === matchId);
   if(!match || !isAdmin()) return;
-  if(!confirm("Dismiss this report? The match will unfreeze and continue normally.")) return;
+  if(!(await siteConfirm("Dismiss this report? The match will unfreeze and continue normally.", { title:"Dismiss report", okLabel:"Dismiss", danger:false }))) return;
   match.cheaterReport.status = "dismissed";
   match.cheaterReport.resolvedBy = state.username;
   match.cheaterReport.resolvedAt = Date.now();
@@ -3938,7 +4146,7 @@ function modDismissCheaterReport(matchId){
 
 /* Modérateur : signalement confirmé — ouvre directement la fenêtre de ban
    sur le(s) joueur(s) signalé(s) (le premier si plusieurs, cas 2v2+). */
-function modConfirmCheaterReport(matchId){
+async function modConfirmCheaterReport(matchId){
   const match = state.matches.find(m => m.id === matchId);
   if(!match || !isAdmin()) return;
   const against = (match.cheaterReport && match.cheaterReport.against) || [];
@@ -3949,7 +4157,7 @@ function modConfirmCheaterReport(matchId){
 
   // Action destructrice (ban) — on demande une confirmation explicite pour
   // éviter qu'un simple mis-clic bannisse quelqu'un par erreur.
-  if(!confirm(`Are you sure you want to ban ${target.username}? This will permanently ban their account.`)) return;
+  if(!(await siteConfirm(`Are you sure you want to ban ${target.username}? This will permanently ban their account.`, { title:"Ban player", okLabel:"Ban" }))) return;
 
   match.cheaterReport.status = "confirmed";
   match.cheaterReport.resolvedBy = state.username;
@@ -3985,9 +4193,9 @@ function modUnbanUser(uid, username){
 }
 
 /* --- Pouvoirs modérateur : voir et gérer tous les matchs --- */
-function modDeleteMatch(id){
+async function modDeleteMatch(id){
   if(!isAdmin()) return;
-  if(!confirm(`Force delete match ${id}?`)) return;
+  if(!(await siteConfirm(`Force delete match ${id}?`, { title:"Delete match", okLabel:"Delete" }))) return;
   const match = state.matches.find(m => m.id === id);
   if(match && !match.completed && (match.escrowedBy || []).length > 0){
     // Des coins ont déjà été débités (escrow, dès la création du match pour
@@ -4035,7 +4243,7 @@ function resolveDispute(matchId, winnerUsername){
    le match n'est pas verrouillé, pas en dispute, et même sans que les
    joueurs aient déclaré quoi que ce soit. À utiliser avec précaution —
    d'où la confirmation et la couleur distincte (violet) dans l'UI. */
-function modForceAssignWin(matchId, side){
+async function modForceAssignWin(matchId, side){
   if(!isAdmin()) return;
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
@@ -4046,7 +4254,7 @@ function modForceAssignWin(matchId, side){
   const losers = side === "host" ? guestPlayers : hostPlayers;
   if(winners.length === 0){ toast("That side has no player."); return; }
 
-  if(!confirm(`[MODERATOR OVERRIDE] Force victory for ${side.toUpperCase()} (${winners.join(", ")}) on match ${matchId}?\n\nThis immediately settles coins and cannot be undone from here.`)) return;
+  if(!(await siteConfirm(`[MODERATOR OVERRIDE] Force victory for ${side.toUpperCase()} (${winners.join(", ")}) on match ${matchId}?\n\nThis immediately settles coins and cannot be undone from here.`, { title:"Moderator override", okLabel:"Force victory" }))) return;
 
   finalizeMatchResult(match, winners, losers);
   save();
@@ -4778,6 +4986,22 @@ function wheelTimeUntilReset(){
 let wheelRotation = 0;
 let wheelSpinning = false;
 
+/* Contenu d'une case de la roue (montant + icône), et libellés du tableau des gains. */
+function wheelSegIcon(seg, size){
+  if(seg.type === "coins") return coinIcon(size || 16);
+  if(seg.type === "snipes") return `<span class="wheel-emoji" style="font-size:${size || 16}px;">🎯</span>`;
+  return icon("gift");
+}
+function wheelSegLabelHTML(seg){
+  const top = seg.type === "avatar" ? "Avatar" : "+" + formatCoins(seg.amount);
+  return `<b>${top}</b><i>${wheelSegIcon(seg, 15)}</i>`;
+}
+function wheelSegName(seg){
+  if(seg.type === "coins") return `+${formatCoins(seg.amount)} coin${seg.amount > 1 ? 's' : ''}`;
+  if(seg.type === "snipes") return `+${seg.amount} snipe${seg.amount > 1 ? 's' : ''}`;
+  return "Random avatar";
+}
+
 function spinWheel(){
   if(wheelSpinning) return;
   if(!canSpinWheelToday()){
@@ -4836,7 +5060,7 @@ function applyWheelReward(seg){
     resultText = `+${seg.amount} Snipe${seg.amount > 1 ? 's' : ''}`;
     resultIcon = "🎯";
   } else if(seg.type === "avatar"){
-    const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !state.ownedAvatars.includes(a.id));
+    const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !a.starter && !state.ownedAvatars.includes(a.id));
     if(unowned.length > 0){
       const picked = unowned[Math.floor(Math.random() * unowned.length)];
       state.ownedAvatars.push(picked.id);
@@ -4890,6 +5114,12 @@ function roundToCents(n){
 ========================================================= */
 
 const AVATAR_CATALOG = [
+  /* Avatars de départ : un est donné au hasard à la création du compte (pas en vente). */
+  { id:"starter_hoodie", name:"Hoodie", tier:"commun", price:0, starter:true, svgBox:"0 0 200 200", grad:"linear-gradient(135deg,#1fe38b,#0b6b43)", art:`<defs><linearGradient id="starter_hoodie_g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1fe38b"/><stop offset="1" stop-color="#0b6b43"/></linearGradient></defs> <rect width="200" height="200" fill="url(#starter_hoodie_g1)"/> <circle cx="160" cy="40" r="60" fill="#fff" opacity=".07"/> <path d="M30 200 C30 150 60 128 100 128 C140 128 170 150 170 200Z" fill="#15181d"/> <path d="M52 118 C44 70 66 36 100 36 C134 36 156 70 148 118 C140 150 60 150 52 118Z" fill="#1d2127"/> <ellipse cx="100" cy="100" rx="32" ry="38" fill="#e2a878"/> <path d="M68 94 C70 70 84 58 100 58 C116 58 130 70 132 94 C120 80 80 80 68 94Z" fill="#1d2127"/><g class="face"> <path d="M81 94 q7 -4 13 0" stroke="#1a1d22" stroke-width="3" fill="none" stroke-linecap="round"/> <path d="M106 94 q7 -4 13 0" stroke="#1a1d22" stroke-width="3" fill="none" stroke-linecap="round"/> <ellipse cx="88" cy="104" rx="4" ry="5" fill="#1a1d22"/><ellipse cx="112" cy="104" rx="4" ry="5" fill="#1a1d22"/> <circle cx="89.4" cy="102.2" r="1.4" fill="#fff"/><circle cx="113.4" cy="102.2" r="1.4" fill="#fff"/> <path d="M101 109 q3 6 -2 8" stroke="#b97b50" stroke-width="2.4" fill="none" stroke-linecap="round"/> <path d="M92 122 q8 6 16 0" stroke="#6b2f24" stroke-width="2.8" fill="none" stroke-linecap="round"/> <circle cx="80" cy="115" r="5" fill="#ff6b6b" opacity=".16"/><circle cx="120" cy="115" r="5" fill="#ff6b6b" opacity=".16"/> </g> <path d="M76 160 L100 176 L124 160" stroke="#1fe38b" stroke-width="4" fill="none" stroke-linecap="round"/> <line x1="88" y1="150" x2="86" y2="176" stroke="#2c323a" stroke-width="3" stroke-linecap="round"/><line x1="112" y1="150" x2="114" y2="176" stroke="#2c323a" stroke-width="3" stroke-linecap="round"/>` },
+  { id:"starter_headset", name:"Headset", tier:"commun", price:0, starter:true, svgBox:"0 0 200 200", grad:"linear-gradient(135deg,#4f8bff,#1d3f8f)", art:`<defs><linearGradient id="starter_headset_g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f8bff"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient></defs> <rect width="200" height="200" fill="url(#starter_headset_g2)"/> <circle cx="40" cy="30" r="55" fill="#fff" opacity=".07"/> <path d="M36 200 C36 152 64 132 100 132 C136 132 164 152 164 200Z" fill="#f2f3f5"/> <path d="M84 132 L100 150 L116 132" fill="#d8dbe0"/> <rect x="88" y="112" width="24" height="26" rx="8" fill="#c98a5e"/> <ellipse cx="100" cy="92" rx="33" ry="37" fill="#d9965f"/> <path d="M64 86 C62 58 80 44 100 44 C122 44 140 58 138 84 Z" fill="#15181d"/> <path d="M62 84 L150 84 C150 92 140 92 130 90 L64 90Z" fill="#15181d"/><g class="face"> <path d="M81 92 q7 -4 13 0" stroke="#1a1d22" stroke-width="3" fill="none" stroke-linecap="round"/> <path d="M106 92 q7 -4 13 0" stroke="#1a1d22" stroke-width="3" fill="none" stroke-linecap="round"/> <ellipse cx="88" cy="102" rx="4" ry="5" fill="#1a1d22"/><ellipse cx="112" cy="102" rx="4" ry="5" fill="#1a1d22"/> <circle cx="89.4" cy="100.2" r="1.4" fill="#fff"/><circle cx="113.4" cy="100.2" r="1.4" fill="#fff"/> <path d="M101 107 q3 6 -2 8" stroke="#a86a3c" stroke-width="2.4" fill="none" stroke-linecap="round"/> <path d="M92 120 q8 6 16 0" stroke="#6b2f24" stroke-width="2.8" fill="none" stroke-linecap="round"/> <circle cx="80" cy="113" r="5" fill="#ff6b6b" opacity=".16"/><circle cx="120" cy="113" r="5" fill="#ff6b6b" opacity=".16"/> </g> <path d="M60 96 C56 60 144 60 140 96" stroke="#2c323a" stroke-width="7" fill="none"/> <rect x="52" y="86" width="16" height="26" rx="7" fill="#2c323a"/><rect x="132" y="86" width="16" height="26" rx="7" fill="#2c323a"/> <path d="M60 108 C62 124 76 128 88 126" stroke="#2c323a" stroke-width="4" fill="none" stroke-linecap="round"/><circle cx="90" cy="126" r="4" fill="#4f8bff"/>` },
+  { id:"starter_longhair", name:"Long Hair", tier:"commun", price:0, starter:true, svgBox:"0 0 200 200", grad:"linear-gradient(135deg,#a970ff,#4b2590)", art:`<defs><linearGradient id="starter_longhair_g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a970ff"/><stop offset="1" stop-color="#4b2590"/></linearGradient></defs> <rect width="200" height="200" fill="url(#starter_longhair_g3)"/> <circle cx="170" cy="170" r="60" fill="#fff" opacity=".07"/> <path d="M60 70 C56 40 80 30 100 30 C126 30 146 44 142 76 L150 160 L50 160Z" fill="#2a1b12"/> <path d="M38 200 C38 154 66 134 100 134 C134 134 162 154 162 200Z" fill="#15181d"/> <rect x="88" y="112" width="24" height="26" rx="8" fill="#e9b48d"/> <ellipse cx="100" cy="92" rx="31" ry="36" fill="#f1c09a"/> <path d="M68 84 C66 54 84 44 102 44 C122 44 136 58 132 86 C120 64 96 62 68 84Z" fill="#2a1b12"/><g class="face"> <path d="M81 88 q7 -4 13 0" stroke="#2a1b12" stroke-width="3" fill="none" stroke-linecap="round"/> <path d="M106 88 q7 -4 13 0" stroke="#2a1b12" stroke-width="3" fill="none" stroke-linecap="round"/> <ellipse cx="88" cy="98" rx="4" ry="5" fill="#1a1d22"/><ellipse cx="112" cy="98" rx="4" ry="5" fill="#1a1d22"/> <circle cx="89.4" cy="96.2" r="1.4" fill="#fff"/><circle cx="113.4" cy="96.2" r="1.4" fill="#fff"/> <path d="M101 103 q3 6 -2 8" stroke="#c98f68" stroke-width="2.4" fill="none" stroke-linecap="round"/> <path d="M92 116 q8 6 16 0" stroke="#6b2f24" stroke-width="2.8" fill="none" stroke-linecap="round"/> <circle cx="80" cy="109" r="5" fill="#ff6b6b" opacity=".16"/><circle cx="120" cy="109" r="5" fill="#ff6b6b" opacity=".16"/> </g> <path d="M58 100 C58 60 142 60 142 100" stroke="#e7e9ec" stroke-width="7" fill="none"/> <rect x="50" y="90" width="16" height="26" rx="7" fill="#e7e9ec"/><rect x="134" y="90" width="16" height="26" rx="7" fill="#e7e9ec"/> <circle cx="58" cy="103" r="3.5" fill="#a970ff"/><circle cx="142" cy="103" r="3.5" fill="#a970ff"/>` },
+  { id:"starter_beanie", name:"Beanie", tier:"commun", price:0, starter:true, svgBox:"0 0 200 200", grad:"linear-gradient(135deg,#ffa05c,#a8431c)", art:`<defs><linearGradient id="starter_beanie_g4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffa05c"/><stop offset="1" stop-color="#a8431c"/></linearGradient></defs> <rect width="200" height="200" fill="url(#starter_beanie_g4)"/> <circle cx="30" cy="170" r="60" fill="#fff" opacity=".07"/> <path d="M36 200 C36 152 64 132 100 132 C136 132 164 152 164 200Z" fill="#1f3a2e"/> <path d="M70 150 C80 140 120 140 130 150" stroke="#15181d" stroke-width="3" fill="none"/> <rect x="88" y="112" width="24" height="26" rx="8" fill="#8a5a3a"/> <ellipse cx="100" cy="94" rx="32" ry="36" fill="#9c6a45"/> <path d="M64 84 C62 50 82 34 100 34 C120 34 140 50 136 84Z" fill="#15181d"/> <rect x="62" y="76" width="76" height="14" rx="6" fill="#262c34"/> <g stroke="#15181d" stroke-width="2"><line x1="74" y1="78" x2="74" y2="88"/><line x1="86" y1="78" x2="86" y2="88"/><line x1="98" y1="78" x2="98" y2="88"/><line x1="110" y1="78" x2="110" y2="88"/><line x1="122" y1="78" x2="122" y2="88"/></g> <circle cx="100" cy="32" r="8" fill="#262c34"/><g class="face"> <path d="M81 93 q7 -4 13 0" stroke="#1a1d22" stroke-width="3" fill="none" stroke-linecap="round"/> <path d="M106 93 q7 -4 13 0" stroke="#1a1d22" stroke-width="3" fill="none" stroke-linecap="round"/> <ellipse cx="88" cy="103" rx="4" ry="5" fill="#1a1d22"/><ellipse cx="112" cy="103" rx="4" ry="5" fill="#1a1d22"/> <circle cx="89.4" cy="101.2" r="1.4" fill="#fff"/><circle cx="113.4" cy="101.2" r="1.4" fill="#fff"/> <path d="M101 108 q3 6 -2 8" stroke="#6e4428" stroke-width="2.4" fill="none" stroke-linecap="round"/> <path d="M92 121 q8 6 16 0" stroke="#6b2f24" stroke-width="2.8" fill="none" stroke-linecap="round"/> <circle cx="80" cy="114" r="5" fill="#ff6b6b" opacity=".16"/><circle cx="120" cy="114" r="5" fill="#ff6b6b" opacity=".16"/> </g>` },
+  { id:"starter_visor", name:"Visor", tier:"commun", price:0, starter:true, svgBox:"0 0 200 200", grad:"linear-gradient(135deg,#f0525f,#7a1622)", art:`<defs><linearGradient id="starter_visor_g5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0525f"/><stop offset="1" stop-color="#7a1622"/></linearGradient> <linearGradient id="starter_visor_v5" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1fe38b"/><stop offset="1" stop-color="#0fa3b8"/></linearGradient></defs> <rect width="200" height="200" fill="url(#starter_visor_g5)"/> <circle cx="160" cy="36" r="56" fill="#fff" opacity=".07"/> <path d="M36 200 C36 150 64 130 100 130 C136 130 164 150 164 200Z" fill="#15181d"/> <path d="M60 160 L100 150 L140 160" stroke="#f0525f" stroke-width="4" fill="none" stroke-linecap="round"/> <path d="M58 100 C54 58 76 38 100 38 C124 38 146 58 142 100 C140 126 124 138 100 138 C76 138 60 126 58 100Z" fill="#e7e9ec"/> <path d="M66 88 C70 76 130 76 134 88 L130 106 C122 112 78 112 70 106Z" fill="url(#starter_visor_v5)"/> <ellipse cx="88" cy="96" rx="4" ry="5" fill="#0b3b2a"/><ellipse cx="112" cy="96" rx="4" ry="5" fill="#0b3b2a"/> <circle cx="89.4" cy="94.2" r="1.4" fill="#fff"/><circle cx="113.4" cy="94.2" r="1.4" fill="#fff"/> <path d="M92 122 q8 5 16 0" stroke="#9aa1ab" stroke-width="2.8" fill="none" stroke-linecap="round"/><path d="M76 88 L96 84" stroke="#fff" stroke-width="3" opacity=".6" stroke-linecap="round"/> <rect x="94" y="46" width="12" height="22" rx="4" fill="#f0525f"/>` },
   { id:"default", name:"Recruit", tier:"commun", price:0, emoji:"🎮",
     grad:"linear-gradient(135deg,#3a4453,#1a2028)" },
 
@@ -4923,6 +5153,12 @@ const AVATAR_CATALOG = [
 
 ];
 
+let pendingStarterAvatar = null;
+function pickStarterAvatar(){
+  const starters = AVATAR_CATALOG.filter(av => av.starter);
+  return starters.length ? starters[Math.floor(Math.random() * starters.length)].id : "default";
+}
+
 const AVATAR_TIER_LABEL = { commun:"Common", rare:"Rare", or:"Gold", epique:"Epic" };
 const AVATAR_TIER_ORDER = { commun:0, rare:1, epique:2, or:3 };
 function sortedAvatarCatalog(){
@@ -4936,7 +5172,7 @@ function getAvatar(id){
 function avatarMediaHTML(a){
   if(!a) return "";
   if(a.img) return `<img src="${a.img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">`;
-  if(a.art) return `<svg viewBox="0 0 100 100" width="100%" height="100%" style="display:block;">${a.art}</svg>`;
+  if(a.art) return `<svg viewBox="${a.svgBox || '0 0 100 100'}" width="100%" height="100%" style="display:block;">${a.art}</svg>`;
   return `<span style="color:var(--muted); font-size:.55em; display:flex;">${icon("user")}</span>`;
 }
 
@@ -5067,73 +5303,124 @@ function loadMoreFullHistory(){
 
 function openStatsModal(name, epic, stats, opts){
   opts = opts || {};
-  const played = (stats && stats.played) || 0;
-  const wins = (stats && stats.wins) || 0;
-  const losses = (stats && stats.losses) || 0;
+  stats = stats || {};
+  const isSelf = !!opts.isSelf;
+  const played = stats.played || 0;
+  const wins = stats.wins || 0;
+  const losses = stats.losses || 0;
   const winrate = played ? Math.round((wins / played) * 100) : 0;
-
-  document.getElementById("statsModalName").textContent = name || "Joueur";
-  document.getElementById("statsModalEpic").textContent = "Epic: " + (epic || "Not set");
-  document.getElementById("statsModalPlayed").textContent = played;
-  document.getElementById("statsModalWins").textContent = wins;
-  document.getElementById("statsModalLosses").textContent = losses;
-  document.getElementById("statsModalWinrate").textContent = winrate + "%";
-  document.getElementById("statsModalBarFill").style.width = winrate + "%";
-
-  const avatarEl = document.getElementById("statsModalAvatar");
-  if(opts.isSelf){
-    avatarEl.innerHTML = avatarInnerHTML(state.equippedAvatar, name, state.customAvatar);
-    avatarEl.setAttribute("style", avatarStyleAttr(state.equippedAvatar));
-  } else if(opts.equippedAvatar && opts.equippedAvatar !== "default"){
-    avatarEl.innerHTML = avatarInnerHTML(opts.equippedAvatar, name, opts.customAvatar);
-    avatarEl.setAttribute("style", avatarStyleAttr(opts.equippedAvatar));
-  } else {
-    const PALETTE = [
-      "linear-gradient(135deg,#0f3a52,#081b26)",
-      "linear-gradient(135deg,#4a1868,#180a2a)",
-      "linear-gradient(135deg,#5a2410,#240e06)",
-      "linear-gradient(135deg,#2b3a2f,#0f1712)",
-      "linear-gradient(135deg,#5a4413,#241c08)",
-      "linear-gradient(135deg,#1b3a52,#0a1a26)"
-    ];
-    avatarEl.innerHTML = initials(name);
-    avatarEl.style.background = PALETTE[hashStr(name || "?") % PALETTE.length];
-  }
-
+  const earned = stats.totalEarned || 0;
+  const best = stats.highestMatchEarning || 0;
   const streak = opts.streak || 0;
   const bestStreak = opts.bestStreak || 0;
-  document.getElementById("statsModalBestStreak").textContent = bestStreak;
+  const tier = tierForWins(wins);
+  const cached = allPlayersCache.find(pl => pl.username === name) || {};
+  const joined = isSelf ? state.joinedAt : (cached.joinedAt || cached.createdAt || null);
+  const hasDiscord = isSelf ? !!state.discordId : !!cached.discordId;
 
-  const badge = document.getElementById("statsModalStreakBadge");
-  if(streak > 0){
-    document.getElementById("statsModalStreakVal").textContent = streak;
-    badge.style.display = "inline-flex";
+  // Avatar
+  let avatarInner, avatarStyle;
+  if(isSelf){
+    avatarInner = avatarInnerHTML(state.equippedAvatar, name, state.customAvatar);
+    avatarStyle = avatarStyleAttr(state.equippedAvatar);
+  } else if(opts.equippedAvatar && opts.equippedAvatar !== "default"){
+    avatarInner = avatarInnerHTML(opts.equippedAvatar, name, opts.customAvatar);
+    avatarStyle = avatarStyleAttr(opts.equippedAvatar);
   } else {
-    badge.style.display = "none";
+    avatarInner = initials(name);
+    avatarStyle = "background:var(--panel3);";
   }
 
   statsModalPlayerName = name || "";
 
-  const historyWrap = document.getElementById("statsModalHistoryWrap");
-  const historyList = document.getElementById("statsModalHistoryList");
-  const viewAllBtn = document.getElementById("statsModalViewAllBtn");
-  const hist = opts.isSelf ? (state.history || []) : getPlayerMatchHistory(name);
-  if(hist.length){
-    historyWrap.style.display = "block";
-    historyList.innerHTML = hist.slice(0, 5).map(h => `
-      <div class="stats-history-row ${h.matchId ? 'clickable-row' : ''}" ${h.matchId ? `onclick="closeStatsModal(); viewHistoryMatch('${h.matchId}');" title="View this match"` : ''}>
-        <div><span class="stats-history-mode">${escapeHTML(h.mode || "Match")}</span><span class="stats-history-meta">${escapeHTML(h.teamSize || "")}</span></div>
-        <span class="stats-history-result ${h.result === 'WIN' ? 'win' : 'loss'}">${h.result === 'WIN' ? 'Win' : 'Loss'}</span>
+  // Historique récent (5 derniers)
+  const hist = isSelf ? (state.history || []) : getPlayerMatchHistory(name);
+  const betOf = h => {
+    if(h.bet !== undefined && h.bet !== null) return h.bet;
+    const m = h.matchId ? (state.matches || []).find(x => x.id === h.matchId) : null;
+    return m ? m.bet : null;
+  };
+  const rowsHTML = hist.slice(0, 5).map(h => {
+    const bet = betOf(h);
+    const win = h.result === "WIN";
+    return `
+      <div class="pf-row ${h.matchId ? 'clickable' : ''}" ${h.matchId ? `onclick="closeStatsModal(); viewHistoryMatch('${h.matchId}');" title="View this match"` : ''}>
+        <span class="pf-game">FN</span>
+        <span class="pf-mode">${escapeHTML(h.mode || "Match")}</span>
+        <span class="pf-size">${escapeHTML(h.teamSize || "—")}</span>
+        <span class="pf-entry">${bet !== null ? `${coinIcon(13)}${formatCoins(bet)}` : '—'}</span>
+        <span class="pf-result ${win ? 'win' : 'loss'}">${win ? 'Victory' : 'Defeat'}</span>
+      </div>`;
+  }).join("");
+
+  const tile = (label, value, cls) => `<div class="pf-tile"><span>${label}</span><strong class="${cls || ''}">${value}</strong></div>`;
+
+  document.getElementById("statsModalBody").innerHTML = `
+    <div class="pf-hero">
+      <div class="pf-avatar-wrap">
+        <div class="pf-avatar" style="${avatarStyle}">${avatarInner}</div>
+        ${isSelf ? `<button class="pf-avatar-edit" onclick="closeStatsModal(); openAvatarPicker();" title="Change my avatar">${icon('pencil')}</button>` : ''}
       </div>
-    `).join("");
-    if(viewAllBtn) viewAllBtn.style.display = hist.length > 5 ? "inline" : "none";
-  } else {
-    historyWrap.style.display = "none";
-    historyList.innerHTML = "";
-  }
+      <div class="pf-id">
+        <div class="pf-name-row">
+          <strong class="pf-name">${vipNameHTML(name)}</strong>
+          ${isVIP(name) ? `<span class="pf-badge vip">${crownIcon()} VIP</span>` : ''}
+        </div>
+        <div class="pf-badges">
+          ${hasDiscord ? `<span class="pf-icon-badge discord" title="Discord linked">${icon('discord')}</span>` : ''}
+          ${isUsernameAdmin(name) ? `<span class="pf-icon-badge mod" title="Moderator">${icon('shieldCheck')}</span>` : ''}
+          <span class="tier-pill ${tier.key}">${tier.label}</span>
+        </div>
+        <div class="pf-meta">
+          <span>Epic: <b>${escapeHTML(epic || "Not set")}</b>${epic ? ` <button class="epic-copy-btn" onclick="copyEpicToClipboard('${escapeHTML(epic)}')" title="Copy Epic username">${icon('copy')}</button>` : ''}</span>
+          ${joined ? `<span>Member since ${new Date(joined).toLocaleDateString("en-US", { day:"numeric", month:"long", year:"numeric" })}</span>` : ''}
+        </div>
+      </div>
+      <div class="pf-hero-action">
+        ${isSelf
+          ? `<button class="btn small" onclick="closeStatsModal(); setPage('settings');">${icon('settings')} Settings</button>`
+          : `<button class="btn small pf-tip" onclick="closeStatsModal(); tipPlayerFromProfile('${escapeHTML(name)}');">${coinIcon(13)} Tip</button>`}
+      </div>
+    </div>
+
+    <div class="pf-grid">
+      ${tile("Total earned", `${coinIcon(14)}${earned > 0 ? '+' : ''}${formatCoins(earned)}`, earned < 0 ? 'red' : 'green')}
+      ${tile("Total wins", wins, 'green')}
+      ${tile("Total losses", losses, 'red')}
+      ${tile("Highest match earnings", `${coinIcon(14)}${formatCoins(best)}`, 'gold')}
+      ${tile("Matches played", played)}
+      ${tile("Win streak", streak)}
+      ${tile("Best streak", bestStreak)}
+      ${tile("Rank", tier.label)}
+      <div class="pf-tile"><span>Win rate</span><strong class="green">${winrate}%</strong><div class="pf-bar"><div style="width:${winrate}%"></div></div></div>
+    </div>
+
+    <div class="pf-recent">
+      <div class="pf-recent-head">
+        <h3>Recent Matches</h3>
+        ${hist.length > 5 ? `<button class="btn small" onclick="openFullHistoryModal()">View all</button>` : ''}
+      </div>
+      ${hist.length ? `
+        <div class="pf-row pf-row-head"><span>Game</span><span>Mode</span><span>Size</span><span>Entry</span><span>Result</span></div>
+        ${rowsHTML}
+      ` : `<div class="pf-empty">No completed matches yet.</div>`}
+    </div>
+  `;
 
   document.getElementById("statsOverlay").classList.add("open");
 }
+
+/* Bouton "Tip" du profil d'un autre joueur : ouvre le Wallet > Tips avec son pseudo pré-rempli. */
+function tipPlayerFromProfile(username){
+  if(typeof walletTab !== "undefined") walletTab = "tips";
+  setPage("wallet");
+  setTimeout(() => {
+    const el = document.getElementById("tipUsername") || document.querySelector('input[placeholder="Player username"]');
+    if(el){ el.value = username; el.focus(); }
+  }, 50);
+}
+
+document.getElementById("statsOverlay").addEventListener("mousedown", e => { if(e.target.id === "statsOverlay") closeStatsModal(); });
 
 function closeStatsModal(){
   document.getElementById("statsOverlay").classList.remove("open");
@@ -5291,11 +5578,50 @@ function declineTeamInvite(teamId){
   render();
 }
 
-function deleteTeam(teamId){
+/* Quitter une team (même si on a déjà joué des matchs avec). Bloqué
+   seulement pendant un match EN COURS de cette team : sinon le joueur
+   basculerait de côté (voir isOnHostTeam). Si c'est le créateur qui part,
+   la team passe au membre suivant ; s'il est seul, la team est supprimée. */
+async function leaveTeam(teamId){
+  const team = teamsCache.find(t => t.id === teamId);
+  if(!team || !db) return;
+  const members = team.members || [];
+  if(!members.includes(state.username)){ toast("You're not in this team."); return; }
+
+  const ongoing = (state.matches || []).some(m =>
+    m.team && m.team.id === teamId && !m.completed && !m.cancelled &&
+    ((m.players || []).includes(state.username) || (m.hostPlayers || []).includes(state.username))
+  );
+  if(ongoing){ toast("You can't leave this team while one of its matches is still in progress."); return; }
+
+  const others = members.filter(u => u !== state.username);
+  const isOwner = team.owner === state.username;
+
+  if(others.length === 0){
+    if(!(await siteConfirm(`You're the last member of "${team.name}". Leaving will remove the team.`, { title:"Leave team", okLabel:"Leave & remove" }))) return;
+    db.collection("teams").doc(teamId).delete().catch(err => console.warn("Error removing team:", err));
+    toast("You left the team. It has been removed.");
+    backToTeamsList();
+    return;
+  }
+
+  const msg = isOwner
+    ? `Leave "${team.name}"? Ownership will be given to ${others[0]}.`
+    : `Leave "${team.name}"?`;
+  if(!(await siteConfirm(msg, { title:"Leave team", okLabel:"Leave" }))) return;
+
+  team.members = others;
+  if(isOwner) team.owner = others[0];
+  pushTeamToCloud(team);
+  toast("You left the team.");
+  backToTeamsList();
+}
+
+async function deleteTeam(teamId){
   const team = teamsCache.find(t => t.id === teamId);
   if(!team) return;
   if(team.owner !== state.username){ toast("Only the team owner can remove this team."); return; }
-  if(!confirm("Remove this team? This cannot be undone.")) return;
+  if(!(await siteConfirm("Remove this team? This cannot be undone.", { title:"Remove team", okLabel:"Remove" }))) return;
   db.collection("teams").doc(teamId).delete().catch(err => console.warn("Error removing team:", err));
   backToTeamsList();
 }
@@ -5444,6 +5770,58 @@ function setPage(page){
 }
 
 document.querySelectorAll(".nav button").forEach(btn => btn.addEventListener("click", () => setPage(btn.dataset.page)));
+
+/* =========================================================
+   MENU DU COMPTE (clic sur l'avatar en haut à droite)
+========================================================= */
+function renderUserMenu(){
+  const menu = document.getElementById("userMenu");
+  if(!menu) return;
+  const vip = isVIP();
+  const until = vip && state.vipUntil ? new Date(state.vipUntil).toLocaleDateString("en-US", { day:"numeric", month:"short" }) : "";
+  menu.innerHTML = `
+    <button class="user-menu-head" onclick="userMenuGo('shop')">
+      <span class="user-menu-vip ${vip ? 'on' : ''}">${crownIcon()}</span>
+      <span class="user-menu-head-txt">
+        <strong>${vip ? 'VIP active' : 'No VIP'}</strong>
+        <span>${vip ? 'Until ' + until : 'Get VIP in the shop'}</span>
+      </span>
+    </button>
+    <div class="user-menu-sep"></div>
+    <button class="user-menu-item" onclick="closeUserMenu(); showPlayerStats(state.username);">${icon('user')}<span>Profile</span></button>
+    <button class="user-menu-item" onclick="userMenuGo('settings')">${icon('settings')}<span>Settings</span></button>
+    <button class="user-menu-item" onclick="userMenuGo('teams')">${icon('users')}<span>Teams</span></button>
+    <button class="user-menu-item" onclick="userMenuGo('wallet')">${icon('wallet')}<span>Wallet</span></button>
+    <button class="user-menu-item" onclick="closeUserMenu(); statsModalPlayerName = state.username; openFullHistoryModal();">${icon('history')}<span>Match History</span></button>
+    <div class="user-menu-sep"></div>
+    <button class="user-menu-item danger" onclick="closeUserMenu(); logout();">${icon('logout')}<span>Log Out</span></button>
+  `;
+}
+function toggleUserMenu(e){
+  if(e) e.stopPropagation();
+  const menu = document.getElementById("userMenu");
+  const open = !menu.classList.contains("open");
+  if(open) renderUserMenu();
+  menu.classList.toggle("open", open);
+  document.getElementById("userMenuBtn").setAttribute("aria-expanded", open ? "true" : "false");
+  document.getElementById("userMenuWrap").classList.toggle("open", open);
+}
+function closeUserMenu(){
+  const menu = document.getElementById("userMenu");
+  if(!menu) return;
+  menu.classList.remove("open");
+  document.getElementById("userMenuWrap").classList.remove("open");
+  document.getElementById("userMenuBtn").setAttribute("aria-expanded", "false");
+}
+function userMenuGo(page){
+  closeUserMenu();
+  setPage(page);
+}
+document.addEventListener("click", e => {
+  const wrap = document.getElementById("userMenuWrap");
+  if(wrap && !wrap.contains(e.target)) closeUserMenu();
+});
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeUserMenu(); });
 
 /* SIDEBAR COLLAPSE */
 let chatPanelCollapsed = false;
@@ -6395,52 +6773,99 @@ function render(){
   }
 
   else if(currentPage === "roue"){
-    const segAngle = 360 / WHEEL_SEGMENTS.length;
+    const n = WHEEL_SEGMENTS.length;
+    const segAngle = 360 / n;
     const canSpin = canSpinWheelToday();
 
-    // Position calculée directement en trigo (x,y depuis le centre) plutôt
-    // qu'avec l'ancien combo rotate()+translateY() : ce dernier plaçait en
-    // fait chaque étiquette à 180° de son propre secteur (calcul d'angle
-    // inversé), ce qui donnait l'impression que "tout était retourné".
-    // Ici le texte reste toujours parfaitement horizontal, aucune rotation.
-    const labelRadius = 95;
-    const labelsHTML = WHEEL_SEGMENTS.map((seg, i) => {
-      const mid = i * segAngle + segAngle / 2;
-      const rad = (mid - 90) * Math.PI / 180; // -90 : 0° = haut du cercle (comme le pointeur)
-      const x = Math.cos(rad) * labelRadius;
-      const y = Math.sin(rad) * labelRadius;
-      // Les étiquettes sont DANS .wheel-dial, qui tourne (wheelRotation) —
-      // sans contre-rotation, leur texte tournait avec la roue et se
-      // retrouvait à l'envers/en miroir selon l'angle où la roue s'arrête.
-      // On annule cette rotation sur le <span> pour que le texte reste
-      // toujours parfaitement droit, quel que soit l'angle du disque.
-      return `<div class="wheel-seg-label" style="left:calc(50% + ${x.toFixed(2)}px); top:calc(50% + ${y.toFixed(2)}px);"><span style="display:inline-block; transform:rotate(${(-wheelRotation).toFixed(2)}deg);">${seg.label}</span></div>`;
+    // Secteurs dessinés en SVG (net à toutes les tailles). 0° = haut, sens horaire,
+    // exactement comme l'ancien conic-gradient : spinWheel() n'a pas besoin de changer.
+    const pt = (deg, r) => {
+      const a = deg * Math.PI / 180;
+      return [(Math.sin(a) * r).toFixed(3), (-Math.cos(a) * r).toFixed(3)];
+    };
+    const segFill = (seg, i) => seg.type === "coins" ? "url(#wgCoin)" : seg.type === "avatar" ? "url(#wgAvatar)" : (i % 2 ? "url(#wgDarkB)" : "url(#wgDarkA)");
+    const sectors = WHEEL_SEGMENTS.map((seg, i) => {
+      const [x0, y0] = pt(i * segAngle, 100);
+      const [x1, y1] = pt((i + 1) * segAngle, 100);
+      return `<path d="M0 0 L${x0} ${y0} A100 100 0 0 1 ${x1} ${y1} Z" fill="${segFill(seg, i)}"/>`;
+    }).join("");
+    const dividers = WHEEL_SEGMENTS.map((seg, i) => {
+      const [x, y] = pt(i * segAngle, 100);
+      return `<line x1="0" y1="0" x2="${x}" y2="${y}"/>`;
     }).join("");
 
-    const gradientStops = WHEEL_SEGMENTS.map((seg, i) =>
-      `${seg.color} ${i * segAngle}deg ${(i + 1) * segAngle}deg`
-    ).join(", ");
+    const labelRadius = window.innerWidth <= 560 ? 84 : 108;
+    const labelsHTML = WHEEL_SEGMENTS.map((seg, i) => {
+      const mid = i * segAngle + segAngle / 2;
+      const rad = (mid - 90) * Math.PI / 180;
+      const x = Math.cos(rad) * labelRadius;
+      const y = Math.sin(rad) * labelRadius;
+      // Contre-rotation : le texte reste droit quel que soit l'angle d'arrêt.
+      return `<div class="wheel-seg-label" style="left:calc(50% + ${x.toFixed(2)}px); top:calc(50% + ${y.toFixed(2)}px);"><span class="wsl" style="transform:rotate(${(-wheelRotation).toFixed(2)}deg);">${wheelSegLabelHTML(seg)}</span></div>`;
+    }).join("");
+
+    // Petites lumières autour de la roue (décor fixe)
+    const bulbs = Array.from({ length: 24 }, (_, i) => {
+      const a = (i * 15) * Math.PI / 180;
+      return `<span class="wheel-bulb ${i % 2 ? 'b' : ''}" style="left:${(50 + Math.sin(a) * 45.25).toFixed(2)}%; top:${(50 - Math.cos(a) * 45.25).toFixed(2)}%;"></span>`;
+    }).join("");
+
+    // Tableau des gains possibles (probabilités réelles : chaque case a la même chance)
+    const groups = [];
+    WHEEL_SEGMENTS.forEach(seg => {
+      const key = seg.type + ":" + (seg.amount || "");
+      const g = groups.find(x => x.key === key);
+      if(g) g.count++; else groups.push({ key, seg, count:1 });
+    });
+    const rewardsHTML = groups.map(g => `
+      <div class="wheel-reward">
+        <span class="wheel-reward-ico ${g.seg.type}">${wheelSegIcon(g.seg, 18)}</span>
+        <span class="wheel-reward-name">${wheelSegName(g.seg)}</span>
+        <span class="wheel-reward-chance">${Math.round(g.count / n * 1000) / 10}%</span>
+      </div>`).join("");
 
     container.innerHTML = `
       <div class="section-head">
-        <div><h1>The Prime Token Wheel</h1><p>One free spin per day. Coins, Snipes, or a bonus avatar are up for grabs.</p></div>
+        <div><h1>Daily Wheel</h1><p>One free spin every 24 hours. Coins, Snipes or a bonus avatar are up for grabs.</p></div>
       </div>
 
-      <div class="wheel-page">
-        <div class="wheel-outer">
-          <div class="wheel-pointer"></div>
-          <div class="wheel-dial" id="wheelDial" style="background:conic-gradient(from 0deg, ${gradientStops}); transform:rotate(${wheelRotation}deg);">
-            ${labelsHTML}
+      <div class="wheel-layout">
+        <div class="wheel-stage">
+          <div class="wheel-outer">
+            <div class="wheel-rim">${bulbs}</div>
+            <svg class="wheel-pointer-svg" viewBox="0 0 40 48" aria-hidden="true">
+              <path d="M20 46 L4 14 A17 17 0 1 1 36 14 Z" fill="#f2b642"/>
+              <circle cx="20" cy="17" r="6" fill="#0e1013"/>
+            </svg>
+            <div class="wheel-dial" id="wheelDial" style="transform:rotate(${wheelRotation}deg);">
+              <svg class="wheel-svg" viewBox="-100 -100 200 200" aria-hidden="true">
+                <defs>
+                  <radialGradient id="wgCoin" cx="0" cy="0" r="100" gradientUnits="userSpaceOnUse"><stop offset=".25" stop-color="#0f3a28"/><stop offset="1" stop-color="#17563b"/></radialGradient>
+                  <radialGradient id="wgAvatar" cx="0" cy="0" r="100" gradientUnits="userSpaceOnUse"><stop offset=".25" stop-color="#231c3a"/><stop offset="1" stop-color="#3a2d61"/></radialGradient>
+                  <radialGradient id="wgDarkA" cx="0" cy="0" r="100" gradientUnits="userSpaceOnUse"><stop offset=".25" stop-color="#14171c"/><stop offset="1" stop-color="#1f242b"/></radialGradient>
+                  <radialGradient id="wgDarkB" cx="0" cy="0" r="100" gradientUnits="userSpaceOnUse"><stop offset=".25" stop-color="#181b21"/><stop offset="1" stop-color="#262c34"/></radialGradient>
+                </defs>
+                ${sectors}
+                <g class="wheel-dividers">${dividers}</g>
+                <circle r="99" class="wheel-edge"/>
+                <circle r="30" class="wheel-hub-ring"/>
+              </svg>
+              ${labelsHTML}
+            </div>
+            <button class="wheel-center-btn ${canSpin && !wheelSpinning ? 'ready' : ''}" id="wheelSpinBtn" onclick="spinWheel()" ${canSpin && !wheelSpinning ? '' : 'disabled'}>${wheelSpinning ? '···' : (canSpin ? 'SPIN' : icon('check'))}</button>
           </div>
-          <button class="wheel-center-btn" id="wheelSpinBtn" onclick="spinWheel()" ${canSpin && !wheelSpinning ? '' : 'disabled'}>${wheelSpinning ? '···' : (canSpin ? 'SPIN' : '✓ DONE')}</button>
         </div>
-        <div class="wheel-status">
-          ${isAdmin()
-            ? `<strong>Moderator privilege: unlimited spins.</strong><br>Hit SPIN whenever you want.`
-            : canSpin
-              ? `<strong>Your free spin is ready!</strong><br>Hit SPIN to see what you win today.`
-              : `<strong>Come back tomorrow.</strong><br>Next free spin in ${wheelTimeUntilReset()}.`
-          }
+
+        <div class="wheel-side">
+          <div class="wheel-card wheel-status-card ${canSpin ? 'ready' : ''}">
+            <span class="wheel-card-label">${canSpin ? 'Ready' : 'Next spin'}</span>
+            <strong>${isAdmin() ? 'Unlimited spins' : (canSpin ? 'Your free spin is ready' : 'in ' + wheelTimeUntilReset())}</strong>
+            <p>${isAdmin() ? 'Moderator privilege — hit SPIN whenever you want.' : (canSpin ? 'Hit SPIN in the middle of the wheel.' : 'Come back later for your next free spin.')}</p>
+          </div>
+          <div class="wheel-card">
+            <span class="wheel-card-label">Possible rewards</span>
+            <div class="wheel-rewards">${rewardsHTML}</div>
+          </div>
         </div>
       </div>
     `;
@@ -6509,7 +6934,7 @@ function render(){
             </div>
           </div>
         </div>
-        ${sortedAvatarCatalog().filter(a => a.id !== "default").map(a => {
+        ${sortedAvatarCatalog().filter(a => a.id !== "default" && !a.starter).map(a => {
           const owned = state.ownedAvatars.includes(a.id);
           const equipped = state.equippedAvatar === a.id;
           return `
@@ -6855,8 +7280,12 @@ function render(){
               <input type="text" class="input" id="findUserInput" placeholder="Find User" ${members.length >= maxSize ? 'disabled' : ''}>
               <button class="btn green" style="flex:none;" onclick="inviteToTeam('${team.id}')" ${members.length >= maxSize ? 'disabled' : ''}>Invite</button>
             </div>
-            <div style="text-align:center; margin-top:20px;">
-              <button class="btn danger" onclick="deleteTeam('${team.id}')">Remove Team</button>
+          ` : ''}
+
+          ${members.includes(state.username) ? `
+            <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:20px;">
+              <button class="btn danger" onclick="leaveTeam('${team.id}')">${icon('userX')} Leave Team</button>
+              ${isOwner ? `<button class="btn danger" onclick="deleteTeam('${team.id}')">Remove Team</button>` : ''}
             </div>
           ` : ''}
         </div>
@@ -7338,7 +7767,7 @@ function doBuyVIP(){
   // Avatar bonus aléatoire parmi ceux pas encore possédés (comme la roue) —
   // sinon quelques coins de consolation si tout est déjà débloqué.
   let avatarMsg = "";
-  const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !state.ownedAvatars.includes(a.id));
+  const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !a.starter && !state.ownedAvatars.includes(a.id));
   if(unowned.length > 0){
     const picked = unowned[Math.floor(Math.random() * unowned.length)];
     state.ownedAvatars.push(picked.id);
@@ -7868,7 +8297,7 @@ function renderAvatarPicker(tab){
 
   const list = tab === "owned"
     ? AVATAR_CATALOG.filter(a => state.ownedAvatars.includes(a.id))
-    : AVATAR_CATALOG.filter(a => !state.ownedAvatars.includes(a.id));
+    : AVATAR_CATALOG.filter(a => !a.starter && !state.ownedAvatars.includes(a.id));
 
   if(list.length === 0){
     grid.innerHTML = tab === "owned"
@@ -8222,6 +8651,8 @@ async function doSignup(){
       }
     } catch(e){ console.warn("Erreur de vérification d'empreinte au signup :", e); }
 
+    const starterAvatar = pickStarterAvatar();
+    pendingStarterAvatar = starterAvatar;
     const cred = await auth.createUserWithEmailAndPassword(email, password);
     const uid = cred.user.uid;
 
@@ -8230,8 +8661,8 @@ async function doSignup(){
       epic: "",
       stats: { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 },
       coins: 0,
-      ownedAvatars: ["default"],
-      equippedAvatar: "default",
+      ownedAvatars: starterAvatar === "default" ? ["default"] : ["default", starterAvatar],
+      equippedAvatar: starterAvatar,
       customAvatar: null,
       snipes: 0,
       vipUntil: null,
@@ -8373,6 +8804,12 @@ async function loadProfileAndStart(uid){
       state.discordAvatar = null;
       state.epicLocked = false;
       state.epic = "";
+      // Nouveau compte : on repart d'une collection d'avatars vide (pas celle
+      // d'un ancien compte en cache) avec l'avatar de départ tiré au sort.
+      const starter = pendingStarterAvatar || pickStarterAvatar();
+      state.ownedAvatars = starter === "default" ? ["default"] : ["default", starter];
+      state.equippedAvatar = starter;
+      state.customAvatar = null;
     }
   } catch(e){
     console.warn("Impossible de charger le profil :", e);
