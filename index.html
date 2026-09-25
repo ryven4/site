@@ -2332,6 +2332,170 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
 
 .settings-grid .setting-card h3{ display:flex; align-items:center; gap:8px; font-weight:600; }
 
+/* ===== Tournois ===== */
+.tn-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+.tn-card{ border:1px solid var(--line); border-radius:14px; background:var(--panel); overflow:hidden; }
+.tn-card-kicker{ display:flex; align-items:center; gap:7px; padding:10px 16px; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--green);
+  background:linear-gradient(90deg, rgba(31,227,139,.10), transparent); border-bottom:1px solid var(--line); }
+.tn-card-body{ padding:16px; display:flex; flex-direction:column; gap:12px; }
+.tn-card-top{ display:flex; align-items:center; gap:11px; }
+.tn-card-top .game-icon{ width:38px; height:38px; flex:none; display:flex; align-items:center; justify-content:center; border-radius:9px; font-size:12px; }
+.tn-card-title{ flex:1; min-width:0; }
+.tn-card-title strong{ display:block; font-size:15px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tn-card-title span{ display:block; font-size:12px; color:var(--muted); margin-top:2px; }
+.tn-status{ flex:none; display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; border:1px solid var(--line2); color:var(--muted); background:var(--panel2); }
+.tn-status.open{ color:var(--green); border-color:rgba(31,227,139,.35); background:rgba(31,227,139,.1); }
+.tn-status.live{ color:#ff7b86; border-color:rgba(240,82,95,.4); background:rgba(240,82,95,.1); }
+.tn-status.soon{ color:var(--gold); border-color:rgba(242,182,66,.35); background:rgba(242,182,66,.1); }
+.tn-card-meta{ display:flex; justify-content:space-between; gap:10px; }
+.tn-card-meta span{ display:block; font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted2); }
+.tn-card-meta strong{ display:block; font-size:14px; color:#fff; margin-top:2px; }
+.tn-progress{ height:6px; border-radius:6px; background:var(--panel3); overflow:hidden; }
+.tn-progress > div{ height:100%; background:var(--green); border-radius:6px; }
+.tn-card-players{ font-size:12px; color:var(--muted); margin-top:-4px; }
+.tn-card-players b{ color:var(--green); }
+.tn-card-prize, .tn-prize{ border:1px solid var(--line); border-radius:12px; background:var(--panel2); padding:12px 14px; }
+.tn-prize-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.tn-prize-head span{ display:flex; align-items:center; gap:7px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); }
+.tn-prize-head strong{ display:flex; align-items:center; gap:6px; font-size:18px; font-weight:800; color:var(--gold); }
+.tn-prize-row{ display:flex; justify-content:space-between; padding:5px 0; font-size:13px; color:var(--muted); border-top:1px solid var(--line); }
+.tn-prize-row strong{ display:flex; align-items:center; gap:5px; color:#fff; font-weight:600; }
+.tn-card-btn{ width:100%; }
+
+.tn-form{ display:flex; flex-direction:column; gap:14px; max-width:820px; }
+.tn-form-card{ border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:18px; display:flex; flex-direction:column; gap:14px; }
+.tn-form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.tn-form-grid.three{ grid-template-columns:repeat(3,1fr); }
+.tn-form-title{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:#fff; }
+.tn-hint{ font-size:11px; color:var(--muted2); }
+.tn-note{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); padding-top:10px; border-top:1px solid var(--line); }
+.tn-submit{ height:46px; font-size:14px; }
+input[type="datetime-local"].input{ color-scheme:dark; }
+
+.tn-detail-grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:14px; margin-bottom:22px; }
+.tn-info{ border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:16px 18px; }
+.tn-info-row{ display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; }
+.tn-info-row span{ color:var(--muted); }
+.tn-info-row strong{ color:#fff; font-weight:600; text-align:right; }
+.tn-info-row strong.green{ color:var(--green); }
+.tn-actions{ margin-top:14px; display:flex; gap:10px; }
+.tn-actions .btn{ flex:1; height:42px; }
+.tn-owner{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line2); }
+.tn-owner > span{ font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted2); margin-right:auto; }
+.tn-prize{ align-self:start; }
+.tn-ready{ display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:16px; padding:14px 18px; border-radius:12px;
+  border:1px solid rgba(31,227,139,.4); background:rgba(31,227,139,.08); }
+.tn-ready strong{ display:flex; align-items:center; gap:7px; color:var(--green); font-size:14px; }
+.tn-ready span{ display:block; font-size:13px; color:var(--muted); margin-top:3px; }
+.tn-champion{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:16px; padding:16px 20px; border-radius:14px;
+  border:1px solid rgba(242,182,66,.4); background:linear-gradient(90deg, rgba(242,182,66,.12), transparent 70%), var(--panel); }
+.tn-champion-crown{ font-size:34px; display:flex; }
+.tn-champion span{ display:block; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--gold); }
+.tn-champion strong{ font-size:20px; color:#fff; }
+.tn-champion-prize{ margin-left:auto; display:flex; flex-direction:column; gap:3px; text-align:right; }
+.tn-champion-prize span{ font-size:12px; letter-spacing:0; text-transform:none; color:var(--muted); font-weight:500; }
+.tn-champion-prize b{ display:inline-flex; align-items:center; gap:4px; color:var(--gold); margin-left:6px; }
+.tn-players h3, .bk-head h3{ display:flex; align-items:center; gap:8px; font-size:15px; font-weight:600; color:#fff; margin-bottom:10px; }
+.tn-players h3 span{ font-size:12px; color:var(--muted); font-weight:500; }
+.tn-player-list{ display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:8px; }
+.tn-player{ display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:#fff; font-size:13px; font-weight:600; text-align:left; }
+.tn-player:hover{ border-color:rgba(255,255,255,.16); }
+.tn-player .avatar{ width:30px; height:30px; flex:none; }
+
+/* Bracket */
+.bk-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.bk-head h3{ margin:0; }
+.bk-tools{ display:flex; gap:8px; }
+.bk-tools .input{ width:220px; height:38px; }
+.bk-scroll{ overflow:auto; padding:6px 2px 16px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.bk{ display:flex; gap:34px; padding:16px; min-width:max-content; }
+.bk-col{ display:flex; flex-direction:column; width:210px; }
+.bk-col-title{ font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted2); text-align:center; margin-bottom:12px; }
+.bk-col-body{ flex:1; display:flex; flex-direction:column; justify-content:space-around; gap:14px; }
+.bk-match{ position:relative; border:1px solid var(--line2); border-radius:10px; background:var(--panel2); overflow:visible; }
+.bk-match.has-match{ cursor:pointer; }
+.bk-match.has-match:hover{ border-color:rgba(255,255,255,.22); }
+.bk-match.live{ border-color:rgba(240,82,95,.5); }
+.bk-col:not(:last-child) .bk-match::after{ content:""; position:absolute; right:-18px; top:50%; width:17px; height:1px; background:var(--line2); }
+.bk-col:not(:first-child) .bk-match::before{ content:""; position:absolute; left:-18px; top:50%; width:17px; height:1px; background:var(--line2); }
+.bk-player{ display:flex; align-items:center; gap:8px; height:36px; padding:0 10px; font-size:13px; color:#d5d9df; }
+.bk-player + .bk-player{ border-top:1px solid var(--line); }
+.bk-player:first-child{ border-radius:10px 10px 0 0; } .bk-player:last-child{ border-radius:0 0 10px 10px; }
+.bk-player.win{ color:#fff; font-weight:700; background:rgba(31,227,139,.08); box-shadow:inset 3px 0 0 var(--green); }
+.bk-player.lose{ opacity:.5; }
+.bk-player.me .bk-name{ color:var(--green); }
+.bk-player.bk-hit{ background:rgba(242,182,66,.16); }
+.bk-av{ width:22px; height:22px; flex:none; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; background:var(--panel3); color:var(--muted); }
+.bk-av img, .bk-av svg{ width:100%; height:100%; object-fit:cover; }
+.bk-av-empty{ background:transparent; border:1px dashed var(--line2); }
+.bk-name{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bk-tbd{ color:var(--muted2); font-style:italic; font-weight:500; }
+.bk-w{ color:var(--green); display:flex; font-size:14px; }
+.bk-live{ position:absolute; top:-8px; right:8px; padding:1px 7px; border-radius:20px; font-size:9px; font-weight:800; letter-spacing:.08em; color:#fff; background:var(--red); }
+.bk-flash{ animation:bkFlash 1.6s ease; }
+@keyframes bkFlash{ 0%,100%{ box-shadow:0 0 0 0 rgba(31,227,139,0); } 20%,60%{ box-shadow:0 0 0 3px rgba(31,227,139,.8); } }
+.lobby-tournament-tag{ display:inline-flex; align-items:center; gap:6px; margin-bottom:6px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; color:var(--gold); background:rgba(242,182,66,.12); border:1px solid rgba(242,182,66,.35); }
+@media(max-width:900px){ .tn-detail-grid{ grid-template-columns:1fr; } .tn-form-grid, .tn-form-grid.three{ grid-template-columns:1fr; } .bk-tools{ width:100%; } .bk-tools .input{ flex:1; width:auto; } }
+
+/* ===== Rangs ===== */
+.rank-badge{ display:inline-flex; align-items:center; vertical-align:-3px; flex:none; }
+.rank-badge-svg{ display:block; flex:none; }
+.top-rank-badge{ display:inline-flex; margin-left:5px; }
+.rank-pill{ display:inline-flex; align-items:center; gap:5px; padding:2px 9px 2px 4px; border-radius:20px; font-size:11px; font-weight:700; color:var(--rc);
+  background:color-mix(in srgb, var(--rc) 12%, transparent); border:1px solid color-mix(in srgb, var(--rc) 35%, transparent); white-space:nowrap; flex:none; }
+.rk-row-id .rank-pill{ flex:none; }
+.rk-pod-name .rank-badge{ vertical-align:-3px; }
+.slot-epic .rank-badge{ margin-right:1px; }
+.pf-tile-rank:hover{ border-color:rgba(255,255,255,.18); }
+@media(max-width:760px){ .rk-row-id .rank-pill{ display:none; } }
+
+/* Page Rank Progression */
+.rd-hero{ display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:28px; padding:26px 28px; border:1px solid var(--line); border-radius:16px;
+  background:radial-gradient(60% 120% at 0% 50%, color-mix(in srgb, var(--rc) 16%, transparent), transparent 70%), var(--panel); margin-bottom:26px; }
+.rd-hero-badge{ filter:drop-shadow(0 12px 24px rgba(0,0,0,.45)); }
+.rd-kicker{ font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.rd-hero-info h2{ font-size:34px; font-weight:800; letter-spacing:-.02em; color:var(--rc); margin:2px 0 4px; }
+.rd-rp{ font-size:14px; color:var(--muted); }
+.rd-rp strong{ font-size:20px; color:#fff; font-variant-numeric:tabular-nums; }
+.rd-bar{ height:10px; margin-top:14px; border-radius:10px; background:var(--panel3); overflow:hidden; max-width:520px; }
+.rd-bar > div{ height:100%; border-radius:10px; background:var(--rc); }
+.rd-bar-legend{ display:flex; justify-content:space-between; gap:12px; margin-top:8px; font-size:12px; color:var(--muted); max-width:520px; }
+.rd-bar-legend strong{ color:#fff; }
+.rd-hero-stats{ display:flex; flex-direction:column; gap:10px; }
+.rd-hero-stats > div{ padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); min-width:150px; }
+.rd-hero-stats span{ display:block; font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted2); }
+.rd-hero-stats strong{ display:block; font-size:17px; font-weight:700; margin-top:2px; }
+.rd-hero-stats strong.green{ color:var(--green); } .rd-hero-stats strong.red{ color:var(--red); }
+.rd-hero-stats em{ font-style:normal; font-size:11px; color:var(--muted2); }
+.rd-section-title{ font-size:15px; font-weight:600; color:#fff; margin-bottom:10px; }
+.rd-ladder{ display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:22px; }
+.rd-step{ position:relative; display:flex; flex-direction:column; align-items:center; gap:6px; padding:18px 8px 14px; border:1px solid var(--line); border-radius:14px; background:var(--panel); text-align:center; }
+.rd-step .rd-step-badge{ filter:grayscale(1) brightness(.55); opacity:.7; }
+.rd-step.reached .rd-step-badge{ filter:none; opacity:1; }
+.rd-step strong{ font-size:13px; font-weight:700; color:var(--muted); }
+.rd-step.reached strong{ color:#fff; }
+.rd-step span{ font-size:11px; color:var(--muted2); }
+.rd-step.current{ border-color:color-mix(in srgb, var(--rc) 55%, transparent); background:linear-gradient(180deg, color-mix(in srgb, var(--rc) 12%, transparent), transparent 70%), var(--panel); }
+.rd-step em{ position:absolute; top:8px; right:8px; font-style:normal; font-size:10px; font-weight:700; color:#111; background:var(--rc); padding:1px 7px; border-radius:20px; }
+.rd-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.rd-card{ padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.rd-card-title{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:#fff; margin-bottom:12px; }
+.rd-rules{ list-style:none; display:flex; flex-direction:column; gap:9px; font-size:13px; color:#c9ced6; }
+.rd-rules li{ padding-left:14px; position:relative; }
+.rd-rules li::before{ content:""; position:absolute; left:0; top:8px; width:5px; height:5px; border-radius:50%; background:var(--muted2); }
+.rd-rules .green{ color:var(--green); font-weight:700; } .rd-rules .red{ color:var(--red); font-weight:700; }
+.rd-top{ display:flex; flex-direction:column; gap:5px; }
+.rd-top-row{ display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:8px; background:var(--panel2); border:1px solid var(--line); cursor:pointer; font-size:13px; }
+.rd-top-row:hover{ border-color:rgba(255,255,255,.16); }
+.rd-top-row.is-you{ border-color:rgba(192,139,255,.45); }
+.rd-top-place{ width:20px; text-align:center; font-weight:700; color:var(--muted); }
+.rd-top-name{ flex:1; font-weight:600; color:#fff; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rd-top-rp{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.rd-empty{ padding:14px; text-align:center; font-size:13px; color:var(--muted); }
+@media(max-width:1200px){ .rd-ladder{ grid-template-columns:repeat(3,1fr); } .rd-hero{ grid-template-columns:auto 1fr; } .rd-hero-stats{ grid-column:1/-1; flex-direction:row; } }
+@media(max-width:760px){ .rd-hero{ grid-template-columns:1fr; text-align:center; justify-items:center; } .rd-bar, .rd-bar-legend{ margin-left:auto; margin-right:auto; }
+  .rd-grid{ grid-template-columns:1fr; } .rd-ladder{ grid-template-columns:repeat(2,1fr); } }
+
 /* ===== Roue v2 ===== */
 .wheel-layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:center; }
 .wheel-stage{ display:flex; justify-content:center; padding:10px 0 20px; }
@@ -2716,6 +2880,7 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
     <button data-page="matches" title="Matches"><span class="nav-icon"><i data-ic="swords"></i></span> <span class="nav-text">Matches</span></button>
     <button data-page="roue" title="Wheel"><span class="nav-icon"><i data-ic="wheel"></i></span> <span class="nav-text">Wheel</span></button>
     <button data-page="ranking" title="Ranking"><span class="nav-icon"><i data-ic="chart"></i></span> <span class="nav-text">Ranking</span></button>
+    <button data-page="ranked" title="Rank Progression"><span class="nav-icon"><i data-ic="medal"></i></span> <span class="nav-text">Rank Progression</span></button>
     <button data-page="teams" title="Teams"><span class="nav-icon"><i data-ic="users"></i></span> <span class="nav-text">Teams</span></button>
     <button data-page="tournaments" title="Tournaments"><span class="nav-icon"><i data-ic="trophy"></i></span> <span class="nav-text">Tournaments</span></button>
     <button data-page="shop" title="Shop"><span class="nav-icon"><i data-ic="bag"></i></span> <span class="nav-text">Shop</span></button>
@@ -2766,7 +2931,7 @@ h3 .ic{ margin-right:6px; vertical-align:-.16em; }
         <div class="profile-chip-avatar js-user-avatar" id="topAvatar">P</div>
         <div class="profile-chip-info">
           <div style="display:flex; align-items:center;">
-            <i data-ic="crown" id="topVipBadge" class="ic-crown" title="VIP" style="display:none; margin-right:5px;"></i><strong id="topUsername">Player</strong>
+            <i data-ic="crown" id="topVipBadge" class="ic-crown" title="VIP" style="display:none; margin-right:5px;"></i><strong id="topUsername">Player</strong><span id="topRankBadge" class="top-rank-badge"></span>
           </div>
           <span id="topRecord"><b>0V</b> · <i>0D</i> · 0%</span>
         </div>
@@ -3310,6 +3475,7 @@ const ICONS = {
   sparkles:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
   info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
   chevronRight:'<path d="m9 18 6-6-6-6"/>',
+  medal:'<path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><path d="M11 12 5.12 2.2"/><path d="m13 12 5.88-9.8"/><path d="M8 7h8"/><circle cx="12" cy="17" r="5"/><path d="M12 18v-2h-.5"/>',
   chevronDown:'<path d="m6 9 6 6 6-6"/>',
   logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
   history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
@@ -3477,6 +3643,7 @@ function playTingSound(){
 // changements pertinents (nouveau joueur / victoire déclarée) d'un cycle
 // Firestore à l'autre, sans déclencher de faux "ting" au premier chargement.
 let matchNotifySnapshots = {};
+let matchNotifyPrimed = false;
 function checkMatchNotifications(matches){
   matches.forEach(m => {
     if(!m || !m.id) return;
@@ -3487,6 +3654,10 @@ function checkMatchNotifications(matches){
     const hasClaim = !!(m.victoryClaim && m.victoryClaim.by);
 
     const prev = matchNotifySnapshots[m.id];
+    if(!prev && matchNotifyPrimed && m.tournamentId && amParticipant && !m.completed){
+      playTingSound();
+      toast(`Your tournament match is ready: ${m.tournamentRoundName || "next round"}!`);
+    }
     if(prev){
       if(amHost && guestCount > prev.guestCount){
         playTingSound();
@@ -3499,6 +3670,7 @@ function checkMatchNotifications(matches){
     }
     matchNotifySnapshots[m.id] = { guestCount, hasClaim };
   });
+  matchNotifyPrimed = true;
 }
 
 function initCloudSync(){
@@ -3514,6 +3686,7 @@ function initCloudSync(){
     });
     checkMatchNotifications(remoteMatches);
     state.matches = remoteMatches;
+    if(typeof tournamentTick === "function") setTimeout(tournamentTick, 300);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     syncingFromRemote = false;
 
@@ -4423,11 +4596,13 @@ function applyMatchResultForMe(match, type){
     // suivi global Total Earned / Highest Match Earnings, façon BetterPlayerWin.
     const profit = roundToHalf(reward - info.stake);
     state.stats.wins += 1;
+    state.rp = (state.rp || 0) + RP_PER_WIN;
     state.stats.streak = (state.stats.streak || 0) + 1;
     if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
     state.stats.totalEarned = roundToHalf((state.stats.totalEarned || 0) + profit);
     if(profit > (state.stats.highestMatchEarning || 0)) state.stats.highestMatchEarning = profit;
     state.coins = roundToHalf((state.coins || 0) + reward);
+    playTingSound();
     toast(`Victory recorded! +1 Win · +${formatCoins(reward)} coins`);
   } else {
     // Rien à débiter ici : la mise a déjà disparu au moment du READY UP.
@@ -4551,6 +4726,7 @@ function declareResult(matchId, type){
   // statut VIP du DÉCLARANT (peu importe si l'adversaire est VIP ou non).
   const claimTimerMs = isVIP() ? VIP_VICTORY_TIMER_MS : VICTORY_TIMER_MS;
   match.victoryClaim = { by: state.username, at: Date.now(), timerMs: claimTimerMs };
+  playTingSound(); // petit son de confirmation quand on déclare sa victoire
   toast(`Victory declared! Your opponent has ${claimTimerMs === VIP_VICTORY_TIMER_MS ? '5' : '15'} minutes to respond, otherwise it's confirmed automatically.`);
   pushMatchToCloud(match);
   render();
@@ -4793,6 +4969,7 @@ if(state.stats.totalEarned === undefined) state.stats.totalEarned = 0;
 if(state.stats.highestMatchEarning === undefined) state.stats.highestMatchEarning = 0;
 if(state.coins === undefined) state.coins = 0;
 if(!state.ownedAvatars) state.ownedAvatars = ["default"];
+if(state.rp === undefined) state.rp = 0;
 if(!state.equippedAvatar) state.equippedAvatar = "default";
 if(state.customAvatar === undefined) state.customAvatar = null;
 if(state.snipes === undefined) state.snipes = 0;
@@ -4840,6 +5017,7 @@ function save(){
       ecoResetVersion: ECO_RESET_VERSION,
       lastWheelSpin: state.lastWheelSpin || null,
       vipUntil: state.vipUntil || null,
+      rp: state.rp || 0,
       discordId: state.discordId || null,
       discordUsername: state.discordUsername || null,
       discordAvatar: state.discordAvatar || null,
@@ -5369,7 +5547,7 @@ function openStatsModal(name, epic, stats, opts){
         <div class="pf-badges">
           ${hasDiscord ? `<span class="pf-icon-badge discord" title="Discord linked">${icon('discord')}</span>` : ''}
           ${isUsernameAdmin(name) ? `<span class="pf-icon-badge mod" title="Moderator">${icon('shieldCheck')}</span>` : ''}
-          <span class="tier-pill ${tier.key}">${tier.label}</span>
+          ${rankPillHTML(name)}
         </div>
         <div class="pf-meta">
           <span>Epic: <b>${escapeHTML(epic || "Not set")}</b>${epic ? ` <button class="epic-copy-btn" onclick="copyEpicToClipboard('${escapeHTML(epic)}')" title="Copy Epic username">${icon('copy')}</button>` : ''}</span>
@@ -5391,7 +5569,7 @@ function openStatsModal(name, epic, stats, opts){
       ${tile("Matches played", played)}
       ${tile("Win streak", streak)}
       ${tile("Best streak", bestStreak)}
-      ${tile("Rank", tier.label)}
+      ${(() => { const rk = rankOf(name); return `<div class="pf-tile pf-tile-rank" onclick="closeStatsModal(); setPage('ranked');" style="cursor:pointer;"><span>Rank</span><strong style="color:${rk.color};">${rankBadgeSVG(rk.key, 22)}${rk.label === 'Supreme Champion' ? 'Supreme' : rk.label}</strong></div>`; })()}
       <div class="pf-tile"><span>Win rate</span><strong class="green">${winrate}%</strong><div class="pf-bar"><div style="width:${winrate}%"></div></div></div>
     </div>
 
@@ -5657,6 +5835,85 @@ function userStatsForPeriod(period){
   return statsForPeriod(period, state.stats, state.history);
 }
 
+/* =========================================================
+   SYSTÈME DE RANG — Bronze → Silver → Gold → Diamond → Champion
+   → Supreme Champion. Chaque victoire rapporte des points de rang (RP),
+   une défaite n'en fait JAMAIS perdre. Les RP sont stockés sur le compte
+   (champ "rp") : tout le monde démarre à 0, donc en Bronze.
+========================================================= */
+const RP_PER_WIN = 10;
+const RANKS = [
+  { key:"bronze",   label:"Bronze",           min:0,    color:"#d8894a", dark:"#6b3a17" },
+  { key:"silver",   label:"Silver",           min:100,  color:"#c3cad3", dark:"#5b636e" },
+  { key:"gold",     label:"Gold",             min:300,  color:"#f2b642", dark:"#8a5a0c" },
+  { key:"diamond",  label:"Diamond",          min:800,  color:"#5fd4ff", dark:"#1a5f86" },
+  { key:"champion", label:"Champion",         min:2000, color:"#ff5a6e", dark:"#7d1426" },
+  { key:"supreme",  label:"Supreme Champion", min:5000, color:"#c08bff", dark:"#3f1d77" }
+];
+const SUPREME_RANK = RANKS[RANKS.length - 1];
+
+function rankPointsOf(username){
+  if(!username || username === state.username) return state.rp || 0;
+  const p = allPlayersCache.find(pl => pl.username === username);
+  return (p && p.rp) || 0;
+}
+
+/* Rang complet d'un joueur : { key, label, color, rp, base, next, progress } */
+function rankOf(username){
+  const rp = rankPointsOf(username);
+  let base = RANKS[0];
+  RANKS.forEach(r => { if(rp >= r.min) base = r; });
+  const next = RANKS[RANKS.indexOf(base) + 1] || null;
+  const progress = next ? Math.min(1, (rp - base.min) / (next.min - base.min)) : 1;
+  return { ...base, rp, base, next, progress };
+}
+
+let rankSvgSeq = 0;
+function rankBadgeSVG(key, size){
+  const r = RANKS.find(x => x.key === key) || RANKS[0];
+  const id = "rk" + (++rankSvgSeq);
+  const s = size || 22;
+  const shield = "M32 3 L56 11 V29 C56 44 46 54 32 61 C18 54 8 44 8 29 V11 Z";
+  const inner  = "M32 9 L50 15 V29 C50 40 43 48 32 54 C21 48 14 40 14 29 V15 Z";
+  const chev = (n, y0) => Array.from({ length:n }, (_, i) =>
+    `<path d="M21 ${y0 + i * 8} L32 ${y0 + 7 + i * 8} L43 ${y0 + i * 8}" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`).join("");
+  const defs = `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${r.color}"/><stop offset="1" stop-color="${r.dark}"/></linearGradient></defs>`;
+  let body = "";
+  if(key === "diamond"){
+    body = `<path d="M32 4 L58 26 L32 60 L6 26 Z" fill="url(#${id})"/>
+      <path d="M32 4 L44 26 L32 60 L20 26 Z" fill="#fff" fill-opacity=".22"/>
+      <path d="M6 26 H58" stroke="#fff" stroke-opacity=".55" stroke-width="2"/>
+      <path d="M20 26 L32 4 L44 26" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1.6"/>`;
+  } else if(key === "champion" || key === "supreme"){
+    const wings = key === "supreme"
+      ? `<path d="M9 22 C1 26 0 38 6 46 C8 38 11 33 15 31 Z" fill="${r.color}" fill-opacity=".85"/><path d="M55 22 C63 26 64 38 58 46 C56 38 53 33 49 31 Z" fill="${r.color}" fill-opacity=".85"/>`
+      : "";
+    body = `${wings}<path d="${shield}" fill="url(#${id})"/>
+      <path d="${inner}" fill="#000" fill-opacity=".18"/>
+      <path d="M20 38 L22 24 L28 30 L32 21 L36 30 L42 24 L44 38 Z" fill="#f7d774"/>
+      <rect x="20" y="40" width="24" height="4" rx="1.5" fill="#f7d774"/>
+      ${key === "supreme" ? `<circle cx="32" cy="14" r="3" fill="#fff"/>` : ""}`;
+  } else {
+    const n = key === "bronze" ? 1 : key === "silver" ? 2 : 3;
+    body = `<path d="${shield}" fill="url(#${id})"/>
+      <path d="${inner}" fill="#000" fill-opacity=".16"/>
+      ${key === "gold" ? `<path d="M32 13 l2.4 4.9 5.4.8 -3.9 3.8 .9 5.4 -4.8-2.6 -4.8 2.6 .9-5.4 -3.9-3.8 5.4-.8z" fill="#fff" fill-opacity=".92"/>` : ""}
+      ${key === "gold" ? chev(2, 32) : chev(n, 24)}`;
+  }
+  return `<svg class="rank-badge-svg" width="${s}" height="${s}" viewBox="0 0 64 64" aria-hidden="true">${defs}${body}</svg>`;
+}
+
+/* Petit badge à côté d'un pseudo (avec info-bulle). */
+function rankBadgeHTML(username, size){
+  const r = rankOf(username);
+  return `<span class="rank-badge rank-${r.key}" title="${r.label} · ${r.rp} RP">${rankBadgeSVG(r.key, size || 18)}</span>`;
+}
+/* Pastille "badge + nom du rang". */
+function rankPillHTML(username){
+  const r = rankOf(username);
+  return `<span class="rank-pill rank-${r.key}" style="--rc:${r.color};">${rankBadgeSVG(r.key, 16)}${r.label}</span>`;
+}
+
 function tierForWins(wins){
   if(wins >= 250) return { key:"legend", label:"Legend" };
   if(wins >= 120) return { key:"elite", label:"Elite" };
@@ -5758,7 +6015,7 @@ function copyEpicToClipboard(epicName){
 }
 
 function pageTitle(page){
-  const titles = { home:"Home", matches:"Matches", lobby:"Lobby", roue:"Wheel", profile:"Profile", ranking:"Ranking", teams:"Teams", tournaments:"Tournaments", shop:"Shop", wallet:"Wallet", settings:"Settings", moderation:"Moderation" };
+  const titles = { home:"Home", matches:"Matches", lobby:"Lobby", roue:"Wheel", profile:"Profile", ranking:"Ranking", ranked:"Rank Progression", teams:"Teams", tournaments:"Tournaments", shop:"Shop", wallet:"Wallet", settings:"Settings", moderation:"Moderation" };
   return titles[page] || "Accueil";
 }
 
@@ -6234,6 +6491,8 @@ function renderHeaderUI(){
   const topAvatar = document.getElementById("topAvatar");
   topAvatar.innerHTML = avatarInnerHTML(state.equippedAvatar);
   topAvatar.setAttribute("style", avatarStyleAttr(state.equippedAvatar));
+  const topRankEl = document.getElementById("topRankBadge");
+  if(topRankEl) topRankEl.innerHTML = rankBadgeHTML(state.username, 16);
   const topUsernameEl = document.getElementById("topUsername");
   topUsernameEl.textContent = state.username;
   topUsernameEl.style.color = isVIP() ? "var(--green)" : "";
@@ -6364,7 +6623,7 @@ function render(){
     // formellement rejoint (et donc pas encore payé sa mise).
     const isMine = m => (m.host === state.username || (m.players || []).includes(state.username) || isOnHostTeam(m, state.username));
 
-    const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !isMine(m));
+    const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !m.tournamentId && !isMine(m));
     // "My Matches" doit garder mes matchs même une fois verrouillés (READY UP fait) —
     // avant, un match verrouillé disparaissait de cet onglet et n'était visible que
     // dans "In Progress", qui mélange ça avec les matchs des autres joueurs.
@@ -6572,7 +6831,7 @@ function render(){
             </div>
             <div class="slot-epic">
               ${revealed
-                ? `<span>Epic: ${escapeHTML(info.epic || "Not set")}</span>${info.epic ? `<button class="epic-copy-btn" onclick="event.stopPropagation(); copyEpicToClipboard('${escapeHTML(info.epic)}')" title="Copy Epic username">${icon('copy')}</button>` : ''}`
+                ? `${rankBadgeHTML(username, 16)}<span>Epic: ${escapeHTML(info.epic || "Not set")}</span>${info.epic ? `<button class="epic-copy-btn" onclick="event.stopPropagation(); copyEpicToClipboard('${escapeHTML(info.epic)}')" title="Copy Epic username">${icon('copy')}</button>` : ''}`
                 : "Hidden until Ready Up"}
             </div>
             <div class="player-row-status">
@@ -6595,7 +6854,7 @@ function render(){
 
           <div class="lobby-banner">
             <div class="lobby-banner-info">
-              <span class="lobby-banner-date">Created on ${createdLabel}</span>
+              ${lobby.tournamentId ? `<span class="lobby-tournament-tag" onclick="currentPage='tournaments'; openTournament('${lobby.tournamentId}'); setPage('tournaments');" style="cursor:pointer;">${icon('trophy')} ${escapeHTML(lobby.tournamentName || 'Tournament')} · ${escapeHTML(lobby.tournamentRoundName || '')}</span>` : `<span class="lobby-banner-date">Created on ${createdLabel}</span>`}
               <h2>${escapeHTML(lobby.mode)} — ${escapeHTML(lobby.teamSize)}</h2>
             </div>
             <div class="lobby-banner-code">
@@ -6615,6 +6874,12 @@ function render(){
             ${lobby.coverBet ? `<div class="lobby-tag"><strong style="color:var(--gold); display:flex; align-items:center; gap:5px;">${coinIcon(11)} Host</strong><span>Covers Bet</span></div>` : ''}
           </div>
 
+          ${lobby.tournamentId ? `
+          <div class="match-economy" style="margin-bottom:16px;">
+            <div class="eco-block in"><span>Entry</span><strong>Free</strong></div>
+            <div class="eco-arrow">→</div>
+            <div class="eco-block out"><span>Winner</span><strong>Next round</strong></div>
+          </div>` : `
           <div class="match-economy" style="margin-bottom:16px;">
             <div class="eco-block in">
               <span>Your Bet</span>
@@ -6636,7 +6901,7 @@ function render(){
             ${(lobby.escrowedBy || []).includes(state.username)
               ? "Your bet has already been deducted from your coins for this match."
               : "Your bet will be deducted from your coins right away."}
-          </div>
+          </div>`}
 
           <div class="lobby-stepper">
             ${steps.map((label, i) => `
@@ -6684,6 +6949,9 @@ function render(){
               ` : (lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
                 <span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">MATCH UNDER REVIEW</span>
                 <p style="font-size:9px; color:var(--muted2); text-align:center; max-width:230px; line-height:1.6; margin:0;">This match is frozen while a moderator reviews the cheater report. Make sure a Discord ticket is open with your proof.</p>
+              ` : (lobby.tournamentId && !lobby.completed) ? `
+                <button class="btn danger" onclick="forfeitTournamentMatch('${lobby.id}')">Forfeit</button>
+                <span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">TOURNAMENT MATCH</span>
               ` : !lobby.locked ? `
                 <button class="btn danger" onclick="leaveLobby()">Leave Lobby</button>
               ` : (!lobby.completed && !lobby.victoryClaim && !lobby.disputed) ? `
@@ -6866,6 +7134,82 @@ function render(){
             <span class="wheel-card-label">Possible rewards</span>
             <div class="wheel-rewards">${rewardsHTML}</div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  else if(currentPage === "ranked"){
+    const me = rankOf(state.username);
+    const nextTxt = me.next
+      ? `<strong>${me.next.min - me.rp} RP</strong> to reach ${me.next.label} · ${Math.ceil((me.next.min - me.rp) / RP_PER_WIN)} win${Math.ceil((me.next.min - me.rp) / RP_PER_WIN) > 1 ? 's' : ''}`
+      : `Max rank reached — you're a legend.`;
+    const progPct = Math.round(me.progress * 100);
+
+    const ladder = RANKS.map(r => {
+      const reached = me.rp >= r.min;
+      const current = r.key === me.key;
+      return `
+        <div class="rd-step ${reached ? 'reached' : ''} ${current ? 'current' : ''}" style="--rc:${r.color};">
+          <div class="rd-step-badge">${rankBadgeSVG(r.key, 54)}</div>
+          <strong>${r.label}</strong>
+          <span>${r.min === 0 ? 'Starting rank' : r.min + ' RP'}</span>
+          ${current ? `<em>You</em>` : ''}
+        </div>`;
+    }).join("");
+
+    // Meilleurs joueurs par RP
+    const everyone = allPlayersCache.filter(p => p.username).map(p => ({ name:p.username, rp: p.username === state.username ? (state.rp || 0) : (p.rp || 0) }));
+    if(state.username && !everyone.some(p => p.name === state.username)) everyone.push({ name:state.username, rp:state.rp || 0 });
+    const top = everyone.filter(p => p.rp > 0).sort((a, b) => b.rp - a.rp).slice(0, 10);
+    const topHTML = top.length ? top.map((p, i) => `
+      <div class="rd-top-row ${p.name === state.username ? 'is-you' : ''}" onclick="showPlayerStats('${escapeHTML(p.name)}')">
+        <span class="rd-top-place">${i + 1}</span>
+        ${rankBadgeHTML(p.name, 20)}
+        <span class="rd-top-name">${vipNameHTML(p.name)}</span>
+        <span class="rd-top-rp">${p.rp} RP</span>
+      </div>`).join("")
+      : `<div class="rd-empty">Nobody has earned RP yet — win a match to be the first on the board.</div>`;
+
+    container.innerHTML = `
+      <div class="section-head">
+        <div><h1>Rank Progression</h1><p>Every win earns Rank Points (RP). Climb from Bronze all the way to Supreme Champion.</p></div>
+      </div>
+
+      <div class="rd-hero" style="--rc:${me.color};">
+        <div class="rd-hero-badge">${rankBadgeSVG(me.key, 132)}</div>
+        <div class="rd-hero-info">
+          <span class="rd-kicker">Current rank</span>
+          <h2>${me.label}</h2>
+          <div class="rd-rp"><strong>${me.rp}</strong> RP</div>
+          <div class="rd-bar"><div style="width:${progPct}%;"></div></div>
+          <div class="rd-bar-legend">
+            <span>${me.label}</span>
+            <span>${nextTxt}</span>
+          </div>
+        </div>
+        <div class="rd-hero-stats">
+          <div><span>Per win</span><strong class="green">+${RP_PER_WIN} RP</strong><em>Losses never cost RP</em></div>
+          <div><span>Next rank</span><strong style="color:${me.next ? me.next.color : me.color};">${me.next ? me.next.label : 'Max'}</strong><em>${me.next ? me.next.min + ' RP' : '—'}</em></div>
+        </div>
+      </div>
+
+      <div class="rd-section-title">Ranks</div>
+      <div class="rd-ladder">${ladder}</div>
+
+      <div class="rd-grid">
+        <div class="rd-card">
+          <div class="rd-card-title">How it works</div>
+          <ul class="rd-rules">
+            <li><span class="green">+${RP_PER_WIN} RP</span> for every match you win</li>
+            <li>Losing a match <b>never</b> removes RP — your rank can only go up</li>
+            <li>Your rank updates instantly after each win</li>
+            <li>Reach <b style="color:${SUPREME_RANK.color};">${SUPREME_RANK.min} RP</b> to become <b style="color:${SUPREME_RANK.color};">Supreme Champion</b></li>
+          </ul>
+        </div>
+        <div class="rd-card">
+          <div class="rd-card-title">Top ranked players</div>
+          <div class="rd-top">${topHTML}</div>
         </div>
       </div>
     `;
@@ -7115,7 +7459,7 @@ function render(){
             ${avatarHTML(p, 'rk-pod-avatar')}
             <span class="rk-pod-rank">${place}</span>
           </div>
-          <div class="rk-pod-name">${vipNameHTML(p.name)}${p.isYou ? ' <span class="rk-you">You</span>' : ''}</div>
+          <div class="rk-pod-name">${rankBadgeHTML(p.name, 18)} ${vipNameHTML(p.name)}${p.isYou ? ' <span class="rk-you">You</span>' : ''}</div>
           <div class="rk-pod-meta">${wrOf(p)}% WR · ${p.played} played</div>
           <div class="rk-pillar">
             <div class="rk-pillar-card">
@@ -7136,7 +7480,7 @@ function render(){
             ${avatarHTML(p, 'rk-row-avatar')}
             <div class="rk-row-id">
               <strong>${vipNameHTML(p.name)}${p.isYou ? ' <span class="rk-you">You</span>' : ''}</strong>
-              <span class="tier-pill ${tier.key}">${tier.label}</span>
+              ${rankPillHTML(p.name)}
             </div>
           </div>
           <div class="rk-stat"><span>Wins</span><strong>${p.wins}</strong></div>
@@ -7648,9 +7992,639 @@ function render(){
     }
   }
 
+  else if(currentPage === "tournaments"){
+    const owner = isSuperAdmin();
+
+    const prizeRows = t => {
+      const p = t.prizes || {};
+      const rows = [];
+      if(p.first) rows.push(["1st", p.first]);
+      if(p.second) rows.push(["2nd", p.second]);
+      if(p.semis) rows.push(["3rd – 4th", p.semis + " each"]);
+      return rows;
+    };
+
+    // ---------- Création (propriétaire uniquement) ----------
+    if(tournamentsView === "create" && owner){
+      const opts = id => { const el = document.getElementById(id); return el ? el.innerHTML : ""; };
+      const defStart = toLocalInputValue(Date.now() + 30 * 60 * 1000);
+      container.innerHTML = `
+        <div class="section-head">
+          <div><h1>Create a Tournament</h1><p>Official tournament — only you can see this page.</p></div>
+          <button class="btn" onclick="backToTournaments()">${icon('chevronLeft')} Back</button>
+        </div>
+        <div class="tn-form">
+          <div class="tn-form-card">
+            <div class="form-group full"><label>Tournament name *</label><input class="input" id="tnName" placeholder="e.g. Zone Wars 1v1 — Friday Cup" maxlength="60"></div>
+            <div class="tn-form-grid">
+              <div class="form-group"><label>Registration opens (optional)</label><input class="input" type="datetime-local" id="tnRegOpens"><span class="tn-hint">Leave empty to open registration right away.</span></div>
+              <div class="form-group"><label>Starts at (your local time) *</label><input class="input" type="datetime-local" id="tnStart" value="${defStart}"><span class="tn-hint">The bracket is drawn automatically at this time.</span></div>
+            </div>
+            <div class="tn-note">${icon('info')} Normal tournament — open to every player with a linked Discord and Epic account. Entry is free.</div>
+          </div>
+
+          <div class="tn-form-card">
+            <div class="tn-form-grid">
+              <div class="form-group"><label>Game</label><select class="select" disabled><option>Fortnite (FN)</option></select></div>
+              <div class="form-group"><label>Tournament slots *</label>
+                <select class="select" id="tnSlots">${[8,16,32,64,128,256].map(n => `<option value="${n}" ${n === 16 ? 'selected' : ''}>${n}</option>`).join("")}</select></div>
+              <div class="form-group"><label>Game mode *</label><select class="select" id="tnMode">${opts("createMode")}</select></div>
+              <div class="form-group"><label>Team size</label><select class="select" disabled><option>1v1</option></select></div>
+              <div class="form-group"><label>Region *</label><select class="select" id="tnRegion">${opts("createRegion")}</select></div>
+              <div class="form-group"><label>Platform *</label><select class="select" id="tnPlatform">${opts("createPlatform")}</select></div>
+              <div class="form-group"><label>Loot type (optional)</label><select class="select" id="tnWeapon">${opts("createWeapon")}</select></div>
+              <div class="form-group"><label>First to *</label><select class="select" id="tnFirstTo">${[1,2,3,4,5,7].map(n => `<option value="${n}">${n}</option>`).join("")}</select></div>
+              <div class="form-group"><label>Simple edit</label><select class="select" id="tnSimpleEdit"><option value="on">Allowed</option><option value="off">Disabled</option></select></div>
+            </div>
+          </div>
+
+          <div class="tn-form-card">
+            <div class="tn-form-title">${icon('trophy')} Prize pool (coins, paid automatically)</div>
+            <div class="tn-form-grid three">
+              <div class="form-group"><label>1st place</label><input class="input" type="number" min="0" step="0.5" id="tnPrize1" value="10"></div>
+              <div class="form-group"><label>2nd place</label><input class="input" type="number" min="0" step="0.5" id="tnPrize2" value="5"></div>
+              <div class="form-group"><label>3rd – 4th (each)</label><input class="input" type="number" min="0" step="0.5" id="tnPrize3" value="0"></div>
+            </div>
+          </div>
+
+          <button class="btn green tn-submit" onclick="createTournamentSubmit()">${icon('trophy')} Create Tournament</button>
+        </div>
+      `;
+      return;
+    }
+
+    // ---------- Détail d'un tournoi ----------
+    if(tournamentsView === "detail"){
+      const t = tournamentsCache.find(x => x.id === activeTournamentId);
+      if(!t){
+        container.innerHTML = `<div class="empty"><strong>Tournament not found</strong><span>It may have been deleted.</span><button class="btn" style="margin-top:10px;" onclick="backToTournaments()">Back to tournaments</button></div>`;
+        return;
+      }
+      const st = tournamentStatus(t);
+      const players = t.players || [];
+      const registered = players.includes(state.username);
+      const regOpen = st.key === "open";
+      const full = players.length >= t.slots;
+      const pending = t.status === "running" ? myPendingTournamentMatch(t) : null;
+
+      let action = "";
+      if(t.status === "upcoming"){
+        if(registered) action = `<button class="btn danger" onclick="unregisterTournament('${t.id}')">Leave tournament</button>`;
+        else if(!regOpen) action = `<button class="btn" disabled>Registration opens ${formatTournamentDate(t.regOpensAt)}</button>`;
+        else if(full) action = `<button class="btn" disabled>Tournament full</button>`;
+        else action = `<button class="btn green" onclick="registerTournament('${t.id}')">${icon('plus')} Register — Free</button>`;
+      }
+
+      // Tableau
+      let bracketHTML = "";
+      if((t.bracket || []).length){
+        const rounds = tournamentRoundCount(t);
+        const cols = [];
+        for(let r = 0; r < rounds; r++){
+          const entries = t.bracket.filter(e => e.r === r).sort((x, y) => x.i - y.i);
+          cols.push(`
+            <div class="bk-col" style="--r:${r};">
+              <div class="bk-col-title">${tournamentRoundName(t, r)}</div>
+              <div class="bk-col-body">
+                ${entries.map(e => {
+                  const m = e.matchId ? (state.matches || []).find(x => x.id === e.matchId) : null;
+                  const live = m && !m.completed && m.locked;
+                  const row = name => {
+                    const isW = e.winner && e.winner === name;
+                    const isL = e.winner && name && e.winner !== name;
+                    return `<div class="bk-player ${isW ? 'win' : ''} ${isL ? 'lose' : ''} ${name === state.username ? 'me' : ''}" data-name="${escapeHTML(name || '')}">
+                      ${name ? `<span class="bk-av" style="${avatarStyleAttr((allPlayersCache.find(p => p.username === name) || {}).equippedAvatar || (name === state.username ? state.equippedAvatar : 'default'))}">${avatarInnerHTML((allPlayersCache.find(p => p.username === name) || {}).equippedAvatar || (name === state.username ? state.equippedAvatar : 'default'), name)}</span><span class="bk-name">${escapeHTML(name)}</span>` : `<span class="bk-av bk-av-empty"></span><span class="bk-name bk-tbd">${e.r === 0 ? 'BYE' : 'TBD'}</span>`}
+                      ${isW ? `<span class="bk-w">${icon('check')}</span>` : ''}
+                    </div>`;
+                  };
+                  return `<div class="bk-match ${e.matchId ? 'has-match' : ''} ${live ? 'live' : ''}" data-players="${escapeHTML((e.a || '') + '|' + (e.b || ''))}" ${e.matchId ? `onclick="enterMatchLobby('${e.matchId}')" title="Open this match"` : ''}>
+                    ${row(e.a)}${row(e.b)}
+                    ${live ? '<span class="bk-live">LIVE</span>' : ''}
+                  </div>`;
+                }).join("")}
+              </div>
+            </div>`);
+        }
+        bracketHTML = `
+          <div class="bk-head">
+            <h3>${icon('swords')} Bracket</h3>
+            <div class="bk-tools">
+              <input class="input" id="bkSearch" placeholder="Search a player…" onkeydown="if(event.key==='Enter') searchBracket()">
+              <button class="btn" onclick="searchBracket()">${icon('search')} Search</button>
+              ${players.includes(state.username) ? `<button class="btn" onclick="findMeInBracket()">${icon('crosshair')} Find me</button>` : ''}
+            </div>
+          </div>
+          <div class="bk-scroll"><div class="bk">${cols.join("")}</div></div>`;
+      }
+
+      container.innerHTML = `
+        <div class="section-head">
+          <div><h1>${escapeHTML(t.name)}</h1><p>Official tournament · ${escapeHTML(t.mode)} · ${escapeHTML(t.region)} · ${escapeHTML(t.platform)}</p></div>
+          <button class="btn" onclick="backToTournaments()">${icon('chevronLeft')} All tournaments</button>
+        </div>
+
+        ${pending && pending.match && !pending.match.completed ? `
+          <div class="tn-ready">
+            <div><strong>${icon('zap')} Your ${tournamentRoundName(t, pending.entry.r).toLowerCase()} match is ready</strong><span>vs ${escapeHTML(pending.entry.a === state.username ? pending.entry.b : pending.entry.a)} — join the lobby and hit Ready Up.</span></div>
+            <button class="btn green" onclick="enterMatchLobby('${pending.entry.matchId}')">Go to my match</button>
+          </div>` : ''}
+
+        ${t.status === "finished" ? `
+          <div class="tn-champion">
+            <div class="tn-champion-crown">${crownIcon()}</div>
+            <div><span>Champion</span><strong>${vipNameHTML(t.winner)}</strong></div>
+            <div class="tn-champion-prize">${t.payouts && t.payouts.length ? t.payouts.map(p => `<span>${p.place === 1 ? '1st' : p.place === 2 ? '2nd' : '3rd–4th'} · ${escapeHTML(p.name)} <b>${coinIcon(12)}${formatCoins(p.amount)}</b></span>`).join("") : ''}</div>
+          </div>` : ''}
+
+        <div class="tn-detail-grid">
+          <div class="tn-info">
+            <div class="tn-info-row"><span>Status</span><strong><span class="tn-status ${st.key}">${st.label}</span></strong></div>
+            <div class="tn-info-row"><span>Starts</span><strong>${formatTournamentDate(t.startAt)}</strong></div>
+            ${t.regOpensAt ? `<div class="tn-info-row"><span>Registration opens</span><strong>${formatTournamentDate(t.regOpensAt)}</strong></div>` : ''}
+            <div class="tn-info-row"><span>Players</span><strong>${players.length} / ${t.slots}</strong></div>
+            <div class="tn-info-row"><span>Format</span><strong>1v1 · First to ${t.firstTo}${t.weapon ? ' · ' + escapeHTML(t.weapon) : ''}</strong></div>
+            <div class="tn-info-row"><span>Simple edit</span><strong>${t.simpleEdit === false ? 'Disabled' : 'Allowed'}</strong></div>
+            <div class="tn-info-row"><span>Entry</span><strong class="green">Free</strong></div>
+            ${t.status === "cancelled" && t.cancelReason ? `<div class="tn-info-row"><span>Reason</span><strong>${escapeHTML(t.cancelReason)}</strong></div>` : ''}
+            <div class="tn-actions">${action}</div>
+            ${owner ? `<div class="tn-owner">
+              <span>Organizer</span>
+              ${t.status === "upcoming" ? `<button class="btn small green" onclick="startTournamentNow('${t.id}')">Start now</button>` : ''}
+              ${t.status === "upcoming" || t.status === "running" ? `<button class="btn small danger" onclick="cancelTournament('${t.id}')">Cancel</button>` : ''}
+              ${t.status !== "running" ? `<button class="btn small danger" onclick="deleteTournament('${t.id}')">Delete</button>` : ''}
+            </div>` : ''}
+          </div>
+          <div class="tn-prize">
+            <div class="tn-prize-head"><span>${icon('trophy')} Prize pool</span><strong>${coinIcon(16)}${formatCoins(tournamentPrizeTotal(t))}</strong></div>
+            ${prizeRows(t).map(([k, val]) => `<div class="tn-prize-row"><span>${k}</span><strong>${coinIcon(12)}${typeof val === 'number' ? formatCoins(val) : val}</strong></div>`).join("") || `<div class="tn-prize-row"><span>No prize</span><strong>—</strong></div>`}
+          </div>
+        </div>
+
+        ${bracketHTML || `
+          <div class="tn-players">
+            <h3>Registered players <span>${players.length}</span></h3>
+            ${players.length ? `<div class="tn-player-list">${players.map(n => `<button class="tn-player" onclick="showPlayerStats('${escapeHTML(n)}')">${teamMemberAvatarHTML(n)}<span>${vipNameHTML(n)}</span></button>`).join("")}</div>`
+              : `<div class="rd-empty">No player registered yet.</div>`}
+          </div>`}
+      `;
+      return;
+    }
+
+    // ---------- Liste ----------
+    const order = { running:0, upcoming:1, finished:2, cancelled:3 };
+    const list = [...tournamentsCache].sort((a, b) => (order[a.status] - order[b.status]) || (a.startAt - b.startAt));
+    const card = t => {
+      const st = tournamentStatus(t);
+      const players = (t.players || []).length;
+      const pct = Math.min(100, Math.round(players / t.slots * 100));
+      return `
+        <div class="tn-card">
+          <div class="tn-card-kicker">${icon('shieldCheck')} Official tournament</div>
+          <div class="tn-card-body">
+            <div class="tn-card-top">
+              <span class="game-icon">FN</span>
+              <div class="tn-card-title"><strong>${escapeHTML(t.name)}</strong><span>FN · ${escapeHTML(t.region)} · ${escapeHTML(t.platform)}</span></div>
+              <span class="tn-status ${st.key}">${st.label}</span>
+            </div>
+            <div class="tn-card-meta">
+              <div><span>Start</span><strong>${formatTournamentDate(t.startAt)}</strong></div>
+              <div style="text-align:right;"><span>Entry</span><strong>Free</strong></div>
+            </div>
+            <div class="tn-progress"><div style="width:${pct}%;"></div></div>
+            <div class="tn-card-players">${players} of ${t.slots} players${(t.players || []).includes(state.username) ? ' · <b>You\'re in</b>' : ''}</div>
+            <div class="tn-card-prize">
+              <div class="tn-prize-head"><span>${icon('trophy')} Prize pool</span><strong>${coinIcon(14)}${formatCoins(tournamentPrizeTotal(t))}</strong></div>
+              ${prizeRows(t).map(([k, val]) => `<div class="tn-prize-row"><span>${k}</span><strong>${typeof val === 'number' ? formatCoins(val) : val}</strong></div>`).join("")}
+            </div>
+            <button class="btn tn-card-btn" onclick="openTournament('${t.id}')">View details</button>
+          </div>
+        </div>`;
+    };
+    container.innerHTML = `
+      <div class="section-head">
+        <div><h1>Tournaments</h1><p>Official Prime Token tournaments — register for free and win coins.</p></div>
+        ${owner ? `<button class="btn green" onclick="openCreateTournament()">${icon('plus')} Create Tournament</button>` : ''}
+      </div>
+      ${list.length ? `<div class="tn-grid">${list.map(card).join("")}</div>`
+        : `<div class="empty"><strong>No tournament yet</strong><span>${owner ? 'Create the first one with the button above.' : 'Official tournaments will show up here — stay tuned!'}</span></div>`}
+    `;
+  }
+
   else {
     container.innerHTML = `<div class="empty"><strong>Page en construction</strong></div>`;
   }
+}
+
+/* =========================================================
+   TOURNOIS — créés par le propriétaire du site uniquement.
+   Collection Firestore "tournaments". Au démarrage, le tableau
+   (bracket) est tiré au sort, puis chaque affrontement devient un
+   vrai match (lobby, Ready Up, Victory/Defeat, modération...).
+   Quand un match est terminé, le gagnant avance tout seul ; à la
+   fin, les prix sont versés automatiquement sur les comptes.
+   Toutes les écritures passent par des transactions Firestore et
+   des identifiants de match déterministes : plusieurs joueurs
+   connectés en même temps ne créent jamais de doublons.
+========================================================= */
+let tournamentsCache = [];
+let tournamentsView = "list";      // "list" | "create" | "detail"
+let activeTournamentId = null;
+let tournamentBusy = false;
+let bracketSearch = "";
+
+function initTournamentsSync(){
+  if(!db) return;
+  db.collection("tournaments").onSnapshot(snap => {
+    const list = [];
+    snap.forEach(d => { const t = d.data(); if(t && t.id) list.push(t); });
+    tournamentsCache = list;
+    tournamentTick();
+    if(currentPage === "tournaments") render();
+  }, err => console.warn("Error syncing tournaments:", err));
+  setInterval(tournamentTick, 15000);
+}
+
+function tournamentRoundCount(t){
+  return Math.max(0, ...(t.bracket || []).map(e => e.r)) + 1;
+}
+function tournamentRoundName(t, r){
+  const total = tournamentRoundCount(t);
+  const left = total - r;
+  if(left === 1) return "Final";
+  if(left === 2) return "Semi-finals";
+  if(left === 3) return "Quarter-finals";
+  return "Round " + (r + 1);
+}
+function tournamentPrizeTotal(t){
+  const p = t.prizes || {};
+  return (p.first || 0) + (p.second || 0) + (p.semis || 0) * 2;
+}
+function tournamentStatus(t){
+  if(t.status === "cancelled") return { key:"cancelled", label:"Cancelled" };
+  if(t.status === "finished") return { key:"finished", label:"Finished" };
+  if(t.status === "running") return { key:"live", label:"Live" };
+  const now = Date.now();
+  if(t.regOpensAt && now < t.regOpensAt) return { key:"soon", label:"Upcoming" };
+  return { key:"open", label:"Registration open" };
+}
+function tournamentMatchId(t, r, i){ return `TM-${t.id}-${r}-${i}`; }
+
+function shuffleArray(arr){
+  const a = [...arr];
+  for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+function buildInitialBracket(players){
+  const shuffled = shuffleArray(players);
+  let size = 2;
+  while(size < shuffled.length) size *= 2;
+  const rounds = Math.log2(size);
+  const half = size / 2;
+  const bracket = [];
+  for(let i = 0; i < half; i++) bracket.push({ r:0, i, a:null, b:null, winner:null, matchId:null });
+  shuffled.forEach((p, k) => { const e = bracket[k % half]; if(k < half) e.a = p; else e.b = p; });
+  for(let r = 1; r < rounds; r++){
+    for(let i = 0; i < size / Math.pow(2, r + 1); i++) bracket.push({ r, i, a:null, b:null, winner:null, matchId:null });
+  }
+  return bracket;
+}
+
+function buildTournamentMatch(t, e, lastRound){
+  const a = e.a, b = e.b;
+  const infoA = allPlayersCache.find(p => p.username === a) || {};
+  return {
+    id: tournamentMatchId(t, e.r, e.i),
+    host: a,
+    hostEpic: infoA.epic || "N/A",
+    hostStats: infoA.stats || {},
+    visibility: "private",
+    passcode: null,
+    region: t.region,
+    platform: t.platform,
+    weapon: t.weapon || "",
+    teamSize: "1v1",
+    team: null,
+    coverBet: false,
+    bet: 0,
+    mode: t.mode,
+    firstTo: t.firstTo || 1,
+    killLead: null,
+    simpleEdit: t.simpleEdit !== false,
+    status: "OPEN",
+    players: [a, b],
+    hostPlayers: [a],
+    guestPlayers: [b],
+    readies: {},
+    results: {},
+    processedBy: [],
+    victoryClaim: null,
+    disputed: false,
+    proofs: {},
+    chat: [],
+    locked: false,
+    completed: false,
+    createdAt: Date.now(),
+    escrowedBy: [a, b],
+    escrowAmounts: { [a]:0, [b]:0 },
+    tournamentId: t.id,
+    tournamentName: t.name,
+    tournamentRound: e.r,
+    tournamentRoundName: tournamentRoundName({ bracket:[{ r: lastRound }] }, e.r)
+  };
+}
+
+/* Fait avancer le tableau autant que possible (byes, résultats, nouveaux
+   matchs). Travaille sur une copie ; renvoie ce qui a changé. */
+function resolveBracket(t, bracketIn, matchesById){
+  const bracket = bracketIn.map(e => ({ ...e }));
+  const lastRound = Math.max(...bracket.map(e => e.r));
+  const find = (r, i) => bracket.find(e => e.r === r && e.i === i);
+  const newMatches = [];
+  let finalWinner = null, changed = false, guard = 0;
+  let loop = true;
+  while(loop && guard++ < 50){
+    loop = false;
+    bracket.sort((x, y) => x.r - y.r || x.i - y.i).forEach(e => {
+      if(e.winner) return;
+      let w = null;
+      if(e.r === 0 && ((e.a && !e.b) || (!e.a && e.b))) w = e.a || e.b; // exempté (bye)
+      else if(e.a && e.b){
+        if(!e.matchId){
+          const m = buildTournamentMatch(t, e, lastRound);
+          e.matchId = m.id;
+          newMatches.push(m);
+          changed = true;
+        } else {
+          const m = matchesById[e.matchId];
+          if(m && m.completed && m.results){
+            if(m.results[e.a] === "WIN") w = e.a;
+            else if(m.results[e.b] === "WIN") w = e.b;
+          }
+        }
+      }
+      if(w){
+        e.winner = w; changed = true; loop = true;
+        if(e.r === lastRound) finalWinner = w;
+        else {
+          const parent = find(e.r + 1, Math.floor(e.i / 2));
+          if(parent){ if(e.i % 2 === 0) parent.a = w; else parent.b = w; }
+        }
+      }
+    });
+  }
+  return { bracket, newMatches, finalWinner, changed };
+}
+
+async function uidForUsername(name){
+  const c = allPlayersCache.find(p => p.username === name);
+  if(c && c.uid) return c.uid;
+  try{
+    const q = await db.collection("users").where("username", "==", name).limit(1).get();
+    if(!q.empty) return q.docs[0].id;
+  }catch(e){}
+  return null;
+}
+
+/* Gains : 1er, 2e, et chaque perdant de demi-finale. */
+function tournamentPayoutList(t, bracket){
+  const p = t.prizes || {};
+  const lastRound = Math.max(...bracket.map(e => e.r));
+  const final = bracket.find(e => e.r === lastRound);
+  const out = [];
+  if(!final || !final.winner) return out;
+  const loserOf = e => e.winner === e.a ? e.b : e.a;
+  if(p.first > 0) out.push({ name: final.winner, amount: p.first, place: 1 });
+  if(p.second > 0 && loserOf(final)) out.push({ name: loserOf(final), amount: p.second, place: 2 });
+  if(p.semis > 0 && lastRound >= 1){
+    bracket.filter(e => e.r === lastRound - 1 && e.winner).forEach(e => {
+      const l = loserOf(e);
+      if(l) out.push({ name: l, amount: p.semis, place: 3 });
+    });
+  }
+  return out;
+}
+
+async function tournamentTick(){
+  if(!db || tournamentBusy) return;
+  tournamentBusy = true;
+  try{
+    const matchesById = {};
+    (state.matches || []).forEach(m => { matchesById[m.id] = m; });
+    for(const t of tournamentsCache){
+      const due = t.status === "upcoming" && t.startAt && Date.now() >= t.startAt;
+      let needs = due;
+      if(t.status === "running"){
+        needs = resolveBracket(t, t.bracket || [], matchesById).changed;
+      }
+      if(!needs) continue;
+      await advanceTournament(t.id, matchesById);
+    }
+  }catch(e){ console.warn("Tournament tick error:", e); }
+  tournamentBusy = false;
+}
+
+async function advanceTournament(tid, matchesById){
+  const ref = db.collection("tournaments").doc(tid);
+  // On prépare les uid des futurs gagnants hors transaction (pas de requêtes dedans).
+  const pre = tournamentsCache.find(x => x.id === tid);
+  const uidMap = {};
+  if(pre && pre.status === "running"){
+    const sim = resolveBracket(pre, pre.bracket || [], matchesById);
+    if(sim.finalWinner){
+      for(const pay of tournamentPayoutList(pre, sim.bracket)) uidMap[pay.name] = await uidForUsername(pay.name);
+    }
+  }
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if(!snap.exists) return;
+    const t = snap.data();
+    let bracket = t.bracket || [];
+    const update = {};
+    if(t.status === "upcoming"){
+      if(!(t.startAt && Date.now() >= t.startAt)) return;
+      const players = t.players || [];
+      if(players.length < 2){
+        tx.update(ref, { status:"cancelled", cancelReason:"Not enough players" });
+        return;
+      }
+      bracket = buildInitialBracket(players);
+      update.status = "running";
+      update.startedAt = Date.now();
+    } else if(t.status !== "running"){
+      return;
+    }
+    const res = resolveBracket(t, bracket, matchesById);
+    if(!res.changed && t.status === "running") return;
+    res.newMatches.forEach(m => tx.set(db.collection("matches").doc(m.id), m));
+    update.bracket = res.bracket;
+    if(res.finalWinner){
+      update.status = "finished";
+      update.winner = res.finalWinner;
+      update.finishedAt = Date.now();
+      if(!t.paidOut){
+        const payouts = tournamentPayoutList(t, res.bracket);
+        const paid = [];
+        payouts.forEach(pay => {
+          const uid = uidMap[pay.name];
+          if(uid){
+            tx.update(db.collection("users").doc(uid), { coins: firebase.firestore.FieldValue.increment(pay.amount) });
+            paid.push(pay);
+          }
+        });
+        update.paidOut = true;
+        update.payouts = paid;
+      }
+    }
+    tx.update(ref, update);
+  });
+}
+
+/* ---------- Actions ---------- */
+function openTournament(id){ activeTournamentId = id; tournamentsView = "detail"; bracketSearch = ""; render(); }
+function backToTournaments(){ tournamentsView = "list"; activeTournamentId = null; render(); }
+function openCreateTournament(){
+  if(!isSuperAdmin()){ toast("Only the site owner can create tournaments."); return; }
+  tournamentsView = "create"; render();
+}
+
+async function createTournamentSubmit(){
+  if(!isSuperAdmin() || !db) return;
+  const v = id => (document.getElementById(id) || {}).value || "";
+  const name = v("tnName").trim();
+  const regOpens = v("tnRegOpens");
+  const start = v("tnStart");
+  const startAt = start ? new Date(start).getTime() : NaN;
+  const regOpensAt = regOpens ? new Date(regOpens).getTime() : null;
+  const num = id => Math.max(0, roundToHalf(parseFloat(v(id)) || 0));
+  if(!name){ toast("Give your tournament a name."); return; }
+  if(isNaN(startAt)){ toast("Choose a start date and time."); return; }
+  if(startAt < Date.now() + 60 * 1000){ toast("The start time must be at least 1 minute from now."); return; }
+  if(regOpensAt && regOpensAt >= startAt){ toast("Registration must open before the tournament starts."); return; }
+  if(!v("tnMode") || !v("tnRegion") || !v("tnPlatform")){ toast("Choose the game mode, region and platform."); return; }
+  const t = {
+    id: "TR-" + Math.floor(100000 + Math.random() * 900000),
+    name,
+    createdBy: state.username,
+    createdAt: Date.now(),
+    regOpensAt,
+    startAt,
+    slots: parseInt(v("tnSlots"), 10) || 16,
+    mode: v("tnMode"),
+    weapon: v("tnWeapon"),
+    teamSize: "1v1",
+    region: v("tnRegion"),
+    platform: v("tnPlatform"),
+    firstTo: parseInt(v("tnFirstTo"), 10) || 1,
+    simpleEdit: v("tnSimpleEdit") !== "off",
+    prizes: { first: num("tnPrize1"), second: num("tnPrize2"), semis: num("tnPrize3") },
+    status: "upcoming",
+    players: [],
+    bracket: [],
+    paidOut: false
+  };
+  try{
+    await db.collection("tournaments").doc(t.id).set(t);
+    toast("Tournament created!");
+    openTournament(t.id);
+  }catch(err){
+    console.warn(err);
+    toast("Couldn't create the tournament (check Firestore permissions for 'tournaments').");
+  }
+}
+
+async function registerTournament(tid){
+  if(!db) return;
+  if(!requireVerifiedIdentity()) return;
+  const ref = db.collection("tournaments").doc(tid);
+  try{
+    const msg = await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if(!snap.exists) return "This tournament no longer exists.";
+      const t = snap.data();
+      if(t.status !== "upcoming") return "Registration is closed.";
+      if(t.regOpensAt && Date.now() < t.regOpensAt) return "Registration isn't open yet.";
+      const players = t.players || [];
+      if(players.includes(state.username)) return "You're already registered.";
+      if(players.length >= t.slots) return "This tournament is full.";
+      tx.update(ref, { players: [...players, state.username] });
+      return null;
+    });
+    toast(msg || "You're registered! Be online when the tournament starts.");
+  }catch(e){ console.warn(e); toast("Registration failed, please try again."); }
+}
+
+async function unregisterTournament(tid){
+  if(!db) return;
+  const ref = db.collection("tournaments").doc(tid);
+  try{
+    await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if(!snap.exists) return;
+      const t = snap.data();
+      if(t.status !== "upcoming") return;
+      tx.update(ref, { players: (t.players || []).filter(p => p !== state.username) });
+    });
+    toast("You left the tournament.");
+  }catch(e){ console.warn(e); }
+}
+
+async function startTournamentNow(tid){
+  if(!isSuperAdmin() || !db) return;
+  const t = tournamentsCache.find(x => x.id === tid);
+  if(!t) return;
+  if((t.players || []).length < 2){ toast("At least 2 players are needed to start."); return; }
+  if(!(await siteConfirm(`Start "${t.name}" now with ${t.players.length} players? Registration will close and the bracket will be drawn.`, { title:"Start tournament", okLabel:"Start now", danger:false }))) return;
+  await db.collection("tournaments").doc(tid).update({ startAt: Date.now() - 1000 });
+  setTimeout(tournamentTick, 400);
+}
+
+async function cancelTournament(tid){
+  if(!isSuperAdmin() || !db) return;
+  const t = tournamentsCache.find(x => x.id === tid);
+  if(!t) return;
+  if(!(await siteConfirm(`Cancel "${t.name}"? ${t.status === "running" ? "Matches already created will stay, but no prizes will be paid." : ""}`, { title:"Cancel tournament", okLabel:"Cancel tournament" }))) return;
+  await db.collection("tournaments").doc(tid).update({ status:"cancelled", cancelReason:"Cancelled by the organizer" });
+  toast("Tournament cancelled.");
+}
+
+async function deleteTournament(tid){
+  if(!isSuperAdmin() || !db) return;
+  if(!(await siteConfirm("Delete this tournament for good? It will disappear from the list.", { title:"Delete tournament", okLabel:"Delete" }))) return;
+  await db.collection("tournaments").doc(tid).delete();
+  backToTournaments();
+}
+
+function findMeInBracket(){
+  const els = [...document.querySelectorAll('.bk-match[data-players]')].filter(el => el.dataset.players.split("|").includes(state.username));
+  if(!els.length){ toast("You're not in this bracket."); return; }
+  const el = els[els.length - 1];
+  el.scrollIntoView({ behavior:"smooth", block:"center", inline:"center" });
+  el.classList.remove("bk-flash"); void el.offsetWidth; el.classList.add("bk-flash");
+}
+function searchBracket(){
+  const input = document.getElementById("bkSearch");
+  const q = (input ? input.value : "").trim().toLowerCase();
+  document.querySelectorAll(".bk-player").forEach(el => el.classList.toggle("bk-hit", !!q && (el.dataset.name || "").toLowerCase().includes(q)));
+  const first = q ? document.querySelector(".bk-player.bk-hit") : null;
+  if(first) first.scrollIntoView({ behavior:"smooth", block:"center", inline:"center" });
+  else if(q) toast("No player found in the bracket.");
+}
+
+/* Mon match de tournoi en attente (pour le bandeau "Your match is ready"). */
+function myPendingTournamentMatch(t){
+  const e = (t.bracket || []).find(x => x.matchId && !x.winner && (x.a === state.username || x.b === state.username));
+  if(!e) return null;
+  return { entry: e, match: (state.matches || []).find(m => m.id === e.matchId) || null };
+}
+
+function toLocalInputValue(ms){
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function formatTournamentDate(ms){
+  return new Date(ms).toLocaleString("en-GB", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" });
 }
 
 /* ACTIONS */
@@ -8154,6 +9128,23 @@ function leaveMatchById(matchId, { silent } = {}){
   pushMatchToCloud(match);
   if(!silent) toast(refunded > 0 ? `You left the match. ${formatCoins(refunded)} coins refunded.` : "You left the match. It's still open for others to join.");
   return true;
+}
+
+/* Match de tournoi : on ne peut pas "quitter" (ça bloquerait le tableau),
+   seulement déclarer forfait — l'adversaire passe au tour suivant. */
+async function forfeitTournamentMatch(matchId){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match || match.completed) return;
+  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  if(!hostPlayers.includes(state.username) && !guestPlayers.includes(state.username)) return;
+  if(!(await siteConfirm("Forfeit this tournament match? Your opponent goes to the next round and you're out of the tournament.", { title:"Forfeit", okLabel:"Forfeit" }))) return;
+  const mine = hostPlayers.includes(state.username) ? hostPlayers : guestPlayers;
+  const other = hostPlayers.includes(state.username) ? guestPlayers : hostPlayers;
+  finalizeMatchResult(match, other, mine);
+  save();
+  toast("You forfeited the match.");
+  setTimeout(tournamentTick, 400);
+  setPage("tournaments");
 }
 
 function leaveLobby(){
@@ -8666,6 +9657,7 @@ async function doSignup(){
       customAvatar: null,
       snipes: 0,
       vipUntil: null,
+      rp: 0,
       ecoResetVersion: ECO_RESET_VERSION,
       history: [],
       joinedAt: Date.now(),
@@ -8775,6 +9767,7 @@ async function loadProfileAndStart(uid){
       state.history = profile.history || state.history;
       state.lastWheelSpin = (profile.lastWheelSpin !== undefined) ? profile.lastWheelSpin : state.lastWheelSpin;
       state.vipUntil = (profile.vipUntil !== undefined) ? profile.vipUntil : state.vipUntil;
+      state.rp = profile.rp || 0; // jamais hérité d'un autre compte en cache
       // IMPORTANT : ces champs ne doivent JAMAIS retomber sur une ancienne
       // valeur en cache (state / localStorage) d'un compte précédemment
       // connecté sur ce navigateur. Sinon, un compte tout neuf pourrait
@@ -8806,6 +9799,7 @@ async function loadProfileAndStart(uid){
       state.epic = "";
       // Nouveau compte : on repart d'une collection d'avatars vide (pas celle
       // d'un ancien compte en cache) avec l'avatar de départ tiré au sort.
+      state.rp = 0;
       const starter = pendingStarterAvatar || pickStarterAvatar();
       state.ownedAvatars = starter === "default" ? ["default"] : ["default", starter];
       state.equippedAvatar = starter;
@@ -8825,6 +9819,7 @@ async function loadProfileAndStart(uid){
   initOwnCoinsSync();
   initGlobalChatSync();
   initTeamsSync();
+  initTournamentsSync();
   handleDiscordOAuthRedirect();
 }
 
