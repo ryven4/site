@@ -854,13 +854,56 @@ button:active{ transform:scale(.97) !important; }
   border-left:1px solid var(--line2);
   background:var(--panel);
   z-index:15;
+  transition:transform .25s ease;
 }
+.home-chat-panel.collapsed{ transform:translateX(100%); }
 .home-chat-panel .panel-body{ flex:1; display:flex; min-height:0; }
 .home-chat-panel .panel-head, .lobby-chat-panel .panel-head{
   background:linear-gradient(90deg, rgba(0,255,136,.12), rgba(0,255,136,.02));
   border-bottom:1px solid var(--line2);
+  display:flex;
+  align-items:center;
+  gap:8px;
 }
 .home-chat-panel .panel-head h3, .lobby-chat-panel .panel-head h3{ color:#fff; }
+
+.chat-toggle-tab{
+  position:fixed;
+  top:96px;
+  right:350px;
+  z-index:16;
+  width:26px;
+  height:52px;
+  border-radius:8px 0 0 8px;
+  background:var(--panel);
+  border:1px solid var(--line2);
+  border-right:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  color:#c7cfd8;
+  font-size:12px;
+  transition:right .25s ease;
+}
+.chat-toggle-tab:hover{ color:#fff; background:rgba(255,255,255,.06); }
+#globalChatPanel.collapsed ~ .chat-toggle-tab{ right:0; }
+
+.chat-collapse-btn{
+  width:22px;
+  height:22px;
+  border-radius:6px;
+  border:1px solid var(--line2);
+  background:rgba(255,255,255,.03);
+  color:#c7cfd8;
+  font-size:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  flex:none;
+}
+.chat-collapse-btn:hover{ color:#fff; background:rgba(255,255,255,.08); }
 
 .home-hero-stats{ margin-top:22px; max-width:320px; }
 
@@ -1069,7 +1112,10 @@ button:active{ transform:scale(.97) !important; }
 .chat-content{ min-width:0; }
 .chat-meta{ display:inline; }
 .chat-meta strong{ font-size:13.5px; color:#fff; }
-.chat-meta span{ display:none; }
+.chat-meta strong .vip-name{ color:var(--green); }
+.vip-name-wrap{ display:inline-flex; align-items:center; gap:3px; color:var(--green); }
+.vip-crown{ display:inline-flex; align-items:center; justify-content:center; line-height:1; }
+.chat-meta > .chat-time{ display:none; }
 .chat-content p{ display:inline; color:#cbd5e1; font-size:13.5px; line-height:1.5; word-break:break-word; }
 .chat-content p::before{ content:" "; }
 .chat-form{ padding:9px; display:flex; gap:6px; border-top:1px solid var(--line); background:rgba(0,0,0,.2); }
@@ -1390,6 +1436,18 @@ button:active{ transform:scale(.97) !important; }
 .team-card.guest{ border-top-color:#ff8a3d; }
 
 .team-card-head{ padding:10px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:rgba(255,255,255,.02); }
+
+.report-cheater-btn{
+  border:1px solid rgba(255,77,94,.35);
+  background:rgba(255,77,94,.08);
+  color:var(--red);
+  font-size:9.5px;
+  font-weight:800;
+  padding:6px 10px;
+  border-radius:8px;
+  cursor:pointer;
+}
+.report-cheater-btn:hover{ background:rgba(255,77,94,.16); border-color:rgba(255,77,94,.55); }
 .team-card-head span:first-child{ font-size:10px; font-weight:900; letter-spacing:1px; color:var(--muted); }
 .team-card.guest .team-card-head span:first-child{ color:#ff8a3d; }
 .team-card:not(.guest) .team-card-head span:first-child{ color:var(--cyan); }
@@ -1854,6 +1912,10 @@ button:active{ transform:scale(.97) !important; }
   .lobby-layout{ margin-right:0; }
   .lobby-chat-panel{ position:static; width:auto; height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
   .home-chat-panel{ position:static; width:auto; min-height:480px; margin-top:18px; border-radius:14px; border:1px solid var(--line); }
+  .home-chat-panel.collapsed{ transform:none; }
+  .chat-toggle-tab{ display:none !important; }
+  .home-chat-panel .chat-collapse-btn{ display:none; }
+  .content.content-full{ padding-right:30px; }
   .matches-list{ grid-template-columns:1fr 1fr; }
 }
 
@@ -2015,7 +2077,9 @@ button:active{ transform:scale(.97) !important; }
     <div class="profile-mini">
       <div class="avatar" id="miniAvatar">P</div>
       <div>
-        <strong id="miniUsername">Player</strong>
+        <div style="display:flex; align-items:center;">
+          <span id="miniVipBadge" class="vip-crown" title="VIP" style="display:none; margin-right:4px;">👑</span><strong id="miniUsername">Player</strong>
+        </div>
         <span>Fortnite</span>
       </div>
     </div>
@@ -2050,7 +2114,9 @@ button:active{ transform:scale(.97) !important; }
     <button class="profile-chip" onclick="setPage('profile')" title="View my profile">
       <div class="profile-chip-avatar js-user-avatar" id="topAvatar">P</div>
       <div class="profile-chip-info">
-        <strong id="topUsername">Player</strong>
+        <div style="display:flex; align-items:center;">
+          <span id="topVipBadge" class="vip-crown" title="VIP" style="display:none; margin-right:4px;">👑</span><strong id="topUsername">Player</strong>
+        </div>
         <span id="topRecord"><b>0V</b> · <i>0D</i> · 0%</span>
       </div>
     </button>
@@ -2060,7 +2126,13 @@ button:active{ transform:scale(.97) !important; }
 <div class="content" id="content"></div>
 
 <div class="panel home-chat-panel" id="globalChatPanel">
-  <div class="panel-head"><h3>Global Chat</h3><span>LIVE</span></div>
+  <div class="panel-head">
+    <h3>Global Chat</h3>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span>LIVE</span>
+      <button class="chat-collapse-btn" onclick="toggleGlobalChatPanel()" title="Collapse chat">›</button>
+    </div>
+  </div>
   <div class="panel-body" style="padding:0;">
     <div class="chat-box">
       <div class="chat-messages" id="chatMessages"></div>
@@ -2071,6 +2143,7 @@ button:active{ transform:scale(.97) !important; }
     </div>
   </div>
 </div>
+<div class="chat-toggle-tab" id="chatToggleTab" onclick="toggleGlobalChatPanel()" title="Toggle chat">💬</div>
 
 <footer class="site-footer">
   <div class="footer-top">
@@ -2431,6 +2504,58 @@ button:active{ transform:scale(.97) !important; }
 </div>
 
 <!-- =========================
+     CHEATER REPORT MODAL
+========================= -->
+<div class="overlay" id="cheaterReportOverlay">
+<div class="modal" style="width:min(440px,100%);">
+  <div class="modal-head">
+    <h2>🚨 Report a Cheater</h2>
+    <button class="close" onclick="closeCheaterReportModal()">×</button>
+  </div>
+  <div style="padding:20px;">
+    <p style="color:var(--muted); font-size:11px; line-height:1.6; margin-bottom:14px;">
+      Reporting will freeze this match and lock the result — a moderator will review it. Please open a ticket on our <strong style="color:#fff;">Discord</strong> right after reporting and attach your proof (clip/screenshot), so a moderator can review it faster.
+    </p>
+    <div style="display:flex; gap:10px; padding:12px 14px; border:1px solid rgba(255,77,94,.35); background:rgba(255,77,94,.08); border-radius:10px;">
+      <span style="font-size:16px;">⚠️</span>
+      <p style="color:#ffb4bc; font-size:10.5px; line-height:1.6; margin:0;">
+        Only report actual cheating. Filing a false or abusive report can lead to consequences on your account, including a ban.
+      </p>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeCheaterReportModal()">Cancel</button>
+    <button class="btn danger" onclick="confirmCheaterReport()">🚨 Confirm Report</button>
+  </div>
+</div>
+</div>
+
+<!-- =========================
+     VIP INFO MODAL
+========================= -->
+<div class="overlay" id="vipInfoOverlay">
+<div class="modal" style="width:min(420px,100%);">
+  <div class="modal-head">
+    <h2>👑 VIP Advantages</h2>
+    <button class="close" onclick="closeVipInfoModal()">×</button>
+  </div>
+  <div style="padding:20px;">
+    <ul style="list-style:none; display:flex; flex-direction:column; gap:12px; margin:0; padding:0;">
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:16px;">💸</span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">No tip fees</strong><br>Send tips with 0% fee instead of 5%.</span></li>
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:16px;">🎯</span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">+20 Snipes</strong><br>Given instantly when you activate VIP.</span></li>
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:16px;">🎨</span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">Random bonus avatar</strong><br>Unlock a random avatar from the shop for free.</span></li>
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:16px;">🛡️</span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">Discord VIP role (open a ticket)</strong><br>Open a ticket on our Discord after purchasing to get the VIP role on the server.</span></li>
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:16px;">⏱️</span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">Faster victory timer</strong><br>5 minutes to confirm a victory instead of 15.</span></li>
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:16px;">👑</span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">VIP name in chat</strong><br>Your name shows in green with a crown everywhere.</span></li>
+    </ul>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" style="background:linear-gradient(135deg,var(--gold),#d99a1f); color:#241c08; border:0; width:100%;" onclick="closeVipInfoModal(); buyVIP();">Get VIP — 3 coins</button>
+  </div>
+</div>
+</div>
+
+<!-- =========================
      WHEEL RESULT MODAL
 ========================= -->
 <div class="overlay" id="wheelResultOverlay">
@@ -2658,6 +2783,23 @@ function checkMatchLocks(){
 ========================================================= */
 
 const VICTORY_TIMER_MS = 15 * 60 * 1000;
+const VIP_VICTORY_TIMER_MS = 5 * 60 * 1000;
+
+/* ===== VIP MEMBERSHIP ===== */
+const VIP_COST_COINS = 3;
+const VIP_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 1 mois
+const VIP_SNIPE_BONUS = 20;
+
+/* isVIP() sans argument = moi. Avec un pseudo, vérifie le statut VIP de
+   N'IMPORTE QUEL joueur (via allPlayersCache) — utile pour un badge VIP
+   affiché à côté du pseudo d'un autre joueur, par exemple. */
+function isVIP(username){
+  if(!username || username === state.username){
+    return !!(state.vipUntil && state.vipUntil > Date.now());
+  }
+  const p = allPlayersCache.find(pl => pl.username === username);
+  return !!(p && p.vipUntil && p.vipUntil > Date.now());
+}
 
 /* =========================================================
    MODÉRATION — comptes autorisés à résoudre les litiges
@@ -2678,6 +2820,14 @@ function isSuperAdmin(){
 
 function isUsernameAdmin(username){
   return username === SUPER_ADMIN || moderatorUsernames.includes(username);
+}
+
+function vipNameHTML(username){
+  const name = escapeHTML(username);
+  if(isVIP(username)){
+    return `<span class="vip-name vip-name-wrap"><span class="vip-crown">👑</span><span>${name}</span></span>`;
+  }
+  return name;
 }
 
 function initModeratorsSync(){
@@ -2836,6 +2986,97 @@ function modGiveSelfSnipes(amount){
   render();
 }
 
+/* Donner (ou retirer, avec un montant négatif) des coins à N'IMPORTE QUEL
+   joueur directement via Firestore — pas besoin qu'il soit en ligne, son
+   solde se met à jour tout seul chez lui (voir initOwnCoinsSync). */
+function modGivePlayerCoins(){
+  if(!isAdmin() || !db) return;
+  const userInput = document.getElementById("modGiveCoinsUsername");
+  const amountInput = document.getElementById("modGiveCoinsAmount");
+  const username = userInput ? userInput.value.trim() : "";
+  const rawAmount = amountInput ? parseFloat(amountInput.value) : NaN;
+
+  if(!username){ toast("Enter a username."); return; }
+  if(isNaN(rawAmount) || rawAmount === 0){ toast("Enter a valid amount."); return; }
+  const amount = roundToCents(rawAmount);
+
+  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
+  if(!target){ toast("This player doesn't exist."); return; }
+
+  db.collection("users").doc(target.uid).update({
+    coins: firebase.firestore.FieldValue.increment(amount)
+  }).then(() => {
+    toast(`${amount > 0 ? '🎁 +' : ''}${formatCoins(amount)} coins ${amount > 0 ? 'given to' : 'removed from'} ${target.username}.`);
+    if(userInput) userInput.value = "";
+    if(amountInput) amountInput.value = "";
+    // Si le mod se donne des coins à lui-même via ce champ, son propre
+    // solde ne se rafraîchit pas tout seul dans ce cas précis (c'est un
+    // update() Firestore, pas un save() local) : on force le state local
+    // à jour pour qu'il n'écrase pas ce changement à son prochain save().
+    if(target.uid === currentUid){
+      state.coins = roundToCents((state.coins || 0) + amount);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderHeaderUI();
+    }
+  }).catch(err => {
+    console.warn(err);
+    toast("Error while updating this player's coins.");
+  });
+}
+
+/* Corrige/force la date d'expiration VIP d'un joueur — utile pour rattraper
+   un compte dont la durée avait été mal calculée (ex : achats répétés qui
+   s'empilaient avant le correctif anti-rachat). */
+function modSetPlayerVIP(){
+  if(!isAdmin() || !db) return;
+  const userInput = document.getElementById("modVipUsername");
+  const daysInput = document.getElementById("modVipDays");
+  const username = userInput ? userInput.value.trim() : "";
+  const days = daysInput ? parseFloat(daysInput.value) : NaN;
+
+  if(!username){ toast("Enter a username."); return; }
+  if(isNaN(days) || days <= 0){ toast("Enter a valid number of days."); return; }
+
+  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
+  if(!target){ toast("This player doesn't exist."); return; }
+
+  const newUntil = Date.now() + Math.round(days) * 24 * 60 * 60 * 1000;
+
+  db.collection("users").doc(target.uid).update({ vipUntil: newUntil }).then(() => {
+    toast(`👑 ${target.username}'s VIP now expires in ${Math.round(days)} days.`);
+    if(target.uid === currentUid){
+      state.vipUntil = newUntil;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderHeaderUI();
+    }
+  }).catch(err => {
+    console.warn(err);
+    toast("Error while updating this player's VIP.");
+  });
+}
+
+function modRemovePlayerVIP(){
+  if(!isAdmin() || !db) return;
+  const userInput = document.getElementById("modVipUsername");
+  const username = userInput ? userInput.value.trim() : "";
+  if(!username){ toast("Enter a username."); return; }
+
+  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
+  if(!target){ toast("This player doesn't exist."); return; }
+
+  db.collection("users").doc(target.uid).update({ vipUntil: null }).then(() => {
+    toast(`VIP removed from ${target.username}.`);
+    if(target.uid === currentUid){
+      state.vipUntil = null;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderHeaderUI();
+    }
+  }).catch(err => {
+    console.warn(err);
+    toast("Error while updating this player's VIP.");
+  });
+}
+
 /* --- Pouvoirs modérateur : gestion des joueurs (ban / coins) --- */
 function modFindUser(query){
   const q = (query || "").trim().toLowerCase();
@@ -2908,6 +3149,39 @@ function modSearchEpicUsers(){
   `).join("");
 }
 
+/* Délie le compte Discord d'un joueur (seuls les modérateurs peuvent le
+   faire désormais — un joueur ne peut plus se délier lui-même, ça servait
+   à changer de compte pour contourner un ban). */
+function modUnlinkPlayerDiscord(){
+  if(!isAdmin() || !db) return;
+  const userInput = document.getElementById("modDiscordUsername");
+  const username = userInput ? userInput.value.trim() : "";
+  if(!username){ toast("Enter a username."); return; }
+
+  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
+  if(!target){ toast("This player doesn't exist."); return; }
+  if(!confirm(`Unlink ${target.username}'s Discord account?`)) return;
+
+  db.collection("users").doc(target.uid).update({
+    discordId: null,
+    discordUsername: null,
+    discordAvatar: null
+  }).then(() => {
+    toast(`${target.username}'s Discord account has been unlinked.`);
+    if(userInput) userInput.value = "";
+    if(target.uid === currentUid){
+      state.discordId = null;
+      state.discordUsername = null;
+      state.discordAvatar = null;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      render();
+    }
+  }).catch(err => {
+    console.warn(err);
+    toast("Error while unlinking this player's Discord.");
+  });
+}
+
 function modResetEpicLock(uid, username){
   if(!isAdmin() || !db || !uid) return;
   if(!confirm(`Unlock ${username}'s Epic username so they can set a new one?`)) return;
@@ -2975,6 +3249,103 @@ function confirmModBan(){
       modSearchUsers();
     })
     .catch(err => { console.warn(err); toast("Error while banning."); });
+}
+
+/* =========================================================
+   CHEATER REPORT — un joueur (host ou guest) peut signaler son
+   adversaire pendant un match verrouillé. Ça gèle le match (plus de
+   déclaration de résultat possible) jusqu'à ce qu'un modérateur tranche.
+========================================================= */
+let pendingCheaterReportMatchId = null;
+
+function openCheaterReportModal(matchId){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match) return;
+  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  if(!hostPlayers.includes(state.username) && !guestPlayers.includes(state.username)){
+    toast("Only match participants can file a report.");
+    return;
+  }
+  if(match.cheaterReport && match.cheaterReport.status === "pending"){
+    toast("A report has already been filed for this match.");
+    return;
+  }
+  pendingCheaterReportMatchId = matchId;
+  document.getElementById("cheaterReportOverlay").classList.add("open");
+}
+
+function closeCheaterReportModal(){
+  document.getElementById("cheaterReportOverlay").classList.remove("open");
+  pendingCheaterReportMatchId = null;
+}
+
+function openVipInfoModal(){
+  document.getElementById("vipInfoOverlay").classList.add("open");
+}
+function closeVipInfoModal(){
+  document.getElementById("vipInfoOverlay").classList.remove("open");
+}
+
+function confirmCheaterReport(){
+  const matchId = pendingCheaterReportMatchId;
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match){ closeCheaterReportModal(); return; }
+
+  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
+  const amHost = hostPlayers.includes(state.username);
+  const amGuest = guestPlayers.includes(state.username);
+  if(!amHost && !amGuest){ closeCheaterReportModal(); return; }
+
+  const against = amHost ? guestPlayers : hostPlayers;
+
+  match.cheaterReport = {
+    by: state.username,
+    against,
+    at: Date.now(),
+    status: "pending"
+  };
+
+  pushMatchToCloud(match);
+  closeCheaterReportModal();
+  toast("🚨 Report sent — the match is now frozen for review. Please open a ticket on our Discord with your proof!");
+  render();
+}
+
+/* Modérateur : classe le signalement sans sanction (match débloqué, le
+   déroulement normal du résultat reprend). */
+function modDismissCheaterReport(matchId){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match || !isAdmin()) return;
+  if(!confirm("Dismiss this report? The match will unfreeze and continue normally.")) return;
+  match.cheaterReport.status = "dismissed";
+  match.cheaterReport.resolvedBy = state.username;
+  match.cheaterReport.resolvedAt = Date.now();
+  pushMatchToCloud(match);
+  toast("Report dismissed — the match can continue.");
+  render();
+}
+
+/* Modérateur : signalement confirmé — ouvre directement la fenêtre de ban
+   sur le(s) joueur(s) signalé(s) (le premier si plusieurs, cas 2v2+). */
+function modConfirmCheaterReport(matchId){
+  const match = state.matches.find(m => m.id === matchId);
+  if(!match || !isAdmin()) return;
+  const against = (match.cheaterReport && match.cheaterReport.against) || [];
+  const targetUsername = against[0];
+  if(!targetUsername){ toast("No reported player found on this match."); return; }
+  const target = allPlayersCache.find(p => p.username === targetUsername);
+  if(!target){ toast("Couldn't find this player's account."); return; }
+
+  // Action destructrice (ban) — on demande une confirmation explicite pour
+  // éviter qu'un simple mis-clic bannisse quelqu'un par erreur.
+  if(!confirm(`Are you sure you want to ban ${target.username}? This will permanently ban their account.`)) return;
+
+  match.cheaterReport.status = "confirmed";
+  match.cheaterReport.resolvedBy = state.username;
+  match.cheaterReport.resolvedAt = Date.now();
+  pushMatchToCloud(match);
+
+  modBanUser(target.uid, target.username);
 }
 
 function modUnbanUser(uid, username){
@@ -3084,8 +3455,9 @@ setInterval(function(){
   if(!el) return;
   const claimedAt = Number(el.getAttribute("data-claimed-at"));
   if(!claimedAt) return;
+  const timerMs = Number(el.getAttribute("data-timer-ms")) || VICTORY_TIMER_MS;
 
-  const remaining = VICTORY_TIMER_MS - (Date.now() - claimedAt);
+  const remaining = timerMs - (Date.now() - claimedAt);
   if(remaining <= 0){
     el.textContent = "00:00";
     if(checkVictoryTimers()){ save(); render(); }
@@ -3281,7 +3653,8 @@ function checkVictoryTimers(){
   (state.matches || []).forEach(match => {
     if(!match.victoryClaim || match.disputed || match.completed) return;
     const elapsed = Date.now() - match.victoryClaim.at;
-    if(elapsed < VICTORY_TIMER_MS) return;
+    const timerMs = match.victoryClaim.timerMs || VICTORY_TIMER_MS;
+    if(elapsed < timerMs) return;
 
     const claimant = match.victoryClaim.by;
     const { hostPlayers, guestPlayers } = matchTeamsOf(match);
@@ -3320,6 +3693,10 @@ function declareResult(matchId, type){
     toast("You're only spectating this match — you can't submit a result.");
     return;
   }
+  if(match.cheaterReport && match.cheaterReport.status === "pending"){
+    toast("This match is under review — you can't submit a result right now.");
+    return;
+  }
   const myTeam = hostPlayers.includes(state.username) ? hostPlayers : guestPlayers;
   const otherTeam = hostPlayers.includes(state.username) ? guestPlayers : hostPlayers;
 
@@ -3350,8 +3727,12 @@ function declareResult(matchId, type){
     return;
   }
 
-  match.victoryClaim = { by: state.username, at: Date.now() };
-  toast("Victory declared! Your opponent has 15 minutes to respond, otherwise it's confirmed automatically.");
+  // Un joueur VIP profite d'une confirmation automatique accélérée (5 min
+  // au lieu de 15) — le délai est fixé au moment de la déclaration, sur le
+  // statut VIP du DÉCLARANT (peu importe si l'adversaire est VIP ou non).
+  const claimTimerMs = isVIP() ? VIP_VICTORY_TIMER_MS : VICTORY_TIMER_MS;
+  match.victoryClaim = { by: state.username, at: Date.now(), timerMs: claimTimerMs };
+  toast(`Victory declared! Your opponent has ${claimTimerMs === VIP_VICTORY_TIMER_MS ? '5' : '15'} minutes to respond, otherwise it's confirmed automatically.`);
   pushMatchToCloud(match);
   render();
 }
@@ -3399,7 +3780,7 @@ function renderLobbyChatMessages(lobby){
     <div class="lobby-chat-msg ${m.user === state.username ? 'me' : ''}">
       ${chatAvatarHTML(m.user)}
       <div class="lobby-chat-msg-col">
-        <div class="lobby-chat-msg-meta"><span class="lobby-chat-msg-name">${escapeHTML(m.user)}</span>${isUsernameAdmin(m.user) ? ' <span class="mod-badge" title="Moderator">🛡️</span>' : ''} · ${m.time}</div>
+        <div class="lobby-chat-msg-meta"><span class="lobby-chat-msg-name">${vipNameHTML(m.user)}</span>${isUsernameAdmin(m.user) ? ' <span class="mod-badge" title="Moderator">🛡️</span>' : ''} · ${m.time}</div>
         <div class="lobby-chat-msg-bubble">${escapeHTML(m.text)}</div>
       </div>
       ${isAdmin() ? `<button class="mod-chat-delete" title="Delete message" onclick="modDeleteLobbyMessage('${lobby.id}', ${i})">✕</button>` : ''}
@@ -3439,6 +3820,15 @@ function renderResultSection(lobby){
   const { hostPlayers: rsHostPlayers, guestPlayers: rsGuestPlayers } = matchTeamsOf(lobby);
   const myTeam = rsHostPlayers.includes(state.username) ? rsHostPlayers : rsGuestPlayers;
   const isParticipant = rsHostPlayers.includes(state.username) || rsGuestPlayers.includes(state.username);
+
+  if(lobby.cheaterReport && lobby.cheaterReport.status === "pending"){
+    return `
+      <div style="padding:20px; background:rgba(255,77,94,.06); border-top:1px solid var(--line); text-align:center;">
+        <h3 style="color:var(--red); margin-bottom:6px;">🚨 Match Under Review</h3>
+        <p style="color:var(--muted); font-size:11px;">A cheater report was filed on this match. It's frozen until a moderator reviews it — make sure a ticket has been opened on Discord with proof.</p>
+      </div>
+    `;
+  }
 
   if(lobby.completed){
     const myResult = (lobby.results || {})[state.username];
@@ -3494,9 +3884,9 @@ function renderResultSection(lobby){
   }
 
   if(lobby.victoryClaim){
-    const remainingMs = Math.max(0, VICTORY_TIMER_MS - (Date.now() - lobby.victoryClaim.at));
+    const remainingMs = Math.max(0, (lobby.victoryClaim.timerMs || VICTORY_TIMER_MS) - (Date.now() - lobby.victoryClaim.at));
     const isClaimant = lobby.victoryClaim.by === state.username || myTeam.includes(lobby.victoryClaim.by);
-    const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${lobby.victoryClaim.at}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
+    const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${lobby.victoryClaim.at}" data-timer-ms="${lobby.victoryClaim.timerMs || VICTORY_TIMER_MS}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
 
     if(!isParticipant){
       return `
@@ -3589,6 +3979,7 @@ if(state.customAvatar === undefined) state.customAvatar = null;
 if(state.snipes === undefined) state.snipes = 0;
 if(!state.snipedMatches) state.snipedMatches = [];
 if(state.lastWheelSpin === undefined) state.lastWheelSpin = null;
+if(state.vipUntil === undefined) state.vipUntil = null;
 
 // Reset économie forcé (mode local/hors-ligne, sans compte Firebase) : une seule fois.
 if((state.ecoResetVersion || 0) < 3){
@@ -3626,6 +4017,7 @@ function save(){
       history: state.history,
       ecoResetVersion: ECO_RESET_VERSION,
       lastWheelSpin: state.lastWheelSpin || null,
+      vipUntil: state.vipUntil || null,
       discordId: state.discordId || null,
       discordUsername: state.discordUsername || null,
       discordAvatar: state.discordAvatar || null,
@@ -4438,6 +4830,27 @@ function setPage(page){
 document.querySelectorAll(".nav button").forEach(btn => btn.addEventListener("click", () => setPage(btn.dataset.page)));
 
 /* SIDEBAR COLLAPSE */
+let chatPanelCollapsed = false;
+(function initChatCollapse(){
+  try{ chatPanelCollapsed = localStorage.getItem("chatPanelCollapsed") === "1"; }catch(e){}
+})();
+
+function toggleGlobalChatPanel(){
+  chatPanelCollapsed = !chatPanelCollapsed;
+  try{ localStorage.setItem("chatPanelCollapsed", chatPanelCollapsed ? "1" : "0"); }catch(e){}
+  applyChatCollapseState();
+}
+
+function applyChatCollapseState(){
+  const panel = document.getElementById("globalChatPanel");
+  const tab = document.getElementById("chatToggleTab");
+  if(panel) panel.classList.toggle("collapsed", chatPanelCollapsed);
+  const isLobby = (typeof currentPage !== "undefined") && currentPage === "lobby";
+  if(tab) tab.style.display = isLobby ? "none" : "flex";
+  const container = document.getElementById("content");
+  if(container && !isLobby) container.classList.toggle("content-full", chatPanelCollapsed);
+}
+
 function toggleSidebarCollapse(){
   const el = document.getElementById("sidebarEl");
   if(!el) return;
@@ -4742,7 +5155,7 @@ function renderChat(){
     <div class="chat-message">
       ${chatAvatarHTML(c.user)}
       <div class="chat-content">
-        <div class="chat-meta"><strong>${escapeHTML(c.user)}</strong>${isUsernameAdmin(c.user) ? ' <span class="mod-badge" title="Moderator">🛡️</span>' : ''}<span>${escapeHTML(c.time || "")}</span></div>
+        <div class="chat-meta"><strong>${vipNameHTML(c.user)}</strong>${isUsernameAdmin(c.user) ? ' <span class="mod-badge" title="Moderator">🛡️</span>' : ''}<span class="chat-time">${escapeHTML(c.time || "")}</span></div>
         <p>${escapeHTML(c.text)}</p>
       </div>
       ${isAdmin() ? `<button class="mod-chat-delete" title="Delete message" onclick="modDeleteGlobalMessage(${i})">✕</button>` : ''}
@@ -4818,12 +5231,20 @@ function renderHeaderUI(){
   const miniAvatar = document.getElementById("miniAvatar");
   miniAvatar.innerHTML = avatarInnerHTML(state.equippedAvatar);
   miniAvatar.setAttribute("style", avatarStyleAttr(state.equippedAvatar));
-  document.getElementById("miniUsername").textContent = state.username;
+  const miniUsernameEl = document.getElementById("miniUsername");
+  miniUsernameEl.textContent = state.username;
+  miniUsernameEl.style.color = isVIP() ? "var(--green)" : "";
+  const miniVipBadge = document.getElementById("miniVipBadge");
+  if(miniVipBadge) miniVipBadge.style.display = isVIP() ? "inline" : "none";
 
   const topAvatar = document.getElementById("topAvatar");
   topAvatar.innerHTML = avatarInnerHTML(state.equippedAvatar);
   topAvatar.setAttribute("style", avatarStyleAttr(state.equippedAvatar));
-  document.getElementById("topUsername").textContent = state.username;
+  const topUsernameEl = document.getElementById("topUsername");
+  topUsernameEl.textContent = state.username;
+  topUsernameEl.style.color = isVIP() ? "var(--green)" : "";
+  const vipBadge = document.getElementById("topVipBadge");
+  if(vipBadge) vipBadge.style.display = isVIP() ? "inline" : "none";
   document.getElementById("topRecord").innerHTML =
     `<b>${state.stats.wins}V</b> · <i>${state.stats.losses}D</i> · ${getWinRate()}%`;
 
@@ -4911,7 +5332,8 @@ function render(){
   const globalChatPanel = document.getElementById("globalChatPanel");
   const hideGlobalChat = (currentPage === "lobby");
   if(globalChatPanel) globalChatPanel.style.display = hideGlobalChat ? "none" : "flex";
-  container.classList.toggle("content-full", hideGlobalChat);
+  container.classList.toggle("content-full", hideGlobalChat || chatPanelCollapsed);
+  applyChatCollapseState();
   if(!hideGlobalChat) renderChat();
 
   if(currentPage === "home"){
@@ -5152,7 +5574,7 @@ function render(){
           <div class="avatar ${revealed ? 'clickable' : ''}" ${revealed ? `onclick="showPlayerStats('${username}')"` : ''} ${revealed ? `style="${avatarStyleAttr(isMe ? state.equippedAvatar : info.equippedAvatar)}"` : ''}>${revealed ? avatarInnerHTML(isMe ? state.equippedAvatar : info.equippedAvatar, username, isMe ? state.customAvatar : info.customAvatar) : "?"}</div>
           <div class="player-row-info">
             <div class="slot-name-row">
-              <div class="slot-name">${revealed ? escapeHTML(username) : "Anonymous Player"}</div>
+              <div class="slot-name">${revealed ? vipNameHTML(username) : "Anonymous Player"}</div>
             </div>
             <div class="slot-epic">
               ${revealed
@@ -5240,6 +5662,11 @@ function render(){
                 <span class="team-card-tag">${lobby.team ? escapeHTML(lobby.team.name) : 'TEAM'}</span>
               </div>
               ${hostSlotsHTML}
+              ${isGuest && lobby.locked && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
+                <div style="padding:8px 10px 10px; text-align:right;">
+                  <button class="report-cheater-btn" onclick="openCheaterReportModal('${lobby.id}')">🚨 Report</button>
+                </div>
+              ` : ''}
             </div>
 
             <div class="lobby-center">
@@ -5257,7 +5684,12 @@ function render(){
 
               ${!(isHost || isGuest) ? `
                 <span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">👁️ SPECTATING — VIEW ONLY</span>
-                ${lobby.locked ? `<span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">MATCH LOCKED</span>` : ''}
+                ${lobby.cheaterReport && lobby.cheaterReport.status === "pending"
+                  ? `<span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">🚨 UNDER REVIEW</span>`
+                  : lobby.locked ? `<span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">MATCH LOCKED</span>` : ''}
+              ` : (lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
+                <span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">🚨 MATCH UNDER REVIEW</span>
+                <p style="font-size:9px; color:var(--muted2); text-align:center; max-width:230px; line-height:1.6; margin:0;">This match is frozen while a moderator reviews the cheater report. Make sure a Discord ticket is open with your proof.</p>
               ` : !lobby.locked ? `
                 <button class="btn danger" onclick="leaveLobby()">Leave Lobby</button>
               ` : (!lobby.completed && !lobby.victoryClaim && !lobby.disputed) ? `
@@ -5272,7 +5704,7 @@ function render(){
 
               <div class="game-info-box">
                 <div class="game-info-row"><span>Status</span><strong>${lobby.locked ? "Locked" : (hasOpponent ? "Ready?" : "Waiting")}</strong></div>
-                <div class="game-info-row"><span>Host</span><strong>${hostNameRevealed ? escapeHTML(lobby.host) : "Hidden"}</strong></div>
+                <div class="game-info-row"><span>Host</span><strong>${hostNameRevealed ? vipNameHTML(lobby.host) : "Hidden"}</strong></div>
                 <div class="game-info-row"><span>Guests</span><strong>${hasOpponent ? guestPlayers.length : 0}/${maxPerSide}</strong></div>
               </div>
             </div>
@@ -5283,6 +5715,11 @@ function render(){
                 <span class="team-card-tag">TEAM</span>
               </div>
               ${guestSlotsHTML}
+              ${isHost && lobby.locked && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
+                <div style="padding:8px 10px 10px; text-align:right;">
+                  <button class="report-cheater-btn" onclick="openCheaterReportModal('${lobby.id}')">🚨 Report</button>
+                </div>
+              ` : ''}
             </div>
 
           </div>
@@ -5401,6 +5838,28 @@ function render(){
       </div>
 
       <div class="avatar-shop-grid">
+        <div class="avatar-card tier-vip">
+          <div class="avatar-card-tier">Membership</div>
+          <button class="avatar-card-lock" title="View advantages" onclick="event.stopPropagation(); openVipInfoModal();" style="left:6px; right:auto; cursor:pointer; padding:0; background:rgba(246,183,60,.18); border-color:rgba(246,183,60,.4); z-index:2;">ℹ️</button>
+          <div class="avatar-card-media" style="background:linear-gradient(135deg,#5a4413,#241c08);">
+            <span style="font-size:38px; filter:drop-shadow(0 0 6px rgba(246,183,60,.55));">👑</span>
+          </div>
+          <div class="avatar-card-body">
+            <strong>VIP — 1 Month</strong>
+            ${isVIP() ? `<div style="font-size:9px; color:var(--green); margin:2px 0;">👑 Until ${new Date(state.vipUntil).toLocaleDateString("en-US", { day:"numeric", month:"short" })}</div>` : ''}
+            <div class="avatar-card-price">
+              <span class="coin-dot"></span>
+              <span>${formatCoins(VIP_COST_COINS)}</span>
+            </div>
+            <div class="avatar-card-actions">
+              ${isVIP()
+                ? `<button class="btn equipped" disabled>✓ Active</button>`
+                : `<button class="btn" style="background:linear-gradient(135deg,var(--gold),#d99a1f); color:#241c08; border:0;" onclick="buyVIP()">Get VIP</button>`
+              }
+            </div>
+          </div>
+        </div>
+
         <div class="avatar-card tier-snipe">
           <div class="avatar-card-tier">Item</div>
           <div class="avatar-card-media" style="background:linear-gradient(135deg,#3a0d10,#0d0303);">
@@ -5485,8 +5944,16 @@ function render(){
           <button class="avatar-edit-badge" onclick="openAvatarPicker()" title="Change my avatar">✎</button>
         </div>
         <div class="profile-head-info">
-          <strong>${escapeHTML(state.username)}</strong>
+          <strong>${isVIP() ? `<span class="vip-name-wrap"><span class="vip-crown">👑</span><span>${escapeHTML(state.username)}</span></span>` : escapeHTML(state.username)}</strong>
           <span>Epic Games: ${escapeHTML(state.epic || "Not linked")} · Member since ${joinedLabel}</span>
+        </div>
+        <div style="margin-left:auto; text-align:right;">
+          ${isVIP()
+            ? `<div style="display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:20px; background:rgba(0,255,136,.1); border:1px solid rgba(0,255,136,.35); color:var(--green); font-size:11px; font-weight:800;">👑 VIP</div>
+               <div style="margin-top:5px; font-size:9px; color:var(--muted);">Until ${new Date(state.vipUntil).toLocaleDateString("en-US", { day:"numeric", month:"short", year:"numeric" })}</div>`
+            : `<div style="display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:20px; background:rgba(255,255,255,.04); border:1px solid var(--line); color:var(--muted); font-size:11px; font-weight:800;">No VIP</div>
+               <div style="margin-top:5px;"><a href="#" onclick="event.preventDefault(); setPage('shop');" style="font-size:9px; color:var(--gold); text-decoration:underline;">Get VIP</a></div>`
+          }
         </div>
       </div>
 
@@ -5580,7 +6047,7 @@ function render(){
         <div class="podium-slot p${p.place}">
           <div class="podium-rank-badge">${p.place}</div>
           <div class="podium-avatar" style="${avatarStyleAttr(p.equippedAvatar || 'default')}">${avatarInnerHTML(p.equippedAvatar || 'default', p.name, p.customAvatar)}</div>
-          <div class="podium-name">${escapeHTML(p.name)}${p.isYou ? " (You)" : ""}</div>
+          <div class="podium-name">${vipNameHTML(p.name)}${p.isYou ? " (You)" : ""}</div>
           <div class="podium-tier"><span class="tier-pill ${tier.key}">${tier.label}</span></div>
           <div class="podium-stats">
             <div class="podium-stat"><strong>${p.wins}</strong><span>Wins</span></div>
@@ -5598,7 +6065,7 @@ function render(){
           <span class="rank-num ${p.place <= 3 ? 'top' : ''}">#${p.place}</span>
           <span class="rank-player">
             <span class="rank-player-avatar" style="${avatarStyleAttr(p.equippedAvatar || 'default')}">${avatarInnerHTML(p.equippedAvatar || 'default', p.name, p.customAvatar)}</span>
-            <span class="rank-player-name">${escapeHTML(p.name)}${p.isYou ? `<span class="rank-player-you">(You)</span>` : ""}</span>
+            <span class="rank-player-name">${vipNameHTML(p.name)}${p.isYou ? `<span class="rank-player-you">(You)</span>` : ""}</span>
           </span>
           <span class="rank-cell">${p.wins}</span>
           <span class="rank-cell muted">${p.played}</span>
@@ -5824,7 +6291,9 @@ function render(){
 
       <div class="setting-card" style="padding:20px;">
         <div style="border:1px solid var(--brand); background:rgba(0,255,136,0.06); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin-bottom:20px;">
-          <strong style="color:var(--brand);">FYI:</strong> A 5% fee applies to every tip. Send ${formatCoins(1)} and the player receives ${formatCoins(roundToCents(1 - 1 * 0.05))}.
+          <strong style="color:var(--brand);">FYI:</strong> ${isVIP()
+            ? `👑 You're VIP — your tips are sent with <strong style="color:#fff;">no fee</strong>.`
+            : `A 5% fee applies to every tip. Send ${formatCoins(1)} and the player receives ${formatCoins(roundToCents(1 - 1 * 0.05))}. <a href="#" onclick="event.preventDefault(); setPage('shop');" style="color:var(--gold);">Get VIP</a> to send tips fee-free.`}
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
           <div class="form-group">
@@ -5859,7 +6328,7 @@ function render(){
                   <span style="font-size:11px; color:var(--muted);">${escapeHTML(state.discordUsername || '')}</span>
                 </div>
               </div>
-              <button class="btn danger small" onclick="unlinkDiscord()">Unlink</button>
+              <span style="font-size:9px; color:var(--muted2); text-align:right; max-width:130px;">🔒 Locked — open a ticket on our Discord to request a change.</span>
             </div>
           ` : `
             <button class="btn" style="background:#5865F2; color:#fff;" onclick="linkDiscord()">Link Discord</button>
@@ -5897,6 +6366,9 @@ function render(){
         .filter(m => m.completed && m.proofs && Object.keys(m.proofs).length > 0)
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
         .slice(0, 5);
+      const cheaterReports = state.matches
+        .filter(m => m.cheaterReport && m.cheaterReport.status === "pending")
+        .sort((a, b) => (b.cheaterReport.at || 0) - (a.cheaterReport.at || 0));
 
       container.innerHTML = `
         ${isSuperAdmin() ? `
@@ -5946,6 +6418,36 @@ function render(){
         </div>
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">🎁 Give Coins to a Player</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Enter a username and an amount — it's credited to their account right away, even if they're offline.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" class="input" id="modGiveCoinsUsername" placeholder="Player username" style="flex:1; min-width:160px;">
+            <input type="number" class="input" id="modGiveCoinsAmount" placeholder="Amount" step="0.5" style="max-width:140px;">
+            <button class="btn green" style="flex:none;" onclick="modGivePlayerCoins()">Give Coins</button>
+          </div>
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">👑 Fix a Player's VIP</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Set VIP to expire in a given number of days from now (e.g. 30 for one month), or remove it entirely.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" class="input" id="modVipUsername" placeholder="Player username" style="flex:1; min-width:160px;">
+            <input type="number" class="input" id="modVipDays" placeholder="Days" value="30" min="1" style="max-width:120px;">
+            <button class="btn green" style="flex:none;" onclick="modSetPlayerVIP()">Set VIP</button>
+            <button class="btn danger" style="flex:none;" onclick="modRemovePlayerVIP()">Remove VIP</button>
+          </div>
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">🔗 Unlink a Player's Discord</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Players can no longer unlink their own Discord account (to prevent account-switching abuse). Use this to unlink one on request — they'll need to link a Discord account again before making changes that require it.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" class="input" id="modDiscordUsername" placeholder="Player username" style="flex:1; min-width:160px;">
+            <button class="btn danger" style="flex:none;" onclick="modUnlinkPlayerDiscord()">Unlink Discord</button>
+          </div>
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
           <h3 style="margin-bottom:6px; font-size:14px;">🔓 Reset a Player's Epic Username</h3>
           <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Search a player by their site username to unlock their Epic Games username — they'll be able to set a new one from Settings.</p>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
@@ -5974,6 +6476,34 @@ function render(){
               </div>
             </div>
           `).join("")}
+        </div>
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">🚨 Cheater Reports (${cheaterReports.length})</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:18px;">These matches are frozen while under review. Spectate to check the chat/lobby, then dismiss the report or ban the reported player.</p>
+
+          ${cheaterReports.length === 0 ? `
+            <div style="color:var(--muted2); font-size:11px; text-align:center; padding:20px;">No cheater reports pending. 🎉</div>
+          ` : cheaterReports.map(m => {
+            const against = (m.cheaterReport.against || []).join(", ") || "—";
+            return `
+              <div style="border:1px solid rgba(255,77,94,.35); border-radius:12px; padding:16px; margin-bottom:14px; background:rgba(255,77,94,.05);">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+                  <div>
+                    <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode || "—")} — ${escapeHTML(m.teamSize || "—")}</strong>
+                    <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${m.id}</div>
+                    <div style="color:var(--muted); font-size:10.5px; margin-top:6px;">Reported by <strong style="color:#fff;">${escapeHTML(m.cheaterReport.by)}</strong> against <strong style="color:var(--red);">${escapeHTML(against)}</strong></div>
+                  </div>
+                  <span style="font-size:9px; color:var(--muted2);">${new Date(m.cheaterReport.at).toLocaleString("en-US", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button class="btn blue small" onclick="enterMatchLobby('${m.id}')">Spectate Match</button>
+                  <button class="btn small" onclick="modDismissCheaterReport('${m.id}')">Dismiss Report</button>
+                  <button class="btn danger small" onclick="modConfirmCheaterReport('${m.id}')">Confirm &amp; Ban Reported Player</button>
+                </div>
+              </div>
+            `;
+          }).join("")}
         </div>
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
@@ -6116,6 +6646,52 @@ function doBuyResetStats(){
   save();
   renderHeaderUI();
   toast("Stats reset to 0-0! 🔄");
+  render();
+}
+
+function buyVIP(){
+  if(isVIP()){
+    const untilLabel = new Date(state.vipUntil).toLocaleDateString("en-US", { day:"numeric", month:"long", year:"numeric" });
+    toast(`👑 You already have VIP until ${untilLabel}. You can buy it again once it expires.`);
+    return;
+  }
+  openBuyConfirm(
+    "Get VIP",
+    `Get VIP for 30 days for ${formatCoins(VIP_COST_COINS)} coins? You'll get: no tip fees, +${VIP_SNIPE_BONUS} Snipes, a random bonus avatar, the Discord VIP role (open a ticket to get it), and a 5-minute victory confirmation timer instead of 15.`,
+    doBuyVIP
+  );
+}
+
+function doBuyVIP(){
+  if(isVIP()){
+    toast("You already have VIP.");
+    return;
+  }
+  if((state.coins || 0) < VIP_COST_COINS){
+    toast(`Not enough coins! VIP costs ${formatCoins(VIP_COST_COINS)} coins.`);
+    return;
+  }
+  state.coins = roundToHalf((state.coins || 0) - VIP_COST_COINS);
+  state.vipUntil = Date.now() + VIP_DURATION_MS;
+
+  state.snipes = (state.snipes || 0) + VIP_SNIPE_BONUS;
+
+  // Avatar bonus aléatoire parmi ceux pas encore possédés (comme la roue) —
+  // sinon quelques coins de consolation si tout est déjà débloqué.
+  let avatarMsg = "";
+  const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !state.ownedAvatars.includes(a.id));
+  if(unowned.length > 0){
+    const picked = unowned[Math.floor(Math.random() * unowned.length)];
+    state.ownedAvatars.push(picked.id);
+    avatarMsg = ` + new avatar: ${picked.name}`;
+  } else {
+    state.coins = roundToHalf((state.coins || 0) + 3);
+    avatarMsg = " + 3 coins (all avatars already owned)";
+  }
+
+  save();
+  renderHeaderUI();
+  toast(`👑 VIP activated for 30 days! +${VIP_SNIPE_BONUS} Snipes${avatarMsg}. Open a ticket on our Discord to get the VIP role.`);
   render();
 }
 
@@ -6762,7 +7338,8 @@ function sendTip(){
     return;
   }
 
-  const fee = roundToCents(amount * 0.05);
+  // Les membres VIP envoient leurs tips sans frais.
+  const fee = isVIP() ? 0 : roundToCents(amount * 0.05);
   const netReceived = roundToCents(amount - fee);
 
   state.coins = roundToCents((state.coins || 0) - amount);
@@ -6771,7 +7348,9 @@ function sendTip(){
   db.collection("users").doc(target.uid).update({
     coins: firebase.firestore.FieldValue.increment(netReceived)
   }).then(() => {
-    toast(`Tipped ${formatCoins(netReceived)} coins to ${target.username} (${formatCoins(fee)} fee).`);
+    toast(fee > 0
+      ? `Tipped ${formatCoins(netReceived)} coins to ${target.username} (${formatCoins(fee)} fee).`
+      : `👑 Tipped ${formatCoins(netReceived)} coins to ${target.username} — no fee (VIP)!`);
     if(amountInput) amountInput.value = "";
     if(usernameInput) usernameInput.value = "";
     render();
@@ -6834,17 +7413,6 @@ async function saveSettings(){
   toast("Saved! Your Epic username is now locked.");
   render();
 }
-
-function unlinkDiscord(){
-  if(!confirm("Unlink your Discord account? You'll need to link a Discord account again before making any changes that require it.")) return;
-  state.discordId = null;
-  state.discordUsername = null;
-  state.discordAvatar = null;
-  save();
-  toast("Discord unlinked.");
-  render();
-}
-
 
 /* =========================================================
    COMPTE — connexion / inscription (Firebase Authentication)
@@ -7028,6 +7596,7 @@ async function loadProfileAndStart(uid){
       state.snipes = (profile.snipes !== undefined) ? profile.snipes : state.snipes;
       state.history = profile.history || state.history;
       state.lastWheelSpin = (profile.lastWheelSpin !== undefined) ? profile.lastWheelSpin : state.lastWheelSpin;
+      state.vipUntil = (profile.vipUntil !== undefined) ? profile.vipUntil : state.vipUntil;
       // IMPORTANT : ces champs ne doivent JAMAIS retomber sur une ancienne
       // valeur en cache (state / localStorage) d'un compte précédemment
       // connecté sur ce navigateur. Sinon, un compte tout neuf pourrait
