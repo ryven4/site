@@ -1113,8 +1113,8 @@ button:active{ transform:scale(.97) !important; }
 .chat-meta{ display:inline; }
 .chat-meta strong{ font-size:13.5px; color:#fff; }
 .chat-meta strong .vip-name{ color:var(--green); }
-.vip-name-wrap{ display:inline-flex; align-items:center; gap:3px; color:var(--green); }
-.vip-crown{ display:inline-flex; align-items:center; justify-content:center; line-height:1; }
+.vip-name-wrap{ display:inline-flex !important; align-items:center !important; gap:3px !important; color:var(--green) !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; letter-spacing:normal !important; font-weight:inherit !important; }
+.vip-crown{ display:inline-flex !important; align-items:center !important; justify-content:center !important; line-height:1 !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; }
 .chat-meta > .chat-time{ display:none; }
 .chat-content p{ display:inline; color:#cbd5e1; font-size:13.5px; line-height:1.5; word-break:break-word; }
 .chat-content p::before{ content:" "; }
@@ -2825,7 +2825,7 @@ function isUsernameAdmin(username){
 function vipNameHTML(username){
   const name = escapeHTML(username);
   if(isVIP(username)){
-    return `<span class="vip-name vip-name-wrap"><span class="vip-crown">👑</span><span>${name}</span></span>`;
+    return `<span class="vip-name vip-name-wrap"><span class="vip-crown">👑</span>${name}</span>`;
   }
   return name;
 }
@@ -5944,7 +5944,7 @@ function render(){
           <button class="avatar-edit-badge" onclick="openAvatarPicker()" title="Change my avatar">✎</button>
         </div>
         <div class="profile-head-info">
-          <strong>${isVIP() ? `<span class="vip-name-wrap"><span class="vip-crown">👑</span><span>${escapeHTML(state.username)}</span></span>` : escapeHTML(state.username)}</strong>
+          <strong>${isVIP() ? `<span class="vip-name-wrap"><span class="vip-crown">👑</span>${escapeHTML(state.username)}</span>` : escapeHTML(state.username)}</strong>
           <span>Epic Games: ${escapeHTML(state.epic || "Not linked")} · Member since ${joinedLabel}</span>
         </div>
         <div style="margin-left:auto; text-align:right;">
@@ -5990,6 +5990,13 @@ function render(){
           <span>Win Rate</span>
           <strong class="green">${winrate}%</strong>
           <div class="bar-track"><div class="bar-fill" style="width:${winrate}%;"></div></div>
+        </div>
+        <div class="profile-stat-tile">
+          <span>VIP Status</span>
+          ${isVIP()
+            ? `<strong class="green">👑 VIP</strong>`
+            : `<strong style="color:var(--muted2); font-size:15px;">No VIP</strong>`
+          }
         </div>
       </div>
 
