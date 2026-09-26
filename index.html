@@ -3720,6 +3720,7 @@ function initCloudSync(){
     if(applyPendingCancelRefundsForMe()) changed = true;
     if(checkVictoryTimers()) changed = true;
     if(checkMatchLocks().length > 0) changed = true;
+    if(checkExpiredMatches()) changed = true;
     if(changed) save();
 
     render();
@@ -3732,6 +3733,7 @@ function initCloudSync(){
     if(applyPendingCancelRefundsForMe()) changed = true;
     if(checkVictoryTimers()) changed = true;
     if(checkMatchLocks().length > 0) changed = true;
+    if(checkExpiredMatches()) changed = true;
     if(changed){ save(); render(); }
   }, 30000);
 }
@@ -3764,6 +3766,31 @@ function checkMatchLocks(){
     }
   });
   return lockedIds;
+}
+
+/* Un match OPEN (jamais verrouillé, donc personne n'a rejoint et complété
+   l'équipe adverse) qui dépasse son délai de 30 min (MATCH_TTL_MS) doit
+   disparaître tout seul — jusqu'ici seul le compte à rebours affiché
+   arrivait à 0 sans que rien ne se passe derrière. On l'annule (comme un
+   "Quit Match" automatique) plutôt que de le supprimer brutalement : le
+   host avait déjà payé sa mise à la création (voir escrowedBy plus haut),
+   donc processCancelRefundForMe() se charge de la lui rendre au prochain
+   cycle de sync, avant que le match ne soit vraiment effacé du serveur.
+   N'importe quel client encore ouvert peut détecter l'expiration (pas
+   besoin que ce soit le host) : c'est le même principe que checkVictoryTimers. */
+function checkExpiredMatches(){
+  let changed = false;
+  const now = Date.now();
+  (state.matches || []).forEach(match => {
+    if(match.completed || match.cancelled || match.locked || match.tournamentId) return;
+    const createdAt = match.createdAt || now;
+    if(now - createdAt >= MATCH_TTL_MS){
+      match.cancelled = true;
+      pushMatchToCloud(match);
+      changed = true;
+    }
+  });
+  return changed;
 }
 
 /* =========================================================
