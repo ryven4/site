@@ -7,11 +7,11 @@
 
 <style>
 :root{
-  --bg:#070a10;
-  --bg2:#0a0e17;
-  --panel:#0f141f;
-  --panel2:#141b29;
-  --panel3:#1a2233;
+  --bg:#0a0e15;
+  --bg2:#0d1220;
+  --panel:#131a28;
+  --panel2:#182133;
+  --panel3:#212b41;
   --line:rgba(255,255,255,.08);
   --line2:rgba(255,255,255,.14);
 
@@ -60,8 +60,9 @@ html{ scroll-behavior:smooth; }
 body{
   min-height:100vh;
   background:
-    radial-gradient(circle at 15% 0%, rgba(0,255,136,.14), transparent 40%),
-    radial-gradient(circle at 90% 10%, rgba(0,229,255,.08), transparent 35%),
+    radial-gradient(circle at 15% 0%, rgba(0,255,136,.22), transparent 42%),
+    radial-gradient(circle at 90% 8%, rgba(0,229,255,.14), transparent 38%),
+    radial-gradient(circle at 50% 100%, rgba(169,112,255,.10), transparent 45%),
     linear-gradient(180deg, var(--bg), var(--bg2));
   color:var(--text);
   font-family:Inter,Arial,Helvetica,sans-serif;
@@ -106,10 +107,10 @@ button:active{ transform:scale(.97) !important; }
   will-change:transform;
 }
 
-.bg-orb.o1{ width:420px; height:420px; left:-8%; top:-6%; background:radial-gradient(circle, rgba(0,255,136,.4), transparent 70%); animation:orbFloat1 22s ease-in-out infinite; }
-.bg-orb.o2{ width:520px; height:520px; right:-10%; top:8%; background:radial-gradient(circle, rgba(0,229,255,.3), transparent 70%); animation:orbFloat2 26s ease-in-out infinite; }
-.bg-orb.o3{ width:380px; height:380px; left:20%; bottom:-12%; background:radial-gradient(circle, rgba(169,112,255,.22), transparent 70%); animation:orbFloat3 30s ease-in-out infinite; }
-.bg-orb.o4{ width:300px; height:300px; right:12%; bottom:-6%; background:radial-gradient(circle, rgba(0,255,136,.25), transparent 70%); animation:orbFloat1 24s ease-in-out infinite reverse; }
+.bg-orb.o1{ width:460px; height:460px; left:-8%; top:-6%; background:radial-gradient(circle, rgba(0,255,136,.55), transparent 70%); animation:orbFloat1 22s ease-in-out infinite; }
+.bg-orb.o2{ width:560px; height:560px; right:-10%; top:8%; background:radial-gradient(circle, rgba(0,229,255,.42), transparent 70%); animation:orbFloat2 26s ease-in-out infinite; }
+.bg-orb.o3{ width:420px; height:420px; left:20%; bottom:-12%; background:radial-gradient(circle, rgba(169,112,255,.32), transparent 70%); animation:orbFloat3 30s ease-in-out infinite; }
+.bg-orb.o4{ width:340px; height:340px; right:12%; bottom:-6%; background:radial-gradient(circle, rgba(0,255,136,.35), transparent 70%); animation:orbFloat1 24s ease-in-out infinite reverse; }
 
 @keyframes orbFloat1{
   0%,100%{ transform:translate(0,0) scale(1); }
@@ -799,8 +800,8 @@ button:active{ transform:scale(.97) !important; }
 }
 
 .hero-card{
-  border:1px solid var(--line);
-  background:rgba(8,13,20,.8);
+  border:1px solid var(--line2);
+  background:linear-gradient(160deg, rgba(0,255,136,.06), transparent 55%), rgba(19,26,40,.85);
   backdrop-filter:blur(10px);
   padding:16px;
   border-radius:12px;
@@ -1112,8 +1113,8 @@ button:active{ transform:scale(.97) !important; }
 .chat-content{ min-width:0; }
 .chat-meta{ display:inline; }
 .chat-meta strong{ font-size:13.5px; color:#fff; }
-.chat-meta strong .vip-name{ color:var(--green); }
-.vip-name-wrap{ display:inline-flex !important; align-items:center !important; gap:3px !important; color:var(--green) !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; letter-spacing:normal !important; font-weight:inherit !important; }
+.chat-meta strong .vip-name{ color:var(--gold); }
+.vip-name-wrap{ display:inline-flex !important; align-items:center !important; gap:3px !important; color:var(--gold) !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; letter-spacing:normal !important; font-weight:inherit !important; }
 .vip-crown{ display:inline-flex !important; align-items:center !important; justify-content:center !important; line-height:1 !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; }
 .chat-meta > .chat-time{ display:none; }
 .chat-content p{ display:inline; color:#cbd5e1; font-size:13.5px; line-height:1.5; word-break:break-word; }
@@ -2056,7 +2057,7 @@ button:active{ transform:none !important; }
 .brand-mark, .footer-brand .brand-mark{ filter:none !important; }
 
 /* ---------- Sidebar ---------- */
-.sidebar{ background:#0e1013; border-right:1px solid var(--line); }
+.sidebar{ background:linear-gradient(180deg, #10141c, #0c0f15); border-right:1px solid var(--line); }
 .brand{ border-bottom-color:var(--line); }
 .brand-text{ font-weight:800; letter-spacing:-.02em; }
 .nav-label{ font-size:10px; font-weight:600; letter-spacing:.08em; color:var(--muted2); }
@@ -2082,7 +2083,7 @@ button:active{ transform:none !important; }
 .profile-mini{ background:var(--panel); border:1px solid var(--line); box-shadow:none; }
 
 /* ---------- Topbar ---------- */
-.topbar{ background:rgba(11,13,16,.96); backdrop-filter:none; border-bottom:1px solid var(--line); height:64px; }
+.topbar{ background:rgba(13,17,24,.85); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); height:64px; }
 .page-title{ font-size:12px; font-weight:500; letter-spacing:.04em; color:var(--muted2); }
 .page-title strong{ font-weight:600; }
 .topbar-search input{ height:36px; border-radius:8px; background:var(--panel); font-size:12px; }
@@ -2124,8 +2125,8 @@ button:active{ transform:none !important; }
 .btn .ic{ font-size:15px; }
 
 /* ---------- Panneaux / cartes ---------- */
-.panel, .hero, .match-card, .lobby-main, .setting-card, .profile-card, .ranking-table,
-.profile-head-card, .profile-stat-tile, .profile-recent, .quick-stat, .hero-card, .matches-tabs, .matches-filters,
+.panel, .match-card, .lobby-main, .setting-card, .profile-card, .ranking-table,
+.profile-head-card, .profile-stat-tile, .profile-recent, .quick-stat, .matches-tabs, .matches-filters,
 .shop-banner, .avatar-card, .team-card, .game-info-box, .lobby-tag, .rank-list, .podium-slot{
   box-shadow:none !important;
 }
@@ -2135,15 +2136,25 @@ button:active{ transform:none !important; }
 
 /* Accueil */
 .hero{
-  background:var(--panel); border:1px solid var(--line); border-radius:16px;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(0,255,136,.16), transparent 45%),
+    radial-gradient(circle at 95% 15%, rgba(0,229,255,.10), transparent 45%),
+    linear-gradient(150deg, #161f30 0%, #0e1420 100%);
+  border:1px solid var(--line2); border-radius:16px;
   min-height:calc(100vh - 190px);
+  box-shadow:0 20px 60px rgba(0,0,0,.45), 0 0 60px rgba(0,255,136,.06) !important;
 }
 .eyebrow{ color:var(--green); font-size:11px; font-weight:600; letter-spacing:.12em; }
 .eyebrow i{ background:var(--green); }
 .hero h1{ font-weight:800; letter-spacing:-.035em; font-size:56px; line-height:1; }
 .hero p{ color:var(--muted); font-size:15px; }
 .hero-logo-wrap img{ filter:none; animation:none; }
-.hero-card{ background:var(--panel2); backdrop-filter:none; border:1px solid var(--line); }
+.hero-card{
+  background:linear-gradient(160deg, rgba(0,255,136,.07), transparent 55%), rgba(24,33,51,.9);
+  backdrop-filter:blur(10px);
+  border:1px solid var(--line2);
+  box-shadow:0 10px 30px rgba(0,0,0,.35) !important;
+}
 .hero-card-label{ font-weight:600; letter-spacing:.08em; font-size:10px; }
 .hero-card-value{ font-weight:700; }
 .hero-card-row{ font-size:13px; }
@@ -3586,7 +3597,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
       <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:18px; color:var(--green); display:inline-flex; margin-top:1px;"><i data-ic="palette"></i></span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">Random bonus avatar</strong><br>Unlock a random avatar from the shop for free.</span></li>
       <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:18px; color:var(--green); display:inline-flex; margin-top:1px;"><i data-ic="discord"></i></span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">Discord VIP role (open a ticket)</strong><br>Open a ticket on our Discord after purchasing to get the VIP role on the server.</span></li>
       <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:18px; color:var(--green); display:inline-flex; margin-top:1px;"><i data-ic="timer"></i></span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">Faster victory timer</strong><br>5 minutes to confirm a victory instead of 15.</span></li>
-      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:18px; color:var(--green); display:inline-flex; margin-top:1px;"><i data-ic="crown"></i></span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">VIP name in chat</strong><br>Your name shows in green with a crown everywhere.</span></li>
+      <li style="display:flex; gap:10px; align-items:flex-start;"><span style="font-size:18px; color:var(--gold); display:inline-flex; margin-top:1px;"><i data-ic="crown"></i></span><span style="font-size:11.5px; color:#e6edf3; line-height:1.5;"><strong style="color:#fff;">VIP name in chat</strong><br>Your name shows in gold with a crown everywhere.</span></li>
     </ul>
   </div>
   <div class="modal-footer">
@@ -7172,7 +7183,7 @@ function renderHeaderUI(){
   miniAvatar.setAttribute("style", avatarStyleAttr(state.equippedAvatar));
   const miniUsernameEl = document.getElementById("miniUsername");
   miniUsernameEl.textContent = state.username;
-  miniUsernameEl.style.color = isVIP() ? "var(--green)" : "";
+  miniUsernameEl.style.color = isVIP() ? "var(--gold)" : "";
   const miniVipBadge = document.getElementById("miniVipBadge");
   if(miniVipBadge) miniVipBadge.style.display = isVIP() ? "inline" : "none";
 
@@ -7183,7 +7194,7 @@ function renderHeaderUI(){
   if(topRankEl) topRankEl.innerHTML = rankBadgeHTML(state.username, 16);
   const topUsernameEl = document.getElementById("topUsername");
   topUsernameEl.textContent = state.username;
-  topUsernameEl.style.color = isVIP() ? "var(--green)" : "";
+  topUsernameEl.style.color = isVIP() ? "var(--gold)" : "";
   const vipBadge = document.getElementById("topVipBadge");
   if(vipBadge) vipBadge.style.display = isVIP() ? "inline" : "none";
   document.getElementById("topRecord").innerHTML =
