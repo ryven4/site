@@ -2158,6 +2158,8 @@ button:active{ transform:none !important; }
 .chat-form input, .lobby-chat-form input{ height:38px; background:var(--panel); border-color:var(--line2); font-size:13px; }
 .chat-avatar{ background:var(--panel3); border:0; color:var(--muted); }
 .mod-badge{ color:#8fb8ff; display:inline-flex; vertical-align:-.1em; font-size:12px; }
+.warn-badge{ display:inline-flex; align-items:center; gap:2px; vertical-align:-.15em; font-size:9px; font-weight:900; color:#ffb020; background:rgba(255,176,32,.12); border:1px solid rgba(255,176,32,.4); border-radius:6px; padding:1px 5px 1px 4px; }
+.warn-badge svg{ width:10px; height:10px; }
 .mod-chat-delete{ display:inline-flex; align-items:center; justify-content:center; font-size:10px; background:transparent; border-color:transparent; color:var(--muted2); opacity:.7; }
 .mod-chat-delete:hover{ color:var(--red); background:rgba(240,82,95,.1); }
 
@@ -3313,6 +3315,27 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 </div>
 
 <!-- =========================
+     MOD: WARN REASON MODAL
+========================= -->
+<div class="overlay" id="warnReasonOverlay">
+<div class="modal" style="width:min(420px,100%);">
+  <div class="modal-head">
+    <h2 id="warnReasonTitle">Warn Player</h2>
+    <button class="close" onclick="closeWarnReasonModal()">×</button>
+  </div>
+  <div style="padding:20px;">
+    <label style="display:block; font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Reason for warning</label>
+    <textarea id="warnReasonInput" class="input" rows="4" placeholder="e.g. Insults in chat, no-show, minor rule breach..." style="width:100%; resize:vertical; font-family:inherit; height:auto;"></textarea>
+    <p style="color:var(--muted); font-size:10.5px; margin-top:10px;">At 3 warnings, the player is automatically banned for 7 days and their counter resets to 0.</p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn" onclick="closeWarnReasonModal()">Cancel</button>
+    <button class="btn" style="background:rgba(255,176,32,.14); border-color:rgba(255,176,32,.45); color:#ffb020;" onclick="confirmModWarn()">Warn Player</button>
+  </div>
+</div>
+</div>
+
+<!-- =========================
      CHEATER REPORT MODAL
 ========================= -->
 <div class="overlay" id="cheaterReportOverlay">
@@ -4178,25 +4201,33 @@ function modSearchUsers(){
     box.innerHTML = `<div style="color:var(--muted2); font-size:10px; padding:10px 0;">No player found.</div>`;
     return;
   }
-  box.innerHTML = results.map(p => `
+  box.innerHTML = results.map(p => {
+    const warnings = p.warnings || 0;
+    const tempBanned = !p.banned && p.banUntil && p.banUntil > Date.now();
+    const tempBanLabel = tempBanned ? new Date(p.banUntil).toLocaleString("en-US", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+    return `
     <div class="stats-history-row">
       <div style="display:flex; align-items:center; gap:8px;">
         <div class="chat-avatar" style="${avatarStyleAttr(p.equippedAvatar || 'default')}">${avatarInnerHTML(p.equippedAvatar || 'default', p.username, p.customAvatar)}</div>
         <div>
-          <span class="stats-history-mode">${escapeHTML(p.username)}${isUsernameAdmin(p.username) ? ' <span class="mod-badge">' + icon('shieldCheck') + '</span>' : ''}${p.banned ? ' <span style="color:var(--red); font-size:9px; font-weight:900;">BANNED</span>' : ''}</span>
+          <span class="stats-history-mode">${escapeHTML(p.username)}${isUsernameAdmin(p.username) ? ' <span class="mod-badge">' + icon('shieldCheck') + '</span>' : ''}${p.banned ? ' <span style="color:var(--red); font-size:9px; font-weight:900;">BANNED</span>' : ''}${tempBanned ? ' <span style="color:var(--red); font-size:9px; font-weight:900;">TEMP BANNED</span>' : ''}${warnings > 0 ? ` <span class="warn-badge" title="${warnings} warning${warnings > 1 ? 's' : ''} — 3 = 7-day ban">${icon('alert')} ${warnings}/3</span>` : ''}</span>
           <span class="stats-history-meta">${formatCoins(p.coins || 0)} coins · ${p.snipes || 0} snipes${p.epicLocked ? ' · Epic locked (' + escapeHTML(p.epic || '—') + ')' : ''}</span>
           ${p.banned && p.banReason ? `<span class="stats-history-meta" style="color:var(--red);">Reason: ${escapeHTML(p.banReason)}</span>` : ''}
+          ${tempBanned ? `<span class="stats-history-meta" style="color:var(--red);">Temp ban until ${tempBanLabel}${p.banReason ? ' — ' + escapeHTML(p.banReason) : ''}</span>` : ''}
         </div>
       </div>
-      <div style="display:flex; gap:6px;">
+      <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
         ${p.epicLocked ? `<button class="btn small" onclick="modResetEpicLock('${p.uid}','${escapeHTML(p.username)}')">Unlock Epic</button>` : ''}
+        ${!p.banned ? `<button class="btn small" style="background:rgba(255,176,32,.14); border-color:rgba(255,176,32,.45); color:#ffb020;" onclick="modWarnUser('${p.uid}','${escapeHTML(p.username)}')" ${isUsernameAdmin(p.username) ? 'disabled title="Cannot warn a moderator"' : ''}>${icon('alert')} Warn</button>` : ''}
+        ${tempBanned ? `<button class="btn green small" onclick="modLiftTempBan('${p.uid}','${escapeHTML(p.username)}')">Lift Temp Ban</button>` : ''}
         ${p.banned
           ? `<button class="btn green small" onclick="modUnbanUser('${p.uid}','${escapeHTML(p.username)}')">Unban</button>`
           : `<button class="btn danger small" onclick="modBanUser('${p.uid}','${escapeHTML(p.username)}')" ${isUsernameAdmin(p.username) ? 'disabled title="Cannot ban a moderator"' : ''}>Ban</button>`
         }
       </div>
     </div>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function modSearchEpicUsers(){
@@ -4451,6 +4482,83 @@ function modUnbanUser(uid, username){
   })
     .then(() => { toast(`${username} unbanned.`); modSearchUsers(); })
     .catch(err => { console.warn(err); toast("Error while unbanning."); });
+}
+
+/* =========================================================
+   AVERTISSEMENTS — un modérateur peut avertir un joueur avec un
+   motif ; au 3e avertissement, le compte est automatiquement banni
+   7 jours (banUntil) et le compteur repart à 0. Distinct du ban
+   permanent (`banned`) : ce ban temporaire se lève tout seul, à la
+   prochaine connexion une fois la date passée (voir loadProfileAndStart).
+========================================================= */
+const WARNINGS_BEFORE_TEMP_BAN = 3;
+const TEMP_BAN_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+let pendingWarnUid = null;
+let pendingWarnUsername = null;
+
+function modWarnUser(uid, username){
+  if(!isAdmin() || !db || !uid) return;
+  pendingWarnUid = uid;
+  pendingWarnUsername = username;
+  document.getElementById("warnReasonTitle").textContent = `Warn ${username}`;
+  document.getElementById("warnReasonInput").value = "";
+  document.getElementById("warnReasonOverlay").classList.add("open");
+}
+
+function closeWarnReasonModal(){
+  document.getElementById("warnReasonOverlay").classList.remove("open");
+  pendingWarnUid = null;
+  pendingWarnUsername = null;
+}
+
+function confirmModWarn(){
+  if(!isAdmin() || !db || !pendingWarnUid) return;
+  const reason = document.getElementById("warnReasonInput").value.trim();
+  if(!reason){ toast("Please enter a reason for the warning."); return; }
+  const uid = pendingWarnUid;
+  const username = pendingWarnUsername;
+  closeWarnReasonModal();
+
+  db.collection("users").doc(uid).get().then(docSnap => {
+    if(!docSnap.exists) return Promise.reject(new Error("player not found"));
+    const profile = docSnap.data() || {};
+    const newCount = (profile.warnings || 0) + 1;
+    const entry = { reason, by: state.username, at: Date.now() };
+    const update = {
+      warnings: newCount,
+      warningHistory: firebase.firestore.FieldValue.arrayUnion(entry)
+    };
+
+    const triggersBan = newCount >= WARNINGS_BEFORE_TEMP_BAN;
+    if(triggersBan){
+      update.warnings = 0; // le compteur repart à zéro après la sanction
+      update.banUntil = Date.now() + TEMP_BAN_DURATION_MS;
+      update.banReason = `Automatic ban — ${WARNINGS_BEFORE_TEMP_BAN} warnings reached (latest: ${reason})`;
+      update.bannedBy = state.username;
+      update.bannedAt = Date.now();
+    }
+
+    return db.collection("users").doc(uid).update(update).then(() => triggersBan);
+  }).then(triggersBan => {
+    toast(triggersBan
+      ? `⚠️ ${username} warned — 3rd warning reached, banned for 7 days.`
+      : `⚠️ Warning given to ${username}.`);
+    modSearchUsers();
+  }).catch(err => {
+    console.warn(err);
+    toast("Error while warning this player.");
+  });
+}
+
+async function modLiftTempBan(uid, username){
+  if(!isAdmin() || !db || !uid) return;
+  if(!(await siteConfirm(`Lift ${username}'s temporary ban early?`, { title:"Lift temporary ban", okLabel:"Lift ban" }))) return;
+  db.collection("users").doc(uid).update({
+    banUntil: firebase.firestore.FieldValue.delete(),
+    banReason: firebase.firestore.FieldValue.delete()
+  }).then(() => { toast(`${username}'s temporary ban was lifted.`); modSearchUsers(); })
+    .catch(err => { console.warn(err); toast("Error while lifting this ban."); });
 }
 
 /* --- Pouvoirs modérateur : voir et gérer tous les matchs --- */
@@ -7925,7 +8033,7 @@ function render(){
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
           <h3 style="margin-bottom:6px; font-size:14px;">${icon('gavel')} Player Management</h3>
-          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Search any player to ban or unban them from the site.</p>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Search any player to warn, ban or unban them from the site. 3 warnings = automatic 7-day ban.</p>
           <div style="display:flex; gap:8px; margin-bottom:12px;">
             <input type="text" class="input" id="modUserSearch" placeholder="Search by username" oninput="modSearchUsers()">
           </div>
@@ -9901,6 +10009,25 @@ async function loadProfileAndStart(uid){
         ? `Your account has been banned from Prime Token.\n\nReason: ${profile.banReason}`
         : "Your account has been banned from Prime Token.");
       return;
+    }
+
+    // Ban temporaire (3 avertissements = 7 jours, voir modWarnUser) : bloque
+    // la connexion tant que banUntil n'est pas passé, puis se lève tout
+    // seul — pas besoin qu'un modérateur intervienne pour débannir.
+    if(profile && profile.banUntil && profile.banUntil > Date.now()){
+      currentUid = null;
+      try{ await auth.signOut(); }catch(e){}
+      showAuthScreen();
+      const untilLabel = new Date(profile.banUntil).toLocaleString("en-US", { day:"numeric", month:"long", hour:"2-digit", minute:"2-digit" });
+      alert(`Your account is temporarily banned from Prime Token until ${untilLabel}.${profile.banReason ? "\n\nReason: " + profile.banReason : ""}`);
+      return;
+    }
+    if(profile && profile.banUntil && profile.banUntil <= Date.now()){
+      // Le ban temporaire est passé : on nettoie le champ pour de bon.
+      db.collection("users").doc(uid).update({
+        banUntil: firebase.firestore.FieldValue.delete(),
+        banReason: firebase.firestore.FieldValue.delete()
+      }).catch(() => {});
     }
 
     // Anti contournement de ban (empreinte navigateur/appareil) : vérifié
