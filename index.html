@@ -2847,6 +2847,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
 
 <style>
 .auth-screen{
@@ -3813,6 +3814,7 @@ const firebaseConfig = {
 
 let db = null;
 let auth = null;
+let fns = null;
 let cloudReady = false;
 let syncingFromRemote = false;
 let currentUid = null;
@@ -3821,6 +3823,7 @@ try{
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
   auth = firebase.auth();
+  fns = firebase.functions();
 } catch(e){
   console.warn("Firebase indisponible, mode local uniquement.", e);
 }
@@ -10317,19 +10320,69 @@ function openDepositModal(coins){
       <div style="font-size:22px; font-weight:700; color:#fff; margin-top:6px;">${coins} Coins</div>
       <div style="font-size:14px; color:var(--gold); font-weight:800; margin-top:2px;">${formatEur(coins * COIN_PRICE_EUR)}</div>
     </div>
-    <div style="border:1px solid var(--gold); background:rgba(246,183,60,0.07); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin:18px 0;">
-      <strong style="color:var(--gold);">Coming soon:</strong> card payments are not open yet. Join our Discord to be notified as soon as deposits go live.
+    <div style="border:1px solid var(--line2); background:var(--panel2); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin:18px 0; display:flex; align-items:center; gap:8px;">
+      ${icon('shield')} Secure card payment via Stripe. Coins are credited automatically once the payment is confirmed.
     </div>
+    <div id="depositErrorBox" style="display:none; border:1px solid rgba(255,71,87,.4); background:rgba(255,71,87,.08); color:var(--red); border-radius:10px; padding:10px 14px; font-size:11px; margin-bottom:14px;"></div>
     <div style="display:flex; gap:10px;">
-      <button class="btn ghost" style="flex:1;" onclick="closeDepositModal()">Close</button>
-      <a class="btn" style="flex:1; background:#5865F2; color:#fff; text-align:center; text-decoration:none;" href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer">Join Discord</a>
+      <button class="btn ghost" style="flex:1;" onclick="closeDepositModal()">Cancel</button>
+      <button class="btn green" style="flex:1;" id="depositPayBtn" onclick="startCoinPurchase(${coins})">${icon('lock')} Pay ${formatEur(coins * COIN_PRICE_EUR)}</button>
+    </div>
+    <div style="text-align:center; margin-top:14px;">
+      <a href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer" style="font-size:10px; color:var(--muted); text-decoration:underline;">Trouble paying by card? Ask on our Discord instead.</a>
     </div>`;
   document.getElementById("depositOverlay").classList.add("open");
-  startCoinPurchase(coins);
 }
 function closeDepositModal(){ document.getElementById("depositOverlay").classList.remove("open"); }
-/* Point d'accroche pour le futur paiement (ne crédite rien pour l'instant). */
-function startCoinPurchase(coins){ /* TODO: rediriger vers un checkout sécurisé ; créditer UNIQUEMENT côté serveur après confirmation. */ }
+
+/* Lance un vrai paiement par carte via Stripe Checkout. Le site ne crédite
+   RIEN lui-même : il demande juste une "session de paiement" au serveur
+   (Cloud Function createCheckoutSession) et redirige le joueur vers la
+   page Stripe sécurisée. Les coins ne sont ajoutés qu'après coup, côté
+   serveur, une fois le paiement confirmé (voir functions/index.js). */
+function startCoinPurchase(coins){
+  const btn = document.getElementById("depositPayBtn");
+  const errBox = document.getElementById("depositErrorBox");
+  if(errBox) errBox.style.display = "none";
+  if(!fns || !currentUid){
+    if(errBox){ errBox.textContent = "You must be logged in to make a deposit."; errBox.style.display = "block"; }
+    return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = "Redirecting to secure payment…"; }
+  fns.httpsCallable("createCheckoutSession")({ coins })
+    .then(result => {
+      const url = result && result.data && result.data.url;
+      if(!url) throw new Error("No checkout URL returned.");
+      window.location.href = url; // redirection vers la page de paiement Stripe
+    })
+    .catch(err => {
+      console.warn("Erreur lors de la création du paiement :", err);
+      if(btn){ btn.disabled = false; btn.innerHTML = `${icon('lock')} Pay ${formatEur(coins * COIN_PRICE_EUR)}`; }
+      if(errBox){
+        errBox.textContent = (err && err.message) ? err.message : "Payment could not be started. Please try again.";
+        errBox.style.display = "block";
+      }
+    });
+}
+
+/* Au retour de Stripe (succès ou annulation), on affiche un toast et on
+   nettoie l'URL. Le crédit des coins lui-même se fait déjà en tâche de
+   fond côté serveur — ce toast est juste un retour visuel immédiat ; le
+   solde se met à jour tout seul via la synchro temps réel existante
+   (initOwnCoinsSync) dès que le webhook a fait son travail. */
+function handleDepositReturnFromUrl(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get("deposit");
+  if(!status) return;
+  if(status === "success"){
+    toast("Payment received! Your coins will appear in a few seconds. 🎉");
+  } else if(status === "cancelled"){
+    toast("Payment cancelled — no coins were charged.");
+  }
+  params.delete("deposit");
+  const newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "") + window.location.hash;
+  window.history.replaceState({}, "", newUrl);
+}
 
 /* =========================================================
    WALLET — envoyer des tips à d'autres joueurs (frais de 5%)
@@ -10733,6 +10786,7 @@ async function loadProfileAndStart(uid){
   }
   initOwnCoinsSync();
   handleDiscordOAuthRedirect();
+  handleDepositReturnFromUrl();
 }
 
 if(auth){
