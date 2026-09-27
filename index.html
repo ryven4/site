@@ -3303,8 +3303,8 @@ input[type="datetime-local"].input{ color-scheme:dark; }
           <button onclick="setBetPreset(this,2)">2</button>
           <button onclick="setBetPreset(this,2.5)">2.5</button>
         </div>
-        <input type="number" class="select" id="createBet" min="0.5" step="0.5" value="0.5" style="margin-top:8px;" oninput="onCustomBetInput()">
-        <span style="font-size:10px; color:var(--muted); display:block; margin-top:4px;">Pick a quick amount or type your own bet (steps of 0.5).</span>
+        <input type="number" class="select" id="createBet" min="0.5" step="0.01" value="0.5" style="margin-top:8px;" oninput="onCustomBetInput()">
+        <span style="font-size:10px; color:var(--muted); display:block; margin-top:4px;">Pick a quick amount or type your own bet (e.g. 1.74).</span>
       </div>
 
       <div class="form-group full">
@@ -4872,7 +4872,7 @@ setInterval(function(){
 /* Mise réellement risquée par un joueur donné (sans se soucier du camp
    adverse) — sert de brique de base à computePlayerBetInfo ci-dessous. */
 function computePlayerStake(match, username){
-  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const baseBet = roundToCents(match.bet !== undefined ? match.bet : 0.5);
   const hostPlayers = match.hostPlayers || [match.host];
   // On se base sur la taille d'équipe VOULUE (2v2/3v3/4v4), pas sur le
   // nombre de joueurs déjà rejoints — sinon la mise affichée est fausse
@@ -4884,7 +4884,7 @@ function computePlayerStake(match, username){
   const isCoveringHost = !!(match.coverBet && isHostSide && username === match.host && teamSizeCount > 1);
 
   if(isCoveredTeammate) return 0;
-  if(isCoveringHost) return roundToHalf(baseBet * teamSizeCount);
+  if(isCoveringHost) return roundToCents(baseBet * teamSizeCount);
   return baseBet;
 }
 
@@ -4895,7 +4895,7 @@ function computePlayerStake(match, username){
    en face 2 adversaires misent 10 chacun (pot adverse = 20) → je récupère
    mes 20 + 20/2 = 30 ; mon mate récupère 0 + 20/2 = 10. */
 function computePlayerBetInfo(match, username){
-  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const baseBet = roundToCents(match.bet !== undefined ? match.bet : 0.5);
   const hostPlayers = match.hostPlayers || [match.host];
   const teamSizeCount = TEAM_SIZE_MAX[match.teamSize] || hostPlayers.length || 1;
   const isHostSide = hostPlayers.includes(username);
@@ -4909,7 +4909,7 @@ function computePlayerBetInfo(match, username){
   // "je récupère ma mise + une part (mise de base) du pot adverse".
   // Ça marche même avant que le lobby soit complet, contrairement à
   // l'ancien calcul basé sur les joueurs déjà présents.
-  const winReward = roundToHalf(stake + baseBet);
+  const winReward = roundToCents(stake + baseBet);
 
   return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
 }
@@ -4919,9 +4919,9 @@ function computePlayerBetInfo(match, username){
    Ne sert jamais au règlement réel (voir computePlayerBetInfo pour la
    répartition individuelle exacte, y compris cover bet). */
 function matchTotalPot(match){
-  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const baseBet = roundToCents(match.bet !== undefined ? match.bet : 0.5);
   const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-  return roundToHalf(2 * maxPerSide * baseBet);
+  return roundToCents(2 * maxPerSide * baseBet);
 }
 
 /* Débite la mise du joueur DÈS que le match se verrouille (les deux camps
@@ -5028,12 +5028,12 @@ function applyMatchResultForMe(match, type){
     const reward = info.winReward;
     // Le "profit" (ce qu'on a vraiment gagné, hors mise récupérée) sert au
     // suivi global Total Earned / Highest Match Earnings, façon BetterPlayerWin.
-    const profit = roundToHalf(reward - info.stake);
+    const profit = roundToCents(reward - info.stake);
     state.stats.wins += 1;
     state.rp = (state.rp || 0) + RP_PER_WIN;
     state.stats.streak = (state.stats.streak || 0) + 1;
     if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
-    state.stats.totalEarned = roundToHalf((state.stats.totalEarned || 0) + profit);
+    state.stats.totalEarned = roundToCents((state.stats.totalEarned || 0) + profit);
     if(profit > (state.stats.highestMatchEarning || 0)) state.stats.highestMatchEarning = profit;
     state.coins = roundToCents((state.coins || 0) + reward);
     playTingSound();
@@ -5042,7 +5042,7 @@ function applyMatchResultForMe(match, type){
     // Rien à débiter ici : la mise a déjà disparu au moment du READY UP.
     state.stats.losses += 1;
     state.stats.streak = 0;
-    state.stats.totalEarned = roundToHalf((state.stats.totalEarned || 0) - info.stake);
+    state.stats.totalEarned = roundToCents((state.stats.totalEarned || 0) - info.stake);
     toast(info.stake > 0 ? `Defeat recorded. Your ${formatCoins(info.stake)} coin bet is gone.` : `Defeat recorded. Your teammate covered the bet — no coins lost.`);
   }
 
@@ -6542,7 +6542,7 @@ function homeExtrasHTML(){
         ${open.length === 0 ? `<div class="home-empty">No open match right now — <a onclick="openCreateModal()">create one</a>.</div>` : open.map(m => `
           <div class="home-row">
             <div class="home-row-main"><strong>${escapeHTML(m.mode)}</strong><span>${escapeHTML(m.teamSize || "1v1")} · ${escapeHTML(m.region || "")} · ${escapeHTML(m.platform || "")}</span></div>
-            <div class="home-row-stake">${coinIcon(13)}${formatCoins(roundToHalf(m.bet !== undefined ? m.bet : 0.5))}</div>
+            <div class="home-row-stake">${coinIcon(13)}${formatCoins(roundToCents(m.bet !== undefined ? m.bet : 0.5))}</div>
             <button class="btn green small" onclick="joinMatch(${jsArg(m.id)})">Join</button>
           </div>`).join("")}
       </div>
@@ -6938,12 +6938,12 @@ function createMatch(){
   const betInput = document.getElementById("createBet");
   let bet = betInput ? parseFloat(betInput.value) : 0.5;
   if(isNaN(bet) || bet < 0.5) bet = 0.5;
-  bet = roundToHalf(bet);
+  bet = roundToCents(bet);
 
   // Ce que JE (le host) vais devoir payer tout de suite à la création :
   // ma mise normale, ou la mise de toute mon équipe si je cover.
   const maxPerSide = TEAM_SIZE_MAX[selectedTeamSize] || 1;
-  const hostStake = coverBet ? roundToHalf(bet * maxPerSide) : bet;
+  const hostStake = coverBet ? roundToCents(bet * maxPerSide) : bet;
 
   if((state.coins || 0) < hostStake){
     toast(`Not enough coins for a ${formatCoins(hostStake)} coin bet. You have ${formatCoins(state.coins || 0)}.`);
@@ -7409,7 +7409,7 @@ function render(){
             <span>${currentMatchesTab === 'available' ? "Be the first to create one!" : "Nothing to show in this tab."}</span>
           </div>
         ` : pool.map(m => {
-          const entry = roundToHalf(m.bet !== undefined ? m.bet : 0.5);
+          const entry = roundToCents(m.bet !== undefined ? m.bet : 0.5);
           const earn = matchTotalPot(m);
           const elapsed = Date.now() - (m.createdAt || Date.now());
           const remainingMs = Math.max(0, MATCH_TTL_MS - elapsed);
@@ -9676,7 +9676,7 @@ function joinMatch(id){
 
   // Même logique que la création : si je vais devoir payer en rejoignant
   // (pas couvert par mon host), je dois avoir assez de coins AVANT de join.
-  const baseBet = roundToHalf(match.bet !== undefined ? match.bet : 0.5);
+  const baseBet = roundToCents(match.bet !== undefined ? match.bet : 0.5);
   const willBeCovered = onHostTeam && match.coverBet && maxPerSide > 1;
   const prospectiveStake = willBeCovered ? 0 : baseBet;
   if((state.coins || 0) < prospectiveStake){
