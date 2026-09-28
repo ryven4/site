@@ -3839,22 +3839,64 @@ try{
   console.warn("Firebase indisponible, mode local uniquement.", e);
 }
 
+/* =========================================================
+   APPELS SERVEUR (Cloud Functions) — TOUT ce qui touche à l'argent réel
+   (coins, snipes, VIP, avatars, mise/gain de match, tournois) passe
+   maintenant par ici, jamais par une écriture Firestore directe depuis
+   le navigateur. Voir functions/economy.js pour le détail : un joueur ne
+   peut plus se donner des coins depuis la console, même en modifiant son
+   propre compte, car les règles Firestore interdisent purement et
+   simplement ces champs en écriture côté client.
+========================================================= */
+function callFn(name, data){
+  if(!fns) return Promise.reject(new Error("Server unavailable."));
+  return fns.httpsCallable(name)(data || {}).then(res => res.data);
+}
+/* Erreur d'une Cloud Function -> message lisible pour un toast. */
+function fnErrorMessage(err){
+  return (err && err.message) ? err.message : "Something went wrong, please try again.";
+}
+
 /* Chaque match a son propre document Firestore (collection "matches"),
    mis à jour intégralement à chaque changement mais de façon isolée par
    match — deux joueurs qui modifient deux matchs différents (ou même le
    même, à quelques secondes d'écart) ne s'écrasent plus mutuellement. */
 
-function pushMatchToCloud(match){
+/* Crée le document d'un TOUT NOUVEAU match (seul cas où un set() du doc
+   entier est légitime — voir la règle `create` dans firestore.rules). */
+function createMatchInCloud(match){
   if(!db || !match || !match.id) return;
   db.collection("matches").doc(match.id).set(match)
-    .catch(err => console.warn("Erreur de synchronisation du match :", err));
+    .catch(err => console.warn("Erreur de création du match :", err));
 }
 
-function deleteMatchFromCloud(id){
-  if(!db || !id) return;
-  db.collection("matches").doc(id).delete()
-    .catch(err => console.warn("Erreur de suppression du match :", err));
+/* Met à jour un match EXISTANT — restreint aux champs "sociaux" que le
+   site a encore le droit de toucher (voir firestore.rules : la mise, le
+   résultat, l'escrow et tout ce qui touche à l'argent ne peuvent plus être
+   changés que par les Cloud Functions, functions/economy.js). On envoie
+   un update() de seulement ces champs, plutôt qu'un set() du match entier
+   — sinon la moindre divergence locale sur un champ protégé (par exemple
+   une Cloud Function qui vient tout juste de le changer, pas encore vue
+   par ce navigateur) ferait rejeter TOUT l'appel par les règles, y
+   compris le changement légitime qu'on voulait vraiment faire. */
+function pushMatchToCloud(match){
+  if(!db || !match || !match.id) return;
+  db.collection("matches").doc(match.id).update({
+    players: match.players || [],
+    hostPlayers: match.hostPlayers || [],
+    guestPlayers: match.guestPlayers || [],
+    readies: match.readies || {},
+    team: match.team !== undefined ? match.team : null,
+    locked: !!match.locked,
+    chat: match.chat || [],
+    proofs: match.proofs || {}
+  }).catch(err => console.warn("Erreur de synchronisation du match :", err));
 }
+
+// Suppression d'un match : plus possible en direct depuis le site (voir
+// `allow delete: if false;` dans firestore.rules) — passe désormais
+// uniquement par la Cloud Function matchAdminDelete (modDeleteMatch), qui
+// rembourse d'abord tout ce qui avait été escrowé.
 
 /* Petit "ting" joué avec le Web Audio API (pas besoin de fichier audio externe) —
    pour prévenir même quand on est alt-tab sur Fortnite : quelqu'un rejoint
@@ -3929,16 +3971,13 @@ function initCloudSync(){
     });
     checkMatchNotifications(remoteMatches);
     state.matches = remoteMatches;
-    if(typeof tournamentTick === "function") setTimeout(tournamentTick, 300);
+    // Coins, résultats, remboursements, expiration des matchs et avancement
+    // des tournois sont désormais entièrement calculés côté serveur — le
+    // site n'a plus qu'à afficher ce qui arrive par ce onSnapshot.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     syncingFromRemote = false;
 
-    let changed = applyPendingResultsForMe();
-    if(applyPendingCancelRefundsForMe()) changed = true;
-    if(checkVictoryTimers()) changed = true;
-    if(checkMatchLocks().length > 0) changed = true;
-    if(checkExpiredMatches()) changed = true;
-    if(changed) save();
+    if(checkMatchLocks().length > 0) save();
 
     render();
   }, function(err){
@@ -3946,12 +3985,7 @@ function initCloudSync(){
   });
 
   setInterval(function(){
-    let changed = false;
-    if(applyPendingCancelRefundsForMe()) changed = true;
-    if(checkVictoryTimers()) changed = true;
-    if(checkMatchLocks().length > 0) changed = true;
-    if(checkExpiredMatches()) changed = true;
-    if(changed){ save(); render(); }
+    if(checkMatchLocks().length > 0){ save(); render(); }
   }, 30000);
 }
 
@@ -3963,52 +3997,26 @@ function initCloudSync(){
 function checkMatchLocks(){
   const lockedIds = [];
   (state.matches || []).forEach(match => {
-    if(match.completed || match.cancelled) return;
-    if(!match.locked){
-      const hostPlayers = match.hostPlayers || [match.host];
-      const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-      const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-      if(hostPlayers.length < maxPerSide || guestPlayers.length < maxPerSide) return;
-      const allPlayers = [...hostPlayers, ...guestPlayers];
-      if(allPlayers.length === 0 || !match.readies) return;
-      if(allPlayers.every(p => match.readies[p])){
-        match.locked = true;
-        pushMatchToCloud(match);
-        lockedIds.push(match.id);
-      }
-    }
-    // Débite ma mise dès que le match est verrouillé (une seule fois, via escrowedBy).
-    if(match.locked && escrowStakeForMe(match) && !lockedIds.includes(match.id)){
+    if(match.completed || match.cancelled || match.locked) return;
+    const hostPlayers = match.hostPlayers || [match.host];
+    const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
+    const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
+    if(hostPlayers.length < maxPerSide || guestPlayers.length < maxPerSide) return;
+    const allPlayers = [...hostPlayers, ...guestPlayers];
+    if(allPlayers.length === 0 || !match.readies) return;
+    if(allPlayers.every(p => match.readies[p])){
+      match.locked = true;
+      pushMatchToCloud(match);
       lockedIds.push(match.id);
     }
   });
   return lockedIds;
 }
-
-/* Un match OPEN (jamais verrouillé, donc personne n'a rejoint et complété
-   l'équipe adverse) qui dépasse son délai de 30 min (MATCH_TTL_MS) doit
-   disparaître tout seul — jusqu'ici seul le compte à rebours affiché
-   arrivait à 0 sans que rien ne se passe derrière. On l'annule (comme un
-   "Quit Match" automatique) plutôt que de le supprimer brutalement : le
-   host avait déjà payé sa mise à la création (voir escrowedBy plus haut),
-   donc processCancelRefundForMe() se charge de la lui rendre au prochain
-   cycle de sync, avant que le match ne soit vraiment effacé du serveur.
-   N'importe quel client encore ouvert peut détecter l'expiration (pas
-   besoin que ce soit le host) : c'est le même principe que checkVictoryTimers. */
-function checkExpiredMatches(){
-  let changed = false;
-  const now = Date.now();
-  (state.matches || []).forEach(match => {
-    if(match.completed || match.cancelled || match.locked || match.tournamentId) return;
-    const createdAt = match.createdAt || now;
-    if(now - createdAt >= MATCH_TTL_MS){
-      match.cancelled = true;
-      if(db) db.collection("matches").doc(match.id).update({ cancelled: true }).catch(() => {});
-      changed = true;
-    }
-  });
-  return changed;
-}
+// Note : l'expiration des matchs jamais verrouillés (30 min sans adversaire)
+// est désormais gérée côté serveur par la Cloud Function planifiée
+// sweepMatchTimers (voir functions/economy.js) — plus besoin de
+// checkExpiredMatches() ici, aucun client n'a plus besoin d'être ouvert
+// pour que ça se déclenche.
 
 /* =========================================================
    RÉSULTATS DE MATCH — façon BetterPlayerWin
@@ -4217,11 +4225,9 @@ function modGiveSelfSnipes(amount){
   if(!isAdmin()) return;
   const n = Number(amount);
   if(!n || n <= 0) return;
-  state.snipes = (state.snipes || 0) + n;
-  save();
-  renderHeaderUI();
-  toast(`+${n} Snipes (mod)`);
-  render();
+  callFn("adminGiveSelfSnipes", { amount: n }).then(() => {
+    toast(`+${n} Snipes (mod)`);
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* Donner (ou retirer, avec un montant négatif) des coins à N'IMPORTE QUEL
@@ -4231,23 +4237,12 @@ function modGiveSelfSnipes(amount){
    à TOUS les documents users (même hors ligne), par lots de 400. */
 async function modResetEconomyAll(){
   if(!isSuperAdmin()){ toast("Only the owner can reset the economy."); return; }
-  if(!db){ toast("Database unavailable."); return; }
   if(!(await siteConfirm("Reset ALL players to 0 coins, 0 snipes and remove every VIP?\n\nThis cannot be undone.", { title:"Reset the economy", okLabel:"Reset everyone", requireText:"RESET" }))){ toast("Reset cancelled."); return; }
   try{
-    const snap = await db.collection("users").get();
-    const docs = snap.docs;
-    for(let i = 0; i < docs.length; i += 400){
-      const batch = db.batch();
-      docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { coins:0, snipes:0, vipUntil:null, ecoResetVersion:ECO_RESET_VERSION }));
-      await batch.commit();
-    }
-    state.coins = 0; state.snipes = 0; state.vipUntil = null; state.ecoResetVersion = ECO_RESET_VERSION;
-    save();
-    toast(`🧹 Economy reset done for ${docs.length} accounts.`);
-    render();
+    const res = await callFn("adminResetEconomy");
+    toast(`🧹 Economy reset done for ${res && res.count != null ? res.count : "all"} accounts.`);
   } catch(err){
-    console.warn(err);
-    toast("Reset failed (check Firestore permissions). Players will still be reset on their next visit.");
+    toast(fnErrorMessage(err));
   }
 }
 
@@ -4256,36 +4251,16 @@ async function modResetEconomyAll(){
    hors ligne, et resynchronise l'état local si le mod se cible lui-même. */
 function modApplyCoinAdjustment(username, signedAmount, opts){
   opts = opts || {};
-  if(!isAdmin() || !db) return;
+  if(!isAdmin()) return;
   if(!username){ toast("Enter a username."); return; }
   if(isNaN(signedAmount) || signedAmount === 0){ toast("Enter a valid amount."); return; }
   const amount = roundToCents(signedAmount);
 
-  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
-  if(!target){ toast("This player doesn't exist."); return; }
-
-  if(amount < 0 && roundToCents((target.coins || 0) + amount) < 0){
-    toast(`${target.username} only has ${formatCoins(target.coins || 0)} coins.`);
-    return;
-  }
-
-  db.collection("users").doc(target.uid).update({
-    coins: firebase.firestore.FieldValue.increment(amount)
-  }).then(() => {
-    toast(`${amount > 0 ? '🎁 +' : '➖'}${formatCoins(Math.abs(amount))} coins ${amount > 0 ? 'given to' : 'removed from'} ${target.username}.`);
+  callFn("adminAdjustCoins", { targetUsername: username, amount }).then(() => {
+    toast(`${amount > 0 ? '🎁 +' : '➖'}${formatCoins(Math.abs(amount))} coins ${amount > 0 ? 'given to' : 'removed from'} ${username}.`);
     if(opts.onDone) opts.onDone();
-    // Si le mod se cible lui-même via ce champ, son propre solde ne se
-    // rafraîchit pas tout seul dans ce cas précis (c'est un update()
-    // Firestore, pas un save() local) : on force le state local à jour
-    // pour qu'il n'écrase pas ce changement à son prochain save().
-    if(target.uid === currentUid){
-      state.coins = roundToCents((state.coins || 0) + amount);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      renderHeaderUI();
-    }
   }).catch(err => {
-    console.warn(err);
-    toast("Error while updating this player's coins.");
+    toast(fnErrorMessage(err));
   });
 }
 
@@ -4325,7 +4300,7 @@ async function modRemovePlayerCoins(){
    un compte dont la durée avait été mal calculée (ex : achats répétés qui
    s'empilaient avant le correctif anti-rachat). */
 function modSetPlayerVIP(){
-  if(!isAdmin() || !db) return;
+  if(!isAdmin()) return;
   const userInput = document.getElementById("modVipUsername");
   const daysInput = document.getElementById("modVipDays");
   const username = userInput ? userInput.value.trim() : "";
@@ -4334,44 +4309,20 @@ function modSetPlayerVIP(){
   if(!username){ toast("Enter a username."); return; }
   if(isNaN(days) || days <= 0){ toast("Enter a valid number of days."); return; }
 
-  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
-  if(!target){ toast("This player doesn't exist."); return; }
-
-  const newUntil = Date.now() + Math.round(days) * 24 * 60 * 60 * 1000;
-
-  db.collection("users").doc(target.uid).update({ vipUntil: newUntil }).then(() => {
-    toast(`👑 ${target.username}'s VIP now expires in ${Math.round(days)} days.`);
-    if(target.uid === currentUid){
-      state.vipUntil = newUntil;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      renderHeaderUI();
-    }
-  }).catch(err => {
-    console.warn(err);
-    toast("Error while updating this player's VIP.");
-  });
+  callFn("adminSetVip", { targetUsername: username, action: "set", days }).then(() => {
+    toast(`👑 ${username}'s VIP now expires in ${Math.round(days)} days.`);
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function modRemovePlayerVIP(){
-  if(!isAdmin() || !db) return;
+  if(!isAdmin()) return;
   const userInput = document.getElementById("modVipUsername");
   const username = userInput ? userInput.value.trim() : "";
   if(!username){ toast("Enter a username."); return; }
 
-  const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
-  if(!target){ toast("This player doesn't exist."); return; }
-
-  db.collection("users").doc(target.uid).update({ vipUntil: null }).then(() => {
-    toast(`VIP removed from ${target.username}.`);
-    if(target.uid === currentUid){
-      state.vipUntil = null;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      renderHeaderUI();
-    }
-  }).catch(err => {
-    console.warn(err);
-    toast("Error while updating this player's VIP.");
-  });
+  callFn("adminSetVip", { targetUsername: username, action: "revoke" }).then(() => {
+    toast(`VIP removed from ${username}.`);
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* --- Pouvoirs modérateur : gestion des joueurs (ban / coins) --- */
@@ -4593,41 +4544,21 @@ function closeVipInfoModal(){
 
 function confirmCheaterReport(){
   const matchId = pendingCheaterReportMatchId;
-  const match = state.matches.find(m => m.id === matchId);
-  if(!match){ closeCheaterReportModal(); return; }
-
-  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
-  const amHost = hostPlayers.includes(state.username);
-  const amGuest = guestPlayers.includes(state.username);
-  if(!amHost && !amGuest){ closeCheaterReportModal(); return; }
-
-  const against = amHost ? guestPlayers : hostPlayers;
-
-  match.cheaterReport = {
-    by: state.username,
-    against,
-    at: Date.now(),
-    status: "pending"
-  };
-
-  pushMatchToCloud(match);
+  if(!matchId){ closeCheaterReportModal(); return; }
   closeCheaterReportModal();
-  toast("🚨 Report sent — the match is now frozen for review. Please open a ticket on our Discord with your proof!");
-  render();
+  callFn("matchFileCheaterReport", { matchId }).then(() => {
+    toast("🚨 Report sent — the match is now frozen for review. Please open a ticket on our Discord with your proof!");
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* Modérateur : classe le signalement sans sanction (match débloqué, le
    déroulement normal du résultat reprend). */
 async function modDismissCheaterReport(matchId){
-  const match = state.matches.find(m => m.id === matchId);
-  if(!match || !isAdmin()) return;
+  if(!isAdmin()) return;
   if(!(await siteConfirm("Dismiss this report? The match will unfreeze and continue normally.", { title:"Dismiss report", okLabel:"Dismiss", danger:false }))) return;
-  match.cheaterReport.status = "dismissed";
-  match.cheaterReport.resolvedBy = state.username;
-  match.cheaterReport.resolvedAt = Date.now();
-  pushMatchToCloud(match);
-  toast("Report dismissed — the match can continue.");
-  render();
+  callFn("matchAdminReportDecision", { matchId, decision: "dismiss" }).then(() => {
+    toast("Report dismissed — the match can continue.");
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* Modérateur : signalement confirmé — ouvre directement la fenêtre de ban
@@ -4645,10 +4576,12 @@ async function modConfirmCheaterReport(matchId){
   // éviter qu'un simple mis-clic bannisse quelqu'un par erreur.
   if(!(await siteConfirm(`Are you sure you want to ban ${target.username}? This will permanently ban their account.`, { title:"Ban player", okLabel:"Ban" }))) return;
 
-  match.cheaterReport.status = "confirmed";
-  match.cheaterReport.resolvedBy = state.username;
-  match.cheaterReport.resolvedAt = Date.now();
-  pushMatchToCloud(match);
+  try{
+    await callFn("matchAdminReportDecision", { matchId, decision: "confirm" });
+  } catch(err){
+    toast(fnErrorMessage(err));
+    return;
+  }
 
   modBanUser(target.uid, target.username);
 }
@@ -4776,23 +4709,15 @@ async function modLiftTempBan(uid, username){
 async function modDeleteMatch(id){
   if(!isAdmin()) return;
   if(!(await siteConfirm(`Force delete match ${id}?`, { title:"Delete match", okLabel:"Delete" }))) return;
-  const match = state.matches.find(m => m.id === id);
-  if(match && !match.completed && (match.escrowedBy || []).length > 0){
-    // Des coins ont déjà été débités (escrow, dès la création du match pour
-    // le host, ou au verrouillage pour tout le monde) : on rembourse au lieu
-    // de les faire disparaître, verrouillé ou non.
-    match.cancelled = true;
-    processCancelRefundForMe(match);
-    save();
-    toast("Match cancelled (mod) — escrowed bets refunded.");
-    render();
+  try{
+    await callFn("matchAdminDelete", { matchId: id });
+  } catch(err){
+    toast(fnErrorMessage(err));
     return;
   }
-  state.matches = state.matches.filter(m => m.id !== id);
   if(state.currentLobby === id) state.currentLobby = null;
   save();
-  deleteMatchFromCloud(id);
-  toast("Match deleted (mod).");
+  toast("Match deleted (mod) — any escrowed bets were refunded.");
   render();
 }
 
@@ -4806,16 +4731,9 @@ function matchTeamsOf(match){
 
 function resolveDispute(matchId, winnerUsername){
   if(!isAdmin()) return;
-  const match = state.matches.find(m => m.id === matchId);
-  if(!match) return;
-  const { hostPlayers, guestPlayers } = matchTeamsOf(match);
-  const winners = hostPlayers.includes(winnerUsername) ? hostPlayers : guestPlayers;
-  const losers = hostPlayers.includes(winnerUsername) ? guestPlayers : hostPlayers;
-  if(winners.length === 0) return;
-
-  finalizeMatchResult(match, winners, losers);
-  toast("Dispute resolved: victory awarded to " + winnerUsername);
-  render();
+  callFn("matchAdminResolveDispute", { matchId, winnerUsername }).then(() => {
+    toast("Dispute resolved: victory awarded to " + winnerUsername);
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* Override modérateur : depuis le panel Spectate, un modérateur peut
@@ -4831,13 +4749,16 @@ async function modForceAssignWin(matchId, side){
 
   const { hostPlayers, guestPlayers } = matchTeamsOf(match);
   const winners = side === "host" ? hostPlayers : guestPlayers;
-  const losers = side === "host" ? guestPlayers : hostPlayers;
   if(winners.length === 0){ toast("That side has no player."); return; }
 
   if(!(await siteConfirm(`[MODERATOR OVERRIDE] Force victory for ${side.toUpperCase()} (${winners.join(", ")}) on match ${matchId}?\n\nThis immediately settles coins and cannot be undone from here.`, { title:"Moderator override", okLabel:"Force victory" }))) return;
 
-  finalizeMatchResult(match, winners, losers);
-  save();
+  try{
+    await callFn("matchAdminResolveDispute", { matchId, winnerUsername: winners[0] });
+  } catch(err){
+    toast(fnErrorMessage(err));
+    return;
+  }
   toast(`🛡️ Moderator override: victory forced for ${winners.join(", ")}.`);
   setPage("moderation");
 }
@@ -4858,8 +4779,10 @@ setInterval(function(){
 
   const remaining = timerMs - (Date.now() - claimedAt);
   if(remaining <= 0){
+    // Le décompte affiché est à 0 : le résultat sera confirmé
+    // automatiquement côté serveur (sweepMatchTimers) d'un instant à
+    // l'autre — pas besoin (et plus possible) de le faire depuis le site.
     el.textContent = "00:00";
-    if(checkVictoryTimers()){ save(); render(); }
     return;
   }
   el.textContent = formatCountdown(remaining);
@@ -4914,206 +4837,28 @@ function computePlayerBetInfo(match, username){
   return { baseBet, stake, winReward, covered: isCoveredTeammate, covering: isCoveringHost };
 }
 
-/* Pot total du match = ce que l'équipe gagnante récupère collectivement
-   (affichage uniquement, ex: 2v2 à 0,5 → 4 joueurs à 0,5 = pot de 2).
-   Ne sert jamais au règlement réel (voir computePlayerBetInfo pour la
-   répartition individuelle exacte, y compris cover bet). */
+// Taxe de plateforme sur les gains de match (5%) — AFFICHAGE UNIQUEMENT ici :
+// le vrai calcul et le vrai prélèvement ont lieu côté serveur, dans
+// finalizeMatch (functions/economy.js). DOIT rester identique à
+// MATCH_TAX_RATE là-bas, sinon "If You Win" mentirait aux joueurs.
+const MATCH_TAX_RATE = 0.05;
+
+/* Pot total du match = ce que l'équipe gagnante récupère collectivement,
+   taxe de plateforme déjà déduite (affichage uniquement, ex: 2v2 à 0,5 →
+   4 joueurs à 0,5 = pot de 2, moins 5% = 1,90). Ne sert jamais au règlement
+   réel (voir computePlayerBetInfo pour la répartition individuelle exacte,
+   y compris cover bet — également affichage seulement). */
 function matchTotalPot(match){
   const baseBet = roundToCents(match.bet !== undefined ? match.bet : 0.5);
   const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-  return roundToCents(2 * maxPerSide * baseBet);
+  return roundToCents(2 * maxPerSide * baseBet * (1 - MATCH_TAX_RATE));
 }
 
-/* Débite la mise du joueur DÈS que le match se verrouille (les deux camps
-   sont prêts) — comme ça les coins "disparaissent" immédiatement, avant même
-   de connaître le résultat, au lieu d'attendre la fin du match. */
-function escrowStakeForMe(match){
-  if(!match || !match.locked) return false;
-  match.escrowedBy = match.escrowedBy || [];
-  if(match.escrowedBy.includes(state.username)) return false;
-
-  const hostPlayers = match.hostPlayers || [match.host];
-  const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-  const amInMatch = hostPlayers.includes(state.username) || guestPlayers.includes(state.username);
-  if(!amInMatch) return false;
-
-  const info = computePlayerBetInfo(match, state.username);
-  const stake = Math.min(state.coins || 0, info.stake);
-  state.coins = roundToCents((state.coins || 0) - stake);
-  match.escrowedBy.push(state.username);
-  match.escrowAmounts = match.escrowAmounts || {};
-  match.escrowAmounts[state.username] = stake;
-  save();
-  pushMatchToCloud(match);
-  if(stake > 0) toast(`🔒 ${formatCoins(stake)} coins locked in for this match.`);
-  return true;
-}
-
-/* Rembourse la mise qui avait été débitée à l'escrow si le match verrouillé
-   est finalement annulé (les deux camps sont d'accord) avant tout résultat. */
-function processCancelRefundForMe(match){
-  if(!match || !match.cancelled) return false;
-  match.refundedBy = match.refundedBy || [];
-  const payers = match.escrowedBy || [];
-  // Seuls les joueurs qui avaient réellement payé une mise ont quelque chose
-  // à faire ici. Les autres clients ne touchent plus au doc (avant, ils le
-  // réécrivaient entièrement, parfois APRÈS sa suppression → remboursements
-  // en double).
-  if(!payers.includes(state.username)) return false;
-  if(match.refundedBy.includes(state.username)){
-    if(payers.every(p => match.refundedBy.includes(p))) deleteMatchFromCloud(match.id);
-    return false;
-  }
-  // Registre personnel (sauvegardé avec mes coins) : même si le refundedBy
-  // du doc partagé est écrasé par un autre joueur, je ne suis jamais
-  // remboursé deux fois.
-  state.settledMatchIds = state.settledMatchIds || [];
-  const key = "R:" + match.id;
-  const already = state.settledMatchIds.includes(key);
-  if(!already){
-    const amount = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
-    if(amount > 0){
-      state.coins = roundToCents((state.coins || 0) + amount);
-      toast(`Match cancelled — your ${formatCoins(amount)} coin bet was refunded.`);
-    }
-    state.settledMatchIds.push(key);
-    if(state.settledMatchIds.length > 300) state.settledMatchIds = state.settledMatchIds.slice(-300);
-  }
-  match.refundedBy.push(state.username);
-  save();
-  // update() (et pas set) : n'efface pas le nom des autres joueurs et ne
-  // recrée jamais un match déjà supprimé.
-  if(db) db.collection("matches").doc(match.id).update({
-    cancelled: true,
-    refundedBy: firebase.firestore.FieldValue.arrayUnion(state.username)
-  }).catch(() => {});
-  if(state.currentLobby === match.id) state.currentLobby = null;
-  if(payers.every(p => match.refundedBy.includes(p))){
-    deleteMatchFromCloud(match.id);
-    state.matches = state.matches.filter(m => m.id !== match.id);
-  }
-  return !already;
-}
-
-function applyPendingCancelRefundsForMe(){
-  let changed = false;
-  (state.matches || []).forEach(match => {
-    if(processCancelRefundForMe(match)) changed = true;
-  });
-  return changed;
-}
-
-function applyMatchResultForMe(match, type){
-  match.processedBy = match.processedBy || [];
-  if(match.processedBy.includes(state.username)) return false;
-  // Registre personnel : le processedBy du doc partagé peut être écrasé
-  // par l'écriture d'un autre joueur — sans ce registre, le gain était
-  // payé une 2e fois.
-  state.settledMatchIds = state.settledMatchIds || [];
-  if(state.settledMatchIds.includes("W:" + match.id)){
-    match.processedBy.push(state.username);
-    if(db) db.collection("matches").doc(match.id).update({ processedBy: firebase.firestore.FieldValue.arrayUnion(state.username) }).catch(() => {});
-    return false;
-  }
-  match.processedBy.push(state.username);
-  state.settledMatchIds.push("W:" + match.id);
-  if(state.settledMatchIds.length > 300) state.settledMatchIds = state.settledMatchIds.slice(-300);
-
-  const info = computePlayerBetInfo(match, state.username);
-
-  state.stats.played += 1;
-  if(type === 'WIN'){
-    // La mise a déjà été débitée au verrouillage du match (escrow) :
-    // on crédite donc le gain complet (mise incluse), pas juste le profit.
-    const reward = info.winReward;
-    // Le "profit" (ce qu'on a vraiment gagné, hors mise récupérée) sert au
-    // suivi global Total Earned / Highest Match Earnings, façon BetterPlayerWin.
-    const profit = roundToCents(reward - info.stake);
-    state.stats.wins += 1;
-    state.rp = (state.rp || 0) + RP_PER_WIN;
-    state.stats.streak = (state.stats.streak || 0) + 1;
-    if(state.stats.streak > (state.stats.bestStreak || 0)) state.stats.bestStreak = state.stats.streak;
-    state.stats.totalEarned = roundToCents((state.stats.totalEarned || 0) + profit);
-    if(profit > (state.stats.highestMatchEarning || 0)) state.stats.highestMatchEarning = profit;
-    state.coins = roundToCents((state.coins || 0) + reward);
-    playTingSound();
-    toast(`Victory recorded! +1 Win · +${formatCoins(reward)} coins`);
-  } else {
-    // Rien à débiter ici : la mise a déjà disparu au moment du READY UP.
-    state.stats.losses += 1;
-    state.stats.streak = 0;
-    state.stats.totalEarned = roundToCents((state.stats.totalEarned || 0) - info.stake);
-    toast(info.stake > 0 ? `Defeat recorded. Your ${formatCoins(info.stake)} coin bet is gone.` : `Defeat recorded. Your teammate covered the bet — no coins lost.`);
-  }
-
-  state.history.unshift({
-    mode: match.mode,
-    teamSize: match.teamSize,
-    result: type,
-    date: Date.now(),
-    matchId: match.id
-  });
-
-  return true;
-}
-
-function applyPendingResultsForMe(){
-  let changed = false;
-  (state.matches || []).forEach(match => {
-    if(!match.results || match.cancelled) return;
-    const myResult = match.results[state.username];
-    if(!myResult) return;
-    const processedBy = match.processedBy || [];
-    if(processedBy.includes(state.username)) return;
-    if(applyMatchResultForMe(match, myResult)){
-      changed = true;
-      // On ajoute juste mon nom à processedBy (arrayUnion) au lieu de
-      // réécrire tout le match — ça effaçait le nom des autres joueurs.
-      if(db) db.collection("matches").doc(match.id).update({ processedBy: firebase.firestore.FieldValue.arrayUnion(state.username) }).catch(() => {});
-    }
-  });
-  return changed;
-}
-
-function checkVictoryTimers(){
-  let changed = false;
-  (state.matches || []).forEach(match => {
-    if(!match.victoryClaim || match.disputed || match.completed || match.cancelled) return;
-    // Un signalement de triche en cours gèle le chrono de victoire.
-    if(match.cheaterReport && match.cheaterReport.status === "pending") return;
-    const elapsed = Date.now() - match.victoryClaim.at;
-    const timerMs = match.victoryClaim.timerMs || VICTORY_TIMER_MS;
-    if(elapsed < timerMs) return;
-
-    const claimant = match.victoryClaim.by;
-    const { hostPlayers, guestPlayers } = matchTeamsOf(match);
-    const winners = hostPlayers.includes(claimant) ? hostPlayers : guestPlayers;
-    const losers = hostPlayers.includes(claimant) ? guestPlayers : hostPlayers;
-    finalizeMatchResult(match, winners, losers);
-    changed = true;
-  });
-  return changed;
-}
-
-/* Enregistre le résultat pour TOUT LE MONDE des deux équipes (pas juste
-   2 joueurs) — indispensable en 2v2/3v3/4v4 pour que chaque coéquipier
-   reçoive vraiment son gain ou sa perte. */
-function finalizeMatchResult(match, winners, losers){
-  match.results = match.results || {};
-  (winners || []).forEach(u => { match.results[u] = 'WIN'; });
-  (losers || []).forEach(u => { match.results[u] = 'LOSS'; });
-  match.victoryClaim = null;
-  match.disputed = false;
-  match.completed = true;
-
-  if((winners || []).includes(state.username)) applyMatchResultForMe(match, 'WIN');
-  if((losers || []).includes(state.username)) applyMatchResultForMe(match, 'LOSS');
-
-  if(state.currentLobby === match.id) state.currentLobby = null;
-
-  pushMatchToCloud(match);
-}
-
+/* Toute la logique d'escrow, de remboursement et de règlement des résultats
+   vit désormais côté serveur (matchEscrow / matchDeclareResult / refundMatch /
+   finalizeMatch dans functions/economy.js) — le site ne fait plus que
+   déclarer l'INTENTION du joueur ("j'ai gagné"/"j'ai perdu") et laisse le
+   serveur calculer et créditer les coins avec les droits Admin SDK. */
 function declareResult(matchId, type){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
@@ -5126,45 +4871,33 @@ function declareResult(matchId, type){
     toast("This match is under review — you can't submit a result right now.");
     return;
   }
-  const myTeam = hostPlayers.includes(state.username) ? hostPlayers : guestPlayers;
-  const otherTeam = hostPlayers.includes(state.username) ? guestPlayers : hostPlayers;
 
-  if(type === 'LOSS'){
-    finalizeMatchResult(match, otherTeam, myTeam);
-    save();
-    setPage("matches");
-    return;
-  }
-
-  // type === 'WIN'
-  if(match.victoryClaim && match.victoryClaim.by === state.username){
-    toast("You already declared your victory, waiting for your opponent.");
-    return;
-  }
-
-  if(match.victoryClaim && match.victoryClaim.by && myTeam.includes(match.victoryClaim.by)){
-    // Un coéquipier a déjà déclaré la victoire pour toute l'équipe — rien à faire de plus.
-    toast("Your teammate already declared victory — waiting for the other side.");
-    return;
-  }
-
-  if(match.victoryClaim && match.victoryClaim.by && !myTeam.includes(match.victoryClaim.by)){
-    match.disputed = true;
-    toast("You both declared victory — send proof to resolve the dispute.");
-    pushMatchToCloud(match);
-    render();
-    return;
-  }
-
-  // Un joueur VIP profite d'une confirmation automatique accélérée (5 min
-  // au lieu de 15) — le délai est fixé au moment de la déclaration, sur le
-  // statut VIP du DÉCLARANT (peu importe si l'adversaire est VIP ou non).
-  const claimTimerMs = isVIP() ? VIP_VICTORY_TIMER_MS : VICTORY_TIMER_MS;
-  match.victoryClaim = { by: state.username, at: Date.now(), timerMs: claimTimerMs };
-  playTingSound(); // petit son de confirmation quand on déclare sa victoire
-  toast(`Victory declared! Your opponent has ${claimTimerMs === VIP_VICTORY_TIMER_MS ? '5' : '15'} minutes to respond, otherwise it's confirmed automatically.`);
-  pushMatchToCloud(match);
-  render();
+  callFn("matchDeclareResult", { matchId, result: type }).then(res => {
+    const status = res && res.status;
+    if(status === "finalized"){
+      playTingSound();
+      if(state.currentLobby === matchId) state.currentLobby = null;
+      toast(type === 'WIN' ? "Victory recorded!" : "Defeat recorded.");
+      setPage("matches");
+    } else if(status === "claimed"){
+      const timerMs = res.timerMs || VICTORY_TIMER_MS;
+      playTingSound();
+      toast(`Victory declared! Your opponent has ${timerMs === VIP_VICTORY_TIMER_MS ? '5' : '15'} minutes to respond, otherwise it's confirmed automatically.`);
+      render();
+    } else if(status === "disputed"){
+      toast("You both declared victory — send proof to resolve the dispute.");
+      render();
+    } else if(status === "already_claimed"){
+      toast("You already declared your victory, waiting for your opponent.");
+    } else if(status === "teammate_claimed"){
+      toast("Your teammate already declared victory — waiting for the other side.");
+    } else if(status === "frozen"){
+      toast("This match is under review — you can't submit a result right now.");
+    } else if(status === "over"){
+      toast("This match is already settled.");
+      render();
+    }
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function uploadProof(matchId, inputEl){
@@ -5449,29 +5182,28 @@ let matchFilters = { mode:"", region:"", platform:"", teamSize:"", sort:"date_de
 
 const MATCH_TTL_MS = 30 * 60 * 1000;
 
+/* Seuls les champs de PROFIL (rien qui touche à l'argent ou à la
+   progression : coins, snipes, avatars possédés, VIP, stats, historique,
+   RP, etc.) sont encore écrits directement par le site — ces champs "eco"
+   sont désormais 100% verrouillés côté règles Firestore et ne peuvent
+   plus être changés que par les Cloud Functions (functions/economy.js).
+   Leur valeur locale (state.coins, state.rp, ...) sert uniquement à
+   l'affichage et arrive par le listener temps réel (initOwnCoinsSync) —
+   ne JAMAIS la renvoyer ici, sous peine de voir TOUT ce set() rejeté par
+   les règles dès qu'elle diverge, même d'un centime, de la vraie valeur
+   serveur. */
 function save(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if(currentUid && db){
     db.collection("users").doc(currentUid).set({
       username: state.username,
       epic: state.epic,
-      stats: state.stats,
-      coins: state.coins,
-      ownedAvatars: state.ownedAvatars,
       equippedAvatar: state.equippedAvatar,
       customAvatar: state.customAvatar || null,
-      customAvatarUnlocked: !!state.customAvatarUnlocked,
-      snipes: state.snipes || 0,
-      history: state.history,
-      ecoResetVersion: ECO_RESET_VERSION,
-      lastWheelSpin: state.lastWheelSpin || null,
-      vipUntil: state.vipUntil || null,
-      rp: state.rp || 0,
       discordId: state.discordId || null,
       discordUsername: state.discordUsername || null,
       discordAvatar: state.discordAvatar || null,
-      epicLocked: !!state.epicLocked,
-      settledMatchIds: (state.settledMatchIds || []).slice(-300)
+      epicLocked: !!state.epicLocked
     }, { merge:true }).catch(err => console.warn("Erreur sauvegarde profil :", err));
   }
 }
@@ -5640,6 +5372,11 @@ function wheelSegName(seg){
   return "Random avatar";
 }
 
+/* Le tirage (quel segment, quel gain) est décidé côté serveur (spinWheel
+   dans functions/economy.js), qui vérifie aussi le cooldown de 24h — le
+   site ne fait plus qu'animer la roue jusqu'à l'index renvoyé, puis
+   afficher le résultat réel une fois les coins/snipes/avatar déjà
+   crédités par le serveur. */
 function spinWheel(){
   if(wheelSpinning) return;
   if(!canSpinWheelToday()){
@@ -5661,82 +5398,64 @@ function spinWheel(){
     btn.className = "wheel-center-btn spinning";
   }
 
-  // On verrouille le cooldown TOUT DE SUITE (avant l'animation de 5.6s),
-  // pas seulement à la fin dans applyWheelReward. Sinon, ouvrir un 2e
-  // onglet et cliquer sur "Spin" dans les deux avant que le 1er ait fini
-  // son animation permettait de gagner deux fois la même roue quotidienne
-  // (aucun des deux onglets n'avait encore vu `lastWheelSpin` se mettre à
-  // jour). On persiste ça à part de `applyWheelReward` justement pour que
-  // le verrou parte immédiatement, indépendamment du gain lui-même.
-  if(!isAdmin()){
-    state.lastWheelSpin = Date.now();
-    save();
-  }
+  callFn("spinWheel").then(res => {
+    const idx = res.idx;
+    const segAngle = 360 / WHEEL_SEGMENTS.length;
+    const targetMid = idx * segAngle + segAngle / 2;
+    const currentMod = ((wheelRotation % 360) + 360) % 360;
+    const neededFinalMod = (360 - targetMid) % 360;
+    const delta = ((neededFinalMod - currentMod) + 360) % 360;
+    // Plus de tours + animation plus longue = plus de suspense, et surtout
+    // un mouvement bien visible dès le premier clic (avant, c'était rapide
+    // au point de sembler ne rien faire, ce qui poussait à re-cliquer
+    // plusieurs fois pour rien — le clic marchait déjà du premier coup).
+    const spins = 8;
+    wheelRotation += spins * 360 + delta;
+    dial.style.transform = `rotate(${wheelRotation}deg)`;
+    if(!isAdmin()) state.lastWheelSpin = Date.now();
 
-  const idx = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
-  const segAngle = 360 / WHEEL_SEGMENTS.length;
-  const targetMid = idx * segAngle + segAngle / 2;
-  const currentMod = ((wheelRotation % 360) + 360) % 360;
-  const neededFinalMod = (360 - targetMid) % 360;
-  const delta = ((neededFinalMod - currentMod) + 360) % 360;
-  // Plus de tours + animation plus longue = plus de suspense, et surtout
-  // un mouvement bien visible dès le premier clic (avant, c'était rapide
-  // au point de sembler ne rien faire, ce qui poussait à re-cliquer
-  // plusieurs fois pour rien — le clic marchait déjà du premier coup).
-  const spins = 8;
-  wheelRotation += spins * 360 + delta;
-  dial.style.transform = `rotate(${wheelRotation}deg)`;
-
-  setTimeout(() => {
-    // Important : on repasse wheelSpinning à false AVANT d'appeler
-    // applyWheelReward (qui déclenche un render()) — sinon le garde-fou
-    // anti-interruption de l'animation (voir render()) bloquerait aussi
-    // CE rendu final, et le bouton resterait bloqué sur "···" indéfiniment.
+    setTimeout(() => {
+      // Important : on repasse wheelSpinning à false AVANT le render() final
+      // — sinon le garde-fou anti-interruption de l'animation (voir render())
+      // bloquerait aussi CE rendu, et le bouton resterait bloqué sur "···".
+      wheelSpinning = false;
+      showWheelResult(WHEEL_SEGMENTS[idx], res.resultText);
+    }, 5600);
+  }).catch(err => {
     wheelSpinning = false;
-    applyWheelReward(WHEEL_SEGMENTS[idx]);
-  }, 5600);
+    if(btn){ btn.disabled = false; btn.className = "wheel-center-btn"; }
+    render();
+    toast(fnErrorMessage(err));
+  });
 }
 
-function applyWheelReward(seg){
-  let resultText = "";
+function showWheelResult(seg, resultText){
+  let display = resultText || "";
   let resultIcon = icon("sparkles");
 
-  if(seg.type === "coins"){
-    state.coins = roundToCents((state.coins || 0) + seg.amount);
-    resultText = `+${formatCoins(seg.amount)} coins`;
-    resultIcon = coinIcon(44);
-  } else if(seg.type === "snipes"){
-    state.snipes = (state.snipes || 0) + seg.amount;
-    resultText = `+${seg.amount} Snipe${seg.amount > 1 ? 's' : ''}`;
+  if(display.indexOf("avatar:") === 0){
+    const av = getAvatar(display.slice(7));
+    display = `New avatar: ${av ? av.name : "?"}`;
+    resultIcon = icon("gift");
+  } else if(/snipe/i.test(display)){
     resultIcon = "🎯";
-  } else if(seg.type === "avatar"){
-    const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !a.starter && !state.ownedAvatars.includes(a.id));
-    if(unowned.length > 0){
-      const picked = unowned[Math.floor(Math.random() * unowned.length)];
-      state.ownedAvatars.push(picked.id);
-      resultText = `New avatar: ${picked.name}`;
-      resultIcon = icon("gift");
-    } else {
-      state.coins = roundToCents((state.coins || 0) + 3);
-      resultText = "+3 coins (all avatars already owned)";
-      resultIcon = coinIcon(44);
-    }
+  } else {
+    resultIcon = coinIcon(44);
   }
-  // (le verrou anti-double-spin `lastWheelSpin` a déjà été posé au tout
-  // début de spinWheel(), pas ici — voir ce commentaire là-bas)
+
   save();
   renderHeaderUI();
   render();
 
   // Toast + popup "Bravo" bien visible pour que le gain soit clair, plutôt
   // que juste un petit toast facile à rater.
-  toast(`${resultText}!`);
+  toast(`${display}!`);
   const overlay = document.getElementById("wheelResultOverlay");
   const iconEl = document.getElementById("wheelResultIcon");
   const textEl = document.getElementById("wheelResultText");
   if(overlay && iconEl && textEl){
     iconEl.innerHTML = resultIcon;
-    textEl.textContent = resultText;
+    textEl.textContent = display;
     overlay.classList.add("open");
   }
 }
@@ -6982,23 +6701,27 @@ function createMatch(){
     locked: false,
     completed: false,
     createdAt: Date.now(),
-    // Le host paie sa mise (ou celle de toute son équipe s'il cover) DÈS la
-    // création du match, même si personne n'a encore rejoint — pas besoin
-    // d'attendre que le match se verrouille. Remboursé s'il annule le match
-    // avant qu'il se verrouille (voir leaveMatchById).
-    escrowedBy: [state.username],
-    escrowAmounts: { [state.username]: hostStake }
+    // La mise n'est plus débitée ici : dès que le doc existe, on appelle la
+    // Cloud Function matchEscrow (voir plus bas) qui vérifie tout côté
+    // serveur et débite réellement — jamais le navigateur qui décide.
+    escrowedBy: [],
+    escrowAmounts: {}
   };
-
-  state.coins = roundToCents((state.coins || 0) - hostStake);
 
   state.matches.unshift(newMatch);
   state.currentLobby = newMatch.id;
   save();
-  pushMatchToCloud(newMatch);
+  createMatchInCloud(newMatch);
   closeCreateModal();
-  toast(hostStake > 0 ? `Match created! 🔒 ${formatCoins(hostStake)} coins locked in.` : "Match created successfully!");
   setPage("lobby");
+
+  // Le host paie sa mise (ou celle de toute son équipe s'il cover) DÈS la
+  // création du match, même si personne n'a encore rejoint — vérifié et
+  // débité côté serveur. Remboursé s'il annule avant que le match se
+  // verrouille (voir leaveMatchById -> matchLeave).
+  callFn("matchEscrow", { matchId: newMatch.id }).then(res => {
+    toast((res && res.stake > 0) ? `Match created! 🔒 ${formatCoins(res.stake)} coins locked in.` : "Match created successfully!");
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* CHAT GÉNÉRAL (synchronisé via Firebase) */
@@ -7147,6 +6870,48 @@ function initOwnCoinsSync(){
       }
     }
 
+    // Tous les autres champs "économiques" (snipes, avatars possédés, VIP,
+    // stats, historique, RP...) ne sont désormais changés QUE par les Cloud
+    // Functions (voir functions/economy.js) — donc jamais localement par ce
+    // navigateur. Ce listener temps réel est la SEULE façon dont l'état
+    // affiché ici les rattrape après un achat, un spin, un résultat de
+    // match, etc. Sans ça l'écran resterait figé sur d'anciennes valeurs
+    // jusqu'au prochain rechargement complet de la page.
+    if(typeof data.snipes === "number" && data.snipes !== (state.snipes || 0)){
+      state.snipes = data.snipes;
+      changed = true;
+    }
+    if(Array.isArray(data.ownedAvatars) && JSON.stringify(data.ownedAvatars) !== JSON.stringify(state.ownedAvatars || [])){
+      state.ownedAvatars = data.ownedAvatars;
+      changed = true;
+    }
+    if(data.vipUntil !== undefined && data.vipUntil !== (state.vipUntil || null)){
+      state.vipUntil = data.vipUntil;
+      changed = true;
+    }
+    if(typeof data.customAvatarUnlocked === "boolean" && data.customAvatarUnlocked !== !!state.customAvatarUnlocked){
+      state.customAvatarUnlocked = data.customAvatarUnlocked;
+      changed = true;
+    }
+    if(data.stats && JSON.stringify(data.stats) !== JSON.stringify(state.stats || {})){
+      state.stats = data.stats;
+      changed = true;
+    }
+    if(Array.isArray(data.history) && JSON.stringify(data.history) !== JSON.stringify(state.history || [])){
+      state.history = data.history;
+      changed = true;
+    }
+    if(typeof data.rp === "number" && data.rp !== (state.rp || 0)){
+      state.rp = data.rp;
+      changed = true;
+    }
+    if(Array.isArray(data.settledMatchIds)){
+      state.settledMatchIds = data.settledMatchIds;
+    }
+    if(typeof data.ecoResetVersion === "number"){
+      state.ecoResetVersion = data.ecoResetVersion;
+    }
+
     // Avertissements / notifications reçus pendant qu'on est déjà sur le
     // site (ex : un modérateur nous averti, ou un joueur nous tip) — mis à
     // jour tout de suite, sans attendre un refresh de la page.
@@ -7172,6 +6937,7 @@ function initOwnCoinsSync(){
     if(!changed) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderHeaderUI();
+    render();
   }, function(err){
     console.warn("Erreur de synchronisation du solde :", err);
   });
@@ -8974,14 +8740,16 @@ let bracketSearch = "";
 
 function initTournamentsSync(){
   if(!db) return;
+  // Le tableau (bracket), l'avancement des rounds et le paiement des prix
+  // sont désormais calculés côté serveur (functions/economy.js:
+  // tournamentTick, une Cloud Function planifiée) — le site se contente
+  // d'afficher ce qui arrive par ce onSnapshot.
   db.collection("tournaments").onSnapshot(snap => {
     const list = [];
     snap.forEach(d => { const t = d.data(); if(t && t.id) list.push(t); });
     tournamentsCache = list;
-    tournamentTick();
     if(currentPage === "tournaments") render();
   }, err => console.warn("Error syncing tournaments:", err));
-  setInterval(tournamentTick, 15000);
 }
 
 function tournamentRoundCount(t){
@@ -9007,218 +8775,12 @@ function tournamentStatus(t){
   if(t.regOpensAt && now < t.regOpensAt) return { key:"soon", label:"Upcoming" };
   return { key:"open", label:"Registration open" };
 }
-function tournamentMatchId(t, r, i){ return `TM-${t.id}-${r}-${i}`; }
-
-function shuffleArray(arr){
-  const a = [...arr];
-  for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
-  return a;
-}
-
-function buildInitialBracket(players){
-  const shuffled = shuffleArray(players);
-  let size = 2;
-  while(size < shuffled.length) size *= 2;
-  const rounds = Math.log2(size);
-  const half = size / 2;
-  const bracket = [];
-  for(let i = 0; i < half; i++) bracket.push({ r:0, i, a:null, b:null, winner:null, matchId:null });
-  shuffled.forEach((p, k) => { const e = bracket[k % half]; if(k < half) e.a = p; else e.b = p; });
-  for(let r = 1; r < rounds; r++){
-    for(let i = 0; i < size / Math.pow(2, r + 1); i++) bracket.push({ r, i, a:null, b:null, winner:null, matchId:null });
-  }
-  return bracket;
-}
-
-function buildTournamentMatch(t, e, lastRound){
-  const a = e.a, b = e.b;
-  const infoA = allPlayersCache.find(p => p.username === a) || {};
-  return {
-    id: tournamentMatchId(t, e.r, e.i),
-    host: a,
-    hostEpic: infoA.epic || "N/A",
-    hostStats: infoA.stats || {},
-    visibility: "private",
-    passcode: null,
-    region: t.region,
-    platform: t.platform,
-    weapon: t.weapon || "",
-    teamSize: "1v1",
-    team: null,
-    coverBet: false,
-    bet: 0,
-    mode: t.mode,
-    firstTo: t.firstTo || 1,
-    killLead: null,
-    simpleEdit: t.simpleEdit !== false,
-    status: "OPEN",
-    players: [a, b],
-    hostPlayers: [a],
-    guestPlayers: [b],
-    readies: {},
-    results: {},
-    processedBy: [],
-    victoryClaim: null,
-    disputed: false,
-    proofs: {},
-    chat: [],
-    locked: false,
-    completed: false,
-    createdAt: Date.now(),
-    escrowedBy: [a, b],
-    escrowAmounts: { [a]:0, [b]:0 },
-    tournamentId: t.id,
-    tournamentName: t.name,
-    tournamentRound: e.r,
-    tournamentRoundName: tournamentRoundName({ bracket:[{ r: lastRound }] }, e.r)
-  };
-}
-
-/* Fait avancer le tableau autant que possible (byes, résultats, nouveaux
-   matchs). Travaille sur une copie ; renvoie ce qui a changé. */
-function resolveBracket(t, bracketIn, matchesById){
-  const bracket = bracketIn.map(e => ({ ...e }));
-  const lastRound = Math.max(...bracket.map(e => e.r));
-  const find = (r, i) => bracket.find(e => e.r === r && e.i === i);
-  const newMatches = [];
-  let finalWinner = null, changed = false, guard = 0;
-  let loop = true;
-  while(loop && guard++ < 50){
-    loop = false;
-    bracket.sort((x, y) => x.r - y.r || x.i - y.i).forEach(e => {
-      if(e.winner) return;
-      let w = null;
-      if(e.r === 0 && ((e.a && !e.b) || (!e.a && e.b))) w = e.a || e.b; // exempté (bye)
-      else if(e.a && e.b){
-        if(!e.matchId){
-          const m = buildTournamentMatch(t, e, lastRound);
-          e.matchId = m.id;
-          newMatches.push(m);
-          changed = true;
-        } else {
-          const m = matchesById[e.matchId];
-          if(m && m.completed && m.results){
-            if(m.results[e.a] === "WIN") w = e.a;
-            else if(m.results[e.b] === "WIN") w = e.b;
-          }
-        }
-      }
-      if(w){
-        e.winner = w; changed = true; loop = true;
-        if(e.r === lastRound) finalWinner = w;
-        else {
-          const parent = find(e.r + 1, Math.floor(e.i / 2));
-          if(parent){ if(e.i % 2 === 0) parent.a = w; else parent.b = w; }
-        }
-      }
-    });
-  }
-  return { bracket, newMatches, finalWinner, changed };
-}
-
-async function uidForUsername(name){
-  const c = allPlayersCache.find(p => p.username === name);
-  if(c && c.uid) return c.uid;
-  try{
-    const q = await db.collection("users").where("username", "==", name).limit(1).get();
-    if(!q.empty) return q.docs[0].id;
-  }catch(e){}
-  return null;
-}
-
-/* Gains : 1er, 2e, et chaque perdant de demi-finale. */
-function tournamentPayoutList(t, bracket){
-  const p = t.prizes || {};
-  const lastRound = Math.max(...bracket.map(e => e.r));
-  const final = bracket.find(e => e.r === lastRound);
-  const out = [];
-  if(!final || !final.winner) return out;
-  const loserOf = e => e.winner === e.a ? e.b : e.a;
-  if(p.first > 0) out.push({ name: final.winner, amount: p.first, place: 1 });
-  if(p.second > 0 && loserOf(final)) out.push({ name: loserOf(final), amount: p.second, place: 2 });
-  if(p.semis > 0 && lastRound >= 1){
-    bracket.filter(e => e.r === lastRound - 1 && e.winner).forEach(e => {
-      const l = loserOf(e);
-      if(l) out.push({ name: l, amount: p.semis, place: 3 });
-    });
-  }
-  return out;
-}
-
-async function tournamentTick(){
-  if(!db || tournamentBusy) return;
-  tournamentBusy = true;
-  try{
-    const matchesById = {};
-    (state.matches || []).forEach(m => { matchesById[m.id] = m; });
-    for(const t of tournamentsCache){
-      const due = t.status === "upcoming" && t.startAt && Date.now() >= t.startAt;
-      let needs = due;
-      if(t.status === "running"){
-        needs = resolveBracket(t, t.bracket || [], matchesById).changed;
-      }
-      if(!needs) continue;
-      await advanceTournament(t.id, matchesById);
-    }
-  }catch(e){ console.warn("Tournament tick error:", e); }
-  tournamentBusy = false;
-}
-
-async function advanceTournament(tid, matchesById){
-  const ref = db.collection("tournaments").doc(tid);
-  // On prépare les uid des futurs gagnants hors transaction (pas de requêtes dedans).
-  const pre = tournamentsCache.find(x => x.id === tid);
-  const uidMap = {};
-  if(pre && pre.status === "running"){
-    const sim = resolveBracket(pre, pre.bracket || [], matchesById);
-    if(sim.finalWinner){
-      for(const pay of tournamentPayoutList(pre, sim.bracket)) uidMap[pay.name] = await uidForUsername(pay.name);
-    }
-  }
-  await db.runTransaction(async tx => {
-    const snap = await tx.get(ref);
-    if(!snap.exists) return;
-    const t = snap.data();
-    let bracket = t.bracket || [];
-    const update = {};
-    if(t.status === "upcoming"){
-      if(!(t.startAt && Date.now() >= t.startAt)) return;
-      const players = t.players || [];
-      if(players.length < 2){
-        tx.update(ref, { status:"cancelled", cancelReason:"Not enough players" });
-        return;
-      }
-      bracket = buildInitialBracket(players);
-      update.status = "running";
-      update.startedAt = Date.now();
-    } else if(t.status !== "running"){
-      return;
-    }
-    const res = resolveBracket(t, bracket, matchesById);
-    if(!res.changed && t.status === "running") return;
-    res.newMatches.forEach(m => tx.set(db.collection("matches").doc(m.id), m));
-    update.bracket = res.bracket;
-    if(res.finalWinner){
-      update.status = "finished";
-      update.winner = res.finalWinner;
-      update.finishedAt = Date.now();
-      if(!t.paidOut){
-        const payouts = tournamentPayoutList(t, res.bracket);
-        const paid = [];
-        payouts.forEach(pay => {
-          const uid = uidMap[pay.name];
-          if(uid){
-            tx.update(db.collection("users").doc(uid), { coins: firebase.firestore.FieldValue.increment(pay.amount) });
-            paid.push(pay);
-          }
-        });
-        update.paidOut = true;
-        update.payouts = paid;
-      }
-    }
-    tx.update(ref, update);
-  });
-}
+// Construction du tableau initial, avancement des rounds (byes, résultats,
+// nouveaux matchs) et paiement des prix : tout ça vit désormais uniquement
+// côté serveur (functions/economy.js: tournamentTick, buildInitialBracket,
+// resolveBracket, tournamentPayoutList...), qui tourne sur une tâche de
+// fond planifiée plutôt que sur le navigateur d'un joueur au hasard. Le
+// site n'a plus qu'à lire t.bracket tel qu'écrit par le serveur.
 
 /* ---------- Actions ---------- */
 function openTournament(id){ activeTournamentId = id; tournamentsView = "detail"; bracketSearch = ""; render(); }
@@ -9310,13 +8872,19 @@ async function unregisterTournament(tid){
 }
 
 async function startTournamentNow(tid){
-  if(!isSuperAdmin() || !db) return;
+  if(!isSuperAdmin()) return;
   const t = tournamentsCache.find(x => x.id === tid);
   if(!t) return;
   if((t.players || []).length < 2){ toast("At least 2 players are needed to start."); return; }
   if(!(await siteConfirm(`Start "${t.name}" now with ${t.players.length} players? Registration will close and the bracket will be drawn.`, { title:"Start tournament", okLabel:"Start now", danger:false }))) return;
-  await db.collection("tournaments").doc(tid).update({ startAt: Date.now() - 1000 });
-  setTimeout(tournamentTick, 400);
+  try{
+    await callFn("adminStartTournamentNow", { tid });
+    // Le tirage du tableau se fait au prochain passage de la Cloud
+    // Function planifiée (tournamentTick), dans la minute qui suit.
+    toast(`"${t.name}" is starting — the bracket will appear shortly.`);
+  } catch(err){
+    toast(fnErrorMessage(err));
+  }
 }
 
 async function cancelTournament(tid){
@@ -9420,11 +8988,9 @@ function doBuySnipe(){
     toast(`Not enough coins! ${SNIPE_BUNDLE_QTY} Snipes cost ${SNIPE_COST_COINS} coins.`);
     return;
   }
-  state.coins = roundToCents(state.coins - SNIPE_COST_COINS);
-  state.snipes = (state.snipes || 0) + SNIPE_BUNDLE_QTY;
-  save();
-  renderHeaderUI();
-  toast(`+${SNIPE_BUNDLE_QTY} Snipes purchased! 🎯`);
+  callFn("shopPurchase", { item: "snipeBundle" }).then(() => {
+    toast(`+${SNIPE_BUNDLE_QTY} Snipes purchased! 🎯`);
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 const RESET_STATS_COST_COINS = 3;
@@ -9442,14 +9008,14 @@ function buyCustomAvatarSlot(){
 function doBuyCustomAvatarSlot(){
   if(state.customAvatarUnlocked){ toast("You've already unlocked custom profile pictures!"); return; }
   if(state.coins < CUSTOM_AVATAR_COST_COINS){ toast("Not enough coins!"); return; }
-  state.coins = roundToCents(state.coins - CUSTOM_AVATAR_COST_COINS);
-  state.customAvatarUnlocked = true;
-  save();
-  renderHeaderUI();
-  toast("Custom profile picture unlocked! 📸");
-  if(currentPage === "shop") render();
-  openAvatarPicker();
-  renderAvatarPicker("upload");
+  callFn("shopPurchase", { item: "customAvatarSlot" }).then(() => {
+    state.customAvatarUnlocked = true;
+    save();
+    toast("Custom profile picture unlocked! 📸");
+    if(currentPage === "shop") render();
+    openAvatarPicker();
+    renderAvatarPicker("upload");
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function buyResetStats(){
@@ -9465,13 +9031,13 @@ function doBuyResetStats(){
     toast(`Not enough coins! Reset Stats costs ${formatCoins(RESET_STATS_COST_COINS)} coins.`);
     return;
   }
-  state.coins = roundToCents((state.coins || 0) - RESET_STATS_COST_COINS);
-  state.stats = { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 };
-  state.history = [];
-  save();
-  renderHeaderUI();
-  toast("Stats reset to 0-0! 🔄");
-  render();
+  callFn("shopPurchase", { item: "resetStats" }).then(() => {
+    state.stats = { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 };
+    state.history = [];
+    save();
+    toast("Stats reset to 0-0! 🔄");
+    render();
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function buyVIP(){
@@ -9496,28 +9062,21 @@ function doBuyVIP(){
     toast(`Not enough coins! VIP costs ${formatCoins(VIP_COST_COINS)} coins.`);
     return;
   }
-  state.coins = roundToCents((state.coins || 0) - VIP_COST_COINS);
-  state.vipUntil = Date.now() + VIP_DURATION_MS;
-
-  state.snipes = (state.snipes || 0) + VIP_SNIPE_BONUS;
-
-  // Avatar bonus aléatoire parmi ceux pas encore possédés (comme la roue) —
-  // sinon quelques coins de consolation si tout est déjà débloqué.
-  let avatarMsg = "";
-  const unowned = AVATAR_CATALOG.filter(a => a.id !== "default" && !a.starter && !state.ownedAvatars.includes(a.id));
-  if(unowned.length > 0){
-    const picked = unowned[Math.floor(Math.random() * unowned.length)];
-    state.ownedAvatars.push(picked.id);
-    avatarMsg = ` + new avatar: ${picked.name}`;
-  } else {
-    state.coins = roundToCents((state.coins || 0) + 3);
-    avatarMsg = " + 3 coins (all avatars already owned)";
-  }
-
-  save();
-  renderHeaderUI();
-  toast(`👑 VIP activated for 30 days! +${VIP_SNIPE_BONUS} Snipes${avatarMsg}. Open a ticket on our Discord to get the VIP role.`);
-  render();
+  callFn("shopPurchase", { item: "vip" }).then(res => {
+    // Avatar bonus aléatoire parmi ceux pas encore possédés (comme la roue) —
+    // sinon quelques coins de consolation si tout est déjà débloqué — décidé
+    // côté serveur ; on ne fait que le décrire dans le toast.
+    let avatarMsg = "";
+    const bonus = (res && res.bonus) || "";
+    if(bonus.indexOf("avatar:") === 0){
+      const av = getAvatar(bonus.slice(7));
+      avatarMsg = ` + new avatar: ${av ? av.name : "?"}`;
+    } else if(bonus.indexOf("coins:") === 0){
+      avatarMsg = ` + ${bonus.slice(6)} coins (all avatars already owned)`;
+    }
+    toast(`👑 VIP activated for 30 days! +${VIP_SNIPE_BONUS} Snipes${avatarMsg}. Open a ticket on our Discord to get the VIP role.`);
+    render();
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function openSnipeModal(matchId){
@@ -9593,12 +9152,15 @@ function revealSnipe(){
     toast("You don't have any Snipes left. Buy one first!");
     return;
   }
-  state.snipes -= 1;
-  state.snipedMatches = state.snipedMatches || [];
-  state.snipedMatches.push(match.id);
-  save();
-  renderHeaderUI();
-  renderSnipeModal();
+  // Le décompte du solde de Snipes est vérifié et débité côté serveur
+  // (useSnipe dans functions/economy.js) — snipedMatches (juste "ai-je déjà
+  // révélé CE match") n'est pas un champ d'argent, il reste local/simple.
+  callFn("useSnipe").then(() => {
+    state.snipedMatches = state.snipedMatches || [];
+    state.snipedMatches.push(match.id);
+    save();
+    renderSnipeModal();
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function enterMatchLobby(id){
@@ -9619,7 +9181,7 @@ function viewHistoryMatch(matchId){
 }
 
 function quitMatch(id){
-  if(leaveMatchById(id)) render();
+  leaveMatchById(id).then(ok => { if(ok) render(); });
 }
 
 /* Un match "d'équipe" ne stocke qu'un instantané de la team (match.team)
@@ -9719,31 +9281,19 @@ function executeJoin(match){
   }
   match.players = [...match.hostPlayers, ...match.guestPlayers];
 
-  // Kept for backward compatibility with older display code; live data now
-  // comes from playerLiveInfo() instead of these snapshot fields.
-  match.opponentEpic = state.epic || "N/A";
-  match.opponentStats = {...state.stats};
-
-  // Comme pour le host à la création : je paie ma mise DÈS que je rejoins
-  // le match, pas besoin d'attendre le verrouillage — sauf si mon host me
-  // couvre (cover bet), auquel cas je ne paie rien.
-  const info = computePlayerBetInfo(match, state.username);
-  match.escrowedBy = match.escrowedBy || [];
-  match.escrowAmounts = match.escrowAmounts || {};
-  if(!match.escrowedBy.includes(state.username)){
-    const stake = Math.min(state.coins || 0, info.stake);
-    state.coins = roundToCents((state.coins || 0) - stake);
-    match.escrowedBy.push(state.username);
-    match.escrowAmounts[state.username] = stake;
-  }
-
   state.currentLobby = match.id;
   save();
   pushMatchToCloud(match);
-  toast(info.stake > 0
-    ? `You joined the match! 🔒 ${formatCoins(info.stake)} coins locked in.`
-    : "You joined the match! Your host is covering your bet — you risk nothing.");
   setPage("lobby");
+
+  // Comme pour le host à la création : je paie ma mise DÈS que je rejoins
+  // le match (vérifié et débité côté serveur) — sauf si mon host me couvre
+  // (cover bet), auquel cas je ne paie rien.
+  callFn("matchEscrow", { matchId: match.id }).then(res => {
+    toast((res && res.stake > 0)
+      ? `You joined the match! 🔒 ${formatCoins(res.stake)} coins locked in.`
+      : "You joined the match! Your host is covering your bet — you risk nothing.");
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function simulateOpponent(matchId){
@@ -9811,123 +9361,55 @@ function toggleReady(matchId){
    ouvert pour les autres. Avant, "Quit Match" supprimait TOUJOURS tout le
    match, même pour un simple coéquipier qui se retirait. */
 function leaveMatchById(matchId, { silent } = {}){
-  const match = state.matches.find(m => m.id === matchId);
-  if(!match){
-    if(state.currentLobby === matchId) state.currentLobby = null;
-    save();
-    return true;
-  }
-  if(match.locked){
-    if(match.completed){
+  return callFn("matchLeave", { matchId }).then(res => {
+    const status = res && res.status;
+    if(status === "left" || status === "forfeit" || status === "cancelled"){
+      if(state.currentLobby === matchId) state.currentLobby = null;
+      save();
+      if(!silent){
+        if(status === "forfeit") toast("You left the match — recorded as a forfeit (loss).");
+        else if(status === "cancelled") toast("Match cancelled — any escrowed bets were refunded.");
+        else toast("You left the match.");
+      }
+      return true;
+    }
+    if(status === "completed"){
       if(!silent) toast("This match is already completed.");
       return false;
     }
-    if(match.victoryClaim || match.disputed){
+    if(status === "result_in_progress"){
       if(!silent) toast("A result is already being processed for this match — you can't leave now.");
       return false;
     }
-    // Match verrouillé mais bloqué (personne n'a déclaré de résultat, ex:
-    // un coéquipier ne s'est jamais présenté) : partir compte comme un
-    // forfait pour mon équipe, comme le bouton "I Lost". Ça évite de rester
-    // coincé indéfiniment dans un match qui ne bouge plus.
-    const { hostPlayers: hp, guestPlayers: gp } = matchTeamsOf(match);
-    const myTeam = hp.includes(state.username) ? hp : gp;
-    const otherTeam = hp.includes(state.username) ? gp : hp;
-    if(myTeam.length === 0 || otherTeam.length === 0){
-      // Pas d'adversaire en face : personne à qui donner la victoire, on annule le match.
-      let refunded = 0;
-      if((match.escrowedBy || []).includes(state.username)){
-        refunded = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
-        if(refunded > 0) state.coins = roundToCents((state.coins || 0) + refunded);
-      }
-      match.cancelled = true;
-      if(state.currentLobby === match.id) state.currentLobby = null;
-      save();
-      pushMatchToCloud(match);
-      if(!silent) toast(refunded > 0 ? `Match cancelled. ${formatCoins(refunded)} coins refunded.` : "Match cancelled.");
-      return true;
-    }
-    finalizeMatchResult(match, otherTeam, myTeam);
+    // "gone" / "not_in_match" : plus rien à quitter de toute façon.
+    if(state.currentLobby === matchId) state.currentLobby = null;
     save();
-    if(!silent) toast("You left the match — recorded as a forfeit (loss).");
     return true;
-  }
-
-  match.hostPlayers = match.hostPlayers || [match.host];
-  match.guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-
-  const isHost = match.hostPlayers.includes(state.username);
-  const isGuest = match.guestPlayers.includes(state.username);
-  const remainingHostPlayers = isHost ? match.hostPlayers.filter(p => p !== state.username) : match.hostPlayers;
-
-  // If the last host-side player leaves, the match has no owner left: cancel it entirely.
-  if(isHost && remainingHostPlayers.length === 0 && (match.escrowedBy || []).some(p => p !== state.username)){
-    // D'autres joueurs ont déjà payé leur mise : on ANNULE le match pour que
-    // chacun soit remboursé (avant, le doc était supprimé et leurs coins
-    // disparaissaient).
-    match.cancelled = true;
-    pushMatchToCloud(match);
-    processCancelRefundForMe(match);
-    if(state.currentLobby === match.id) state.currentLobby = null;
-    save();
-    if(!silent) toast("Match cancelled — every player's bet is refunded.");
-    return true;
-  }
-  if(isHost && remainingHostPlayers.length === 0){
-    // Rembourse la mise que le host avait payée dès la création du match
-    // (voir createMatch) — le match n'a jamais démarré, donc pas de raison
-    // de garder ses coins.
-    let refunded = 0;
-    if((match.escrowedBy || []).includes(state.username)){
-      refunded = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
-      if(refunded > 0) state.coins = roundToCents((state.coins || 0) + refunded);
-    }
-    state.matches = state.matches.filter(m => m.id !== match.id);
-    if(state.currentLobby === match.id) state.currentLobby = null;
-    save();
-    deleteMatchFromCloud(match.id);
-    if(!silent) toast(refunded > 0 ? `Match cancelled. ${formatCoins(refunded)} coins refunded.` : "Match cancelled.");
-    return true;
-  }
-
-  // Otherwise, just remove this player from their side — the match stays open for others.
-  if(isHost) match.hostPlayers = remainingHostPlayers;
-  if(isGuest) match.guestPlayers = match.guestPlayers.filter(p => p !== state.username);
-  match.players = [...match.hostPlayers, ...match.guestPlayers];
-  if(match.readies) delete match.readies[state.username];
-  if(match.cancelVotes) delete match.cancelVotes[state.username];
-
-  // Je paie ma mise dès que je rejoins un match (voir executeJoin) : si je
-  // pars avant que le match soit verrouillé, je dois être remboursé.
-  let refunded = 0;
-  if((match.escrowedBy || []).includes(state.username)){
-    refunded = (match.escrowAmounts && match.escrowAmounts[state.username]) || 0;
-    if(refunded > 0) state.coins = roundToCents((state.coins || 0) + refunded);
-    match.escrowedBy = match.escrowedBy.filter(p => p !== state.username);
-    if(match.escrowAmounts) delete match.escrowAmounts[state.username];
-  }
-
-  if(state.currentLobby === match.id) state.currentLobby = null;
-  save();
-  pushMatchToCloud(match);
-  if(!silent) toast(refunded > 0 ? `You left the match. ${formatCoins(refunded)} coins refunded.` : "You left the match. It's still open for others to join.");
-  return true;
+  }).catch(err => {
+    if(!silent) toast(fnErrorMessage(err));
+    return false;
+  });
 }
 
 /* Match de tournoi : on ne peut pas "quitter" (ça bloquerait le tableau),
-   seulement déclarer forfait — l'adversaire passe au tour suivant. */
+   seulement déclarer forfait — l'adversaire passe au tour suivant. Les
+   matchs de tournoi sont toujours en 1v1, donc "j'ai perdu" (LOSS) via le
+   même chemin serveur que dans le classement normal suffit à finaliser
+   immédiatement le résultat et faire avancer le tableau au prochain
+   passage de tournamentTick côté serveur. */
 async function forfeitTournamentMatch(matchId){
   const match = state.matches.find(m => m.id === matchId);
   if(!match || match.completed) return;
   const { hostPlayers, guestPlayers } = matchTeamsOf(match);
   if(!hostPlayers.includes(state.username) && !guestPlayers.includes(state.username)) return;
   if(!(await siteConfirm("Forfeit this tournament match? Your opponent goes to the next round and you're out of the tournament.", { title:"Forfeit", okLabel:"Forfeit" }))) return;
-  const mine = hostPlayers.includes(state.username) ? hostPlayers : guestPlayers;
-  const other = hostPlayers.includes(state.username) ? guestPlayers : hostPlayers;
-  finalizeMatchResult(match, other, mine);
-  save();
+  try{
+    await callFn("matchDeclareResult", { matchId, result: "LOSS" });
+  } catch(err){
+    toast(fnErrorMessage(err));
+    return;
+  }
   toast("You forfeited the match.");
-  setTimeout(tournamentTick, 400);
   setPage("tournaments");
 }
 
@@ -9936,7 +9418,7 @@ function leaveLobby(){
     setPage("matches");
     return;
   }
-  if(leaveMatchById(state.currentLobby)) setPage("matches");
+  leaveMatchById(state.currentLobby).then(ok => { if(ok) setPage("matches"); });
 }
 
 /* Annuler un match verrouillé (les 2 joueurs sont prêts) — nécessite le
@@ -9956,25 +9438,17 @@ function toggleCancelVote(matchId){
     return;
   }
 
-  match.cancelVotes = match.cancelVotes || {};
-  match.cancelVotes[state.username] = !match.cancelVotes[state.username];
-
-  const players = match.players || [];
-  const bothVoted = players.length > 1 && players.every(p => match.cancelVotes[p]);
-
-  if(bothVoted){
-    match.cancelled = true;
-    toast("Match cancelled by both players.");
-    processCancelRefundForMe(match);
-    save();
-    setPage("matches");
-    return;
-  }
-
-  save();
-  pushMatchToCloud(match);
-  toast(match.cancelVotes[state.username] ? "Cancel request sent. Waiting for opponent..." : "Cancel request withdrawn.");
-  render();
+  callFn("matchCancelVote", { matchId }).then(res => {
+    if(res && res.status === "cancelled"){
+      toast("Match cancelled by both players — bets refunded.");
+      if(state.currentLobby === matchId) state.currentLobby = null;
+      save();
+      setPage("matches");
+    } else {
+      toast("Cancel request updated.");
+      render();
+    }
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 function buyAvatar(id){
@@ -10422,47 +9896,24 @@ function sendTip(){
     toast(`Not enough coins. You have ${formatCoins(state.coins || 0)}.`);
     return;
   }
-
-  const target = allPlayersCache.find(p => p.username === targetUsername)
-    || allPlayersCache.find(p => (p.username || "").toLowerCase() === targetUsername.toLowerCase());
-  if(!target){
-    toast("This player doesn't exist.");
-    return;
-  }
-  if(!db){
-    toast("Can't send tips right now — try again in a moment.");
-    return;
-  }
   if(amount < 0.01){ toast("Enter a valid amount to tip."); return; }
   if(window.__tipInFlight) return;
   window.__tipInFlight = true;
   setTimeout(() => { window.__tipInFlight = false; }, 2500);
 
-  // Les membres VIP envoient leurs tips sans frais.
-  const fee = isVIP() ? 0 : roundToCents(amount * 0.05);
-  const netReceived = roundToCents(amount - fee);
-
-  state.coins = roundToCents((state.coins || 0) - amount);
-  save();
-
-  db.collection("users").doc(target.uid).update({
-    coins: firebase.firestore.FieldValue.increment(netReceived)
-  }).then(() => {
+  // Le calcul (frais VIP, débit/crédit, notification au destinataire) est
+  // désormais entièrement fait côté serveur (sendTip dans functions/
+  // economy.js) — le site n'envoie plus que l'intention.
+  callFn("sendTip", { targetUsername, amount }).then(res => {
+    const fee = (res && res.fee) || 0;
+    const net = (res && res.net) || 0;
     toast(fee > 0
-      ? `Tipped ${formatCoins(netReceived)} coins to ${target.username} (${formatCoins(fee)} fee).`
-      : `👑 Tipped ${formatCoins(netReceived)} coins to ${target.username} — no fee (VIP)!`);
-    pushNotificationForUid(target.uid, { type:'tip', text: `${state.username} tipped you ${formatCoins(netReceived)} coins!` });
+      ? `Tipped ${formatCoins(net)} coins to ${targetUsername} (${formatCoins(fee)} fee).`
+      : `👑 Tipped ${formatCoins(net)} coins to ${targetUsername} — no fee (VIP)!`);
     if(amountInput) amountInput.value = "";
     if(usernameInput) usernameInput.value = "";
     render();
-  }).catch(err => {
-    console.warn(err);
-    // L'envoi a échoué côté destinataire : on rembourse l'expéditeur.
-    state.coins = roundToCents((state.coins || 0) + amount);
-    save();
-    toast("Error while sending the tip — you were refunded.");
-    render();
-  });
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 async function saveSettings(){
@@ -10584,20 +10035,16 @@ async function doSignup(){
     const cred = await auth.createUserWithEmailAndPassword(email, password);
     const uid = cred.user.uid;
 
+    // Le document de création ne doit contenir AUCUN champ "économique"
+    // (voir economicFields() dans les règles Firestore) — sinon la règle
+    // `create` le refuse purement et simplement. Les valeurs de départ
+    // (0 coin, avatar de bienvenue, etc.) sont posées juste après par la
+    // Cloud Function initAccount, avec les droits Admin SDK.
     const profile = {
       username,
       epic: "",
-      stats: { played:0, wins:0, losses:0, streak:0, bestStreak:0, totalEarned:0, highestMatchEarning:0 },
-      coins: 0,
-      ownedAvatars: starterAvatar === "default" ? ["default"] : ["default", starterAvatar],
       equippedAvatar: starterAvatar,
       customAvatar: null,
-      customAvatarUnlocked: false,
-      snipes: 0,
-      vipUntil: null,
-      rp: 0,
-      ecoResetVersion: ECO_RESET_VERSION,
-      history: [],
       joinedAt: Date.now(),
       discordId: null,
       discordUsername: null,
@@ -10606,6 +10053,11 @@ async function doSignup(){
       deviceFingerprint: fingerprint || null
     };
     await db.collection("users").doc(uid).set(profile);
+    try{
+      await callFn("initAccount", { starterAvatar });
+    } catch(initErr){
+      console.warn("Erreur d'initialisation du compte :", initErr);
+    }
   } catch(e){
     errEl.textContent = firebaseAuthErrorMessage(e);
   }
@@ -10747,12 +10199,15 @@ async function loadProfileAndStart(uid){
 
       // Reset économie forcé (v4) : tous les comptes existants repartent
       // à 0 coin, 0 snipe et perdent leur VIP — une seule fois par compte.
+      // coins/snipes/vipUntil étant verrouillés côté règles, c'est la
+      // Cloud Function selfEcoReset (idempotente) qui l'applique vraiment ;
+      // on met juste à jour l'affichage local en attendant sa réponse.
       if((profile.ecoResetVersion || 0) < ECO_RESET_VERSION){
         state.coins = 0;
         state.snipes = 0;
         state.vipUntil = null;
         state.ecoResetVersion = ECO_RESET_VERSION;
-        save();
+        callFn("selfEcoReset").catch(err => console.warn("Erreur reset économie v4 :", err));
       }
     } else {
       // Pas encore de doc Firestore pour ce compte (ex: juste après un
