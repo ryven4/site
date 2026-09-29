@@ -1453,6 +1453,11 @@ button:active{ transform:scale(.97) !important; }
 .map-code-tag strong{ display:flex !important; align-items:center; gap:6px; color:var(--brand) !important; letter-spacing:.3px; }
 .map-code-tag .ic{ width:12px; height:12px; opacity:.8; }
 .map-code-tag:hover{ background:rgba(0,255,136,.14) !important; }
+button.is-loading{ position:relative; color:transparent !important; pointer-events:none; }
+button.is-loading > *{ visibility:hidden; }
+button.is-loading::after{ content:""; position:absolute; left:50%; top:50%; width:15px; height:15px; margin:-9px 0 0 -9px; border:2.5px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:btnspin .7s linear infinite; }
+button.btn.green.is-loading::after, button.btn-primary.is-loading::after{ border-color:rgba(0,0,0,.25); border-top-color:#06120b; }
+@keyframes btnspin{ to{ transform:rotate(360deg); } }
 .team-card-actions{ display:flex; justify-content:flex-end; align-items:center; gap:8px; padding:8px 10px 10px; margin-top:auto; }
 .rules-btn{ display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line2); background:rgba(255,255,255,.04); color:#cfd6de; font-size:11px; font-weight:600; padding:6px 11px; border-radius:8px; cursor:pointer; font-family:inherit; }
 .rules-btn:hover{ border-color:rgba(0,255,136,.45); color:var(--brand); background:rgba(0,255,136,.06); }
@@ -3901,9 +3906,23 @@ try{
    propre compte, car les règles Firestore interdisent purement et
    simplement ces champs en écriture côté client.
 ========================================================= */
+/* Retour visuel immédiat : le bouton qui vient d'être cliqué passe en
+   "chargement" (spinner + désactivé) tant que le serveur n'a pas répondu.
+   Les Cloud Functions peuvent mettre 1 à 3 s (démarrage à froid), sans ça
+   on avait l'impression que le clic ne faisait rien — et on pouvait
+   cliquer plusieurs fois. S'applique à TOUS les appels serveur (victoire,
+   défaite, panel modération, rematch, tips, shop…). */
+let lastClickedBtn = null, lastClickAt = 0;
+document.addEventListener("click", e => {
+  const b = e.target && e.target.closest ? e.target.closest("button") : null;
+  if(b){ lastClickedBtn = b; lastClickAt = Date.now(); }
+}, true);
 function callFn(name, data){
   if(!fns) return Promise.reject(new Error("Server unavailable."));
-  return fns.httpsCallable(name)(data || {}).then(res => res.data);
+  const btn = (lastClickedBtn && Date.now() - lastClickAt < 800 && document.contains(lastClickedBtn)) ? lastClickedBtn : null;
+  if(btn){ lastClickedBtn = null; btn.classList.add("is-loading"); btn.disabled = true; }
+  const done = () => { if(btn){ btn.classList.remove("is-loading"); btn.disabled = false; } };
+  return fns.httpsCallable(name)(data || {}).then(res => { done(); return res.data; }, err => { done(); throw err; });
 }
 /* Erreur d'une Cloud Function -> message lisible pour un toast. */
 function fnErrorMessage(err){
