@@ -29,6 +29,11 @@ const Stripe = require("stripe");
 admin.initializeApp();
 const db = admin.firestore();
 
+// Économie serveur (coins, snipes, VIP, avatars, matchs, tournois) — voir
+// economy.js pour le détail et pourquoi c'est désormais ici et plus dans
+// le site.
+Object.assign(exports, require("./economy.js")(admin, db));
+
 // Secrets Stripe — jamais dans le code, jamais sur GitHub. Configurés une
 // fois via `firebase functions:secrets:set` (voir le guide de déploiement).
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");

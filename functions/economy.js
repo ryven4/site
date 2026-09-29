@@ -376,14 +376,22 @@ module.exports = function (admin, db) {
   /* Balaie toutes les 2 minutes les matchs dont le timer de réclamation
      de victoire a expiré, et confirme la victoire automatiquement. */
   const sweepMatchTimers = onSchedule("every 2 minutes", async () => {
+    // NB : on ne filtre PAS sur "cancelled" == false ici. Un match tout
+    // juste créé (ou un rematch) n'a pas encore ce champ du tout tant qu'il
+    // n'a jamais été annulé — et Firestore ne fait matcher un filtre
+    // d'égalité QUE sur les documents qui ont réellement ce champ. Filtrer
+    // dessus aurait donc exclu silencieusement tous les matchs jamais
+    // annulés (quasiment tous), et c'est exactement ce qui empêchait les
+    // victoires de se confirmer automatiquement. Le check "annulé ?" se
+    // fait à la place en mémoire, juste en dessous.
     const snap = await db.collection("matches")
       .where("completed", "==", false)
-      .where("cancelled", "==", false)
       .where("locked", "==", true)
       .get();
     const now = Date.now();
     for (const doc of snap.docs) {
       const match = doc.data();
+      if (match.cancelled) continue;
       if (!match.victoryClaim || match.disputed) continue;
       if (match.cheaterReport && match.cheaterReport.status === "pending") continue;
       const elapsed = now - match.victoryClaim.at;
@@ -397,10 +405,12 @@ module.exports = function (admin, db) {
     }
 
     // Nettoyage : matchs OPEN jamais verrouillés au-delà de 30 min → annulés + remboursés.
+    // Même remarque que ci-dessus pour "cancelled".
     const expiredSnap = await db.collection("matches")
-      .where("completed", "==", false).where("cancelled", "==", false).where("locked", "==", false).get();
+      .where("completed", "==", false).where("locked", "==", false).get();
     for (const doc of expiredSnap.docs) {
       const m = doc.data();
+      if (m.cancelled) continue;
       if (m.tournamentId) continue;
       const createdAt = m.createdAt || now;
       if (now - createdAt >= MATCH_TTL_MS) {
