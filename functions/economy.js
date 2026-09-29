@@ -548,6 +548,87 @@ module.exports = function (admin, db) {
     return { ok: true };
   });
 
+  /* =========================================================
+     REMATCH — après un match terminé, chaque participant peut cliquer
+     "Rematch". Dès que TOUS les joueurs des DEUX équipes ont cliqué
+     (compté via matchRoster, donc ça marche pareil en 1v1/2v2/3v3/4v4),
+     un nouveau match est créé automatiquement avec les mêmes équipes,
+     la même mise et le même cover bet que le match d'origine. Idempotent :
+     si le rematch a déjà été créé (rematchMatchId déjà posé), on renvoie
+     juste son id sans jamais en recréer un deuxième.
+  ========================================================= */
+  const matchRematch = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const matchId = String((request.data || {}).matchId || "");
+    if (!matchId) throw new HttpsError("invalid-argument", "matchId is required.");
+    const me = await getMe(uid);
+    const username = me.data.username;
+    const matchRef = db.collection("matches").doc(matchId);
+
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(matchRef);
+      if (!snap.exists) throw new HttpsError("not-found", "Match not found.");
+      const match = snap.data();
+      if (!match.completed) throw new HttpsError("failed-precondition", "This match isn't finished yet.");
+
+      if (match.rematchMatchId) return { status: "already_created", newMatchId: match.rematchMatchId };
+
+      const { hostPlayers, guestPlayers } = matchRoster(match);
+      const all = [...hostPlayers, ...guestPlayers];
+      if (!all.includes(username)) throw new HttpsError("permission-denied", "You weren't part of this match.");
+
+      const votes = { ...(match.rematchVotes || {}), [username]: true };
+      const everyoneIn = all.length > 0 && all.every((p) => votes[p]);
+
+      if (!everyoneIn) {
+        tx.update(matchRef, { rematchVotes: votes });
+        return { status: "waiting", votes: Object.keys(votes).length, total: all.length };
+      }
+
+      const newId = "M-" + Math.random().toString(36).slice(2, 8).toUpperCase() +
+        Math.random().toString(36).slice(2, 4).toUpperCase();
+      const newMatch = {
+        id: newId,
+        host: match.host,
+        hostEpic: match.hostEpic || "N/A",
+        hostStats: match.hostStats || {},
+        visibility: match.visibility || "public",
+        passcode: match.passcode || null,
+        region: match.region || null,
+        platform: match.platform || null,
+        weapon: match.weapon || "",
+        teamSize: match.teamSize || "1v1",
+        team: match.team || null,
+        coverBet: !!match.coverBet,
+        bet: match.bet !== undefined ? match.bet : 0.5,
+        mode: match.mode || null,
+        firstTo: match.firstTo || 1,
+        killLead: match.killLead || null,
+        simpleEdit: match.simpleEdit !== false,
+        status: "OPEN",
+        players: all,
+        hostPlayers,
+        guestPlayers,
+        readies: {},
+        results: {},
+        processedBy: [],
+        victoryClaim: null,
+        disputed: false,
+        proofs: {},
+        chat: [],
+        locked: false,
+        completed: false,
+        createdAt: Date.now(),
+        escrowedBy: [],
+        escrowAmounts: {},
+        rematchOf: matchId,
+      };
+      tx.set(db.collection("matches").doc(newId), newMatch);
+      tx.update(matchRef, { rematchVotes: votes, rematchMatchId: newId });
+      return { status: "created", newMatchId: newId };
+    });
+  });
+
   const matchAdminDelete = onCall(async (request) => {
     const uid = requireAuth(request);
     const { matchId } = request.data || {};
@@ -1016,7 +1097,7 @@ module.exports = function (admin, db) {
 
   return {
     initAccount, selfEcoReset,
-    matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave,
+    matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
     matchFileCheaterReport, matchAdminReportDecision, matchAdminResolveDispute, matchAdminDelete,
     spinWheel, shopPurchase, useSnipe, sendTip,
     adminAdjustCoins, adminResetEconomy, adminSetVip, adminGiveSelfSnipes,

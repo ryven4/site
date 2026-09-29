@@ -3943,6 +3943,18 @@ function checkMatchNotifications(matches){
       playTingSound();
       toast(`Your tournament match is ready: ${m.tournamentRoundName || "next round"}!`);
     }
+    // Rematch : ce match vient d'être créé par matchRematch (tout le monde
+    // avait cliqué). Chaque participant paie sa mise automatiquement, comme
+    // à la création/au join d'un match normal — jamais décidé par le client.
+    if(!prev && matchNotifyPrimed && m.rematchOf && amParticipant){
+      if(state.currentLobby === m.rematchOf) state.currentLobby = m.id;
+      const alreadyEscrowed = (m.escrowedBy || []).includes(state.username);
+      if(!alreadyEscrowed){
+        callFn("matchEscrow", { matchId: m.id }).then(res => {
+          toast((res && res.stake > 0) ? `🔁 Rematch! ${formatCoins(res.stake)} coins locked in.` : "🔁 Rematch started!");
+        }).catch(err => toast(fnErrorMessage(err)));
+      }
+    }
     if(prev){
       if(amHost && guestCount > prev.guestCount){
         playTingSound();
@@ -4985,6 +4997,54 @@ function sendLobbyMessage(e, matchId){
   }
 }
 
+/* Bouton "Rematch" affiché sous le résultat d'un match terminé. Compte
+   TOUS les joueurs des deux équipes (1v1/2v2/3v3/4v4 pareil, via les
+   rosters déjà stockés sur le match) : tant qu'il en manque un seul, on
+   affiche juste l'avancement du vote — le nouveau match n'est créé par
+   le serveur (Cloud Function matchRematch) que quand tout le monde a
+   cliqué. Une fois créé, chaque participant reçoit automatiquement son
+   lien vers le nouveau match via checkMatchNotifications. */
+function renderRematchBlock(lobby, hostPlayers, guestPlayers){
+  const all = [...hostPlayers, ...guestPlayers];
+  if(all.length === 0) return '';
+  const votes = lobby.rematchVotes || {};
+  const votedCount = all.filter(p => votes[p]).length;
+  const iVoted = !!votes[state.username];
+
+  if(lobby.rematchMatchId){
+    return `
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" onclick="openRematchLobby(${jsArg(lobby.rematchMatchId)})">${icon('refresh') || '🔁'} Go to rematch</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="margin-top:14px;">
+      <button class="btn ${iVoted ? '' : 'btn-primary'}" ${iVoted ? 'disabled' : ''} onclick="requestRematch(${jsArg(lobby.id)})">
+        ${iVoted ? `${icon('check') || '✓'} Waiting for others (${votedCount}/${all.length})` : `🔁 Rematch (${votedCount}/${all.length})`}
+      </button>
+    </div>
+  `;
+}
+
+function requestRematch(matchId){
+  callFn("matchRematch", { matchId }).then(res => {
+    if(res.status === "waiting"){
+      toast(`Rematch vote registered (${res.votes}/${res.total})`);
+    } else if(res.status === "created" || res.status === "already_created"){
+      toast("🔁 Rematch! New match created.");
+    }
+    render();
+  }).catch(err => toast(fnErrorMessage(err)));
+}
+
+function openRematchLobby(matchId){
+  state.currentLobby = matchId;
+  save();
+  setPage("lobby");
+}
+
 function renderResultSection(lobby){
   const players = lobby.players || [];
   const opponent = players.find(p => p !== state.username);
@@ -5016,6 +5076,7 @@ function renderResultSection(lobby){
       <div style="padding:20px; background:${win ? 'rgba(0,255,136,.06)' : 'rgba(255,71,87,.06)'}; border-top:1px solid var(--line); text-align:center;">
         <h3 style="color:${win ? 'var(--green)' : 'var(--red)'}; margin-bottom:6px;">${win ? icon('trophy') : icon('xCircle')} ${winnerLabel ? `Victory — ${winnerLabel}` : (win ? 'Victory recorded' : 'Defeat recorded')}</h3>
         <p style="color:var(--muted); font-size:11px;">${win ? 'This match is over.' : (winnerLabel ? `${winnerLabel} won this match.` : 'This match is over.')}</p>
+        ${isParticipant ? renderRematchBlock(lobby, rsHostPlayers, rsGuestPlayers) : ''}
       </div>
     `;
   }
