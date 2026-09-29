@@ -1416,6 +1416,9 @@ button:active{ transform:scale(.97) !important; }
 .lobby-banner-code strong{ color:var(--green); font-size:15px; letter-spacing:2px; text-shadow:0 0 10px rgba(0,255,136,.3); }
 
 .lobby-tags{ display:flex; flex-wrap:wrap; gap:8px; padding:14px 20px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.015); }
+.winby2-hint{ margin-top:8px; font-size:10.5px; line-height:1.45; color:var(--muted); border-left:3px solid var(--brand); padding:6px 10px; background:rgba(0,255,136,.05); border-radius:0 8px 8px 0; }
+.winby2-banner{ display:flex; gap:10px; align-items:center; margin:12px 20px 16px; padding:10px 14px; border:1px solid rgba(0,255,136,.35); background:rgba(0,255,136,.06); border-radius:10px; font-size:11.5px; color:#dfe7ee; line-height:1.45; }
+.winby2-banner strong{ flex:none; color:var(--brand); font-size:10px; letter-spacing:1px; padding:3px 8px; border:1px solid var(--brand); border-radius:6px; }
 .lobby-tag{ padding:7px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); min-width:74px; }
 .lobby-tag strong{ display:block; font-size:11px; color:#fff; font-weight:850; }
 .lobby-tag span{ display:block; margin-top:2px; color:var(--muted2); font-size:8px; text-transform:uppercase; letter-spacing:.6px; }
@@ -3325,14 +3328,15 @@ input[type="datetime-local"].input{ color-scheme:dark; }
       </div>
 
       <div class="form-group full">
-        <label>First To (rounds to win)</label>
+        <label>First To + 2 (rounds to win, win by 2)</label>
         <div class="segment five">
-          <button class="active" onclick="setFirstTo(this,1)">1</button>
-          <button onclick="setFirstTo(this,2)">2</button>
-          <button onclick="setFirstTo(this,3)">3</button>
-          <button onclick="setFirstTo(this,4)">4</button>
-          <button onclick="setFirstTo(this,5)">5</button>
+          <button class="active" onclick="setFirstTo(this,1)">1 + 2</button>
+          <button onclick="setFirstTo(this,2)">2 + 2</button>
+          <button onclick="setFirstTo(this,3)">3 + 2</button>
+          <button onclick="setFirstTo(this,4)">4 + 2</button>
+          <button onclick="setFirstTo(this,5)">5 + 2</button>
         </div>
+        <div class="winby2-hint" id="firstToHint">First to 1 + 2: you must win by 2 rounds (e.g. 2-0 or 3-1). At 1-1, play on until someone leads by 2.</div>
       </div>
 
       <div class="form-group full">
@@ -6321,7 +6325,7 @@ function homeExtrasHTML(){
         <div class="home-panel-head"><h3>${icon('swords')} Open matches</h3><button class="btn small" onclick="setPage('matches')">See all</button></div>
         ${open.length === 0 ? `<div class="home-empty">No open match right now — <a onclick="openCreateModal()">create one</a>.</div>` : open.map(m => `
           <div class="home-row">
-            <div class="home-row-main"><strong>${escapeHTML(m.mode)}</strong><span>${escapeHTML(m.teamSize || "1v1")} · ${escapeHTML(m.region || "")} · ${escapeHTML(m.platform || "")}</span></div>
+            <div class="home-row-main"><strong>${escapeHTML(m.mode)}</strong><span>${escapeHTML(m.teamSize || "1v1")} · FT ${firstToLabel(m)} · ${escapeHTML(m.region || "")} · ${escapeHTML(m.platform || "")}</span></div>
             <div class="home-row-stake">${coinIcon(13)}${formatCoins(roundToCents(m.bet !== undefined ? m.bet : 0.5))}</div>
             <button class="btn green small" onclick="joinMatch(${jsArg(m.id)})">Join</button>
           </div>`).join("")}
@@ -6574,6 +6578,7 @@ function openCreateModal(){
   if(!requireVerifiedIdentity()) return;
   document.getElementById("createOverlay").classList.add("open");
   toggleCreateTeamWrap();
+  updateFirstToHint();
   const betInput = document.getElementById("createBet");
   if(betInput) betInput.value = 0.5;
   const betGroup = document.getElementById("betPresetGroup");
@@ -6642,6 +6647,30 @@ function setFirstTo(btn, val){
   btn.parentElement.querySelectorAll("button").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   selectedFirstTo = val;
+  updateFirstToHint();
+}
+
+/* =========================================================
+   RÈGLE "+2" (win by 2) — TOUS les matchs sauf les tournois.
+   Ex. First To 5 : à 4-4, il faut prendre 2 manches d'avance
+   (6-4, 7-5…). C'est la SEULE source de vérité : toute
+   l'interface passe par ces fonctions.
+========================================================= */
+function isWinBy2(m){ return !(m && m.tournamentId); }
+function firstToValue(m){ return parseInt((m && m.firstTo) || 1, 10) || 1; }
+function firstToLabel(m){ const n = firstToValue(m); return isWinBy2(m) ? `${n} + 2` : String(n); }
+function winBy2Text(n){
+  n = parseInt(n, 10) || 1;
+  if(n <= 1) return `First to ${n} + 2: you must win by 2 rounds (e.g. 2-0 or 3-1). At 1-1, play on until someone leads by 2.`;
+  return `First to ${n} + 2: at ${n-1}-${n-1}, ${n}-${n-1} is not enough — keep playing until someone leads by 2 rounds (${n+1}-${n-1}, ${n+2}-${n}…).`;
+}
+function winBy2BannerHTML(m){
+  if(!isWinBy2(m)) return "";
+  return `<div class="winby2-banner"><strong>+2 RULE</strong><span>${escapeHTML(winBy2Text(firstToValue(m)))}</span></div>`;
+}
+function updateFirstToHint(){
+  const el = document.getElementById("firstToHint");
+  if(el) el.textContent = winBy2Text(selectedFirstTo);
 }
 
 function setBetPreset(btn, val){
@@ -7269,7 +7298,7 @@ function render(){
               <span class="match-tag">Size <strong>${escapeHTML(m.teamSize || "1v1")}</strong></span>
               <span class="match-tag">Platform <strong>${escapeHTML(m.platform)}</strong></span>
               <span class="match-tag">Region <strong>${escapeHTML(m.region)}</strong></span>
-              <span class="match-tag">First To <strong>${m.firstTo}</strong></span>
+              <span class="match-tag">First To <strong>${firstToLabel(m)}</strong></span>
               <span class="match-tag">Simple Edit <strong>${m.simpleEdit ? "Yes" : "No"}</strong></span>
             </div>
 
@@ -7410,12 +7439,13 @@ function render(){
             <div class="lobby-tag"><strong>${escapeHTML(lobby.teamSize)}</strong><span>Team Size</span></div>
             <div class="lobby-tag"><strong>${escapeHTML(lobby.region)}</strong><span>Region</span></div>
             <div class="lobby-tag"><strong>${escapeHTML(lobby.platform)}</strong><span>Platform</span></div>
-            <div class="lobby-tag"><strong>${lobby.firstTo}</strong><span>First To</span></div>
+            <div class="lobby-tag"><strong>${firstToLabel(lobby)}</strong><span>First To</span></div>
             <div class="lobby-tag"><strong>${lobby.killLead ? lobby.killLead : "OFF"}</strong><span>Kill Lead</span></div>
             <div class="lobby-tag"><strong>${lobby.simpleEdit ? "ON" : "OFF"}</strong><span>Simple Edit</span></div>
             ${lobby.team ? `<div class="lobby-tag"><strong>${escapeHTML(lobby.team.name)}</strong><span>Team</span></div>` : ''}
             ${lobby.coverBet ? `<div class="lobby-tag"><strong style="color:var(--gold); display:flex; align-items:center; gap:5px;">${coinIcon(11)} Host</strong><span>Covers Bet</span></div>` : ''}
           </div>
+          ${winBy2BannerHTML(lobby)}
 
           ${lobby.tournamentId ? `
           <div class="match-economy" style="margin-bottom:16px;">
@@ -8467,7 +8497,7 @@ function render(){
             <div class="stats-history-row">
               <div>
                 <span class="stats-history-mode">${escapeHTML(m.id)} · ${escapeHTML(m.mode || "—")}</span>
-                <span class="stats-history-meta">${escapeHTML(m.teamSize || "—")} · Host ${escapeHTML(m.host || "—")} · ${m.visibility === "private" ? "Private" : "Public"} · ${m.locked ? "In progress" : (m.completed ? "Completed" : "Open")} · Bet ${formatCoins(m.bet !== undefined ? m.bet : 0.5)}</span>
+                <span class="stats-history-meta">${escapeHTML(m.teamSize || "—")} · FT ${firstToLabel(m)} · Host ${escapeHTML(m.host || "—")} · ${m.visibility === "private" ? "Private" : "Public"} · ${m.locked ? "In progress" : (m.completed ? "Completed" : "Open")} · Bet ${formatCoins(m.bet !== undefined ? m.bet : 0.5)}</span>
               </div>
               <div style="display:flex; gap:6px;">
                 <button class="btn blue small" onclick="enterMatchLobby(${jsArg(m.id)})">Spectate</button>
@@ -8489,7 +8519,7 @@ function render(){
               <div style="border:1px solid rgba(255,77,94,.35); border-radius:12px; padding:16px; margin-bottom:14px; background:rgba(255,77,94,.05);">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
                   <div>
-                    <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode || "—")} — ${escapeHTML(m.teamSize || "—")}</strong>
+                    <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode || "—")} — ${escapeHTML(m.teamSize || "—")} — FT ${firstToLabel(m)}</strong>
                     <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${m.id}</div>
                     <div style="color:var(--muted); font-size:10.5px; margin-top:6px;">Reported by <strong style="color:#fff;">${escapeHTML(m.cheaterReport.by)}</strong> against <strong style="color:var(--red);">${escapeHTML(against)}</strong></div>
                   </div>
@@ -8520,7 +8550,7 @@ function render(){
               <div style="border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; background:var(--panel2);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                   <div>
-                    <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode)} — ${escapeHTML(m.teamSize)}</strong>
+                    <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode)} — ${escapeHTML(m.teamSize)} — FT ${firstToLabel(m)}</strong>
                     <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${m.id}</div>
                   </div>
                 </div>
@@ -8548,7 +8578,7 @@ function render(){
               const winner = Object.entries(m.results || {}).find(([, r]) => r === 'WIN');
               return `
                 <div class="stats-history-row">
-                  <div><span class="stats-history-mode">${escapeHTML(m.mode)}</span><span class="stats-history-meta">${escapeHTML(m.teamSize)} · ${m.id}</span></div>
+                  <div><span class="stats-history-mode">${escapeHTML(m.mode)}</span><span class="stats-history-meta">${escapeHTML(m.teamSize)} · FT ${firstToLabel(m)} · ${m.id}</span></div>
                   <span class="stats-history-result win">Won by ${escapeHTML(winner ? winner[0] : "—")}</span>
                 </div>
               `;
