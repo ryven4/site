@@ -1449,6 +1449,23 @@ button:active{ transform:scale(.97) !important; }
   border-radius:8px;
   cursor:pointer;
 }
+.map-code-tag{ font-family:inherit; text-align:left; cursor:pointer; border-color:rgba(0,255,136,.45) !important; background:rgba(0,255,136,.07) !important; }
+.map-code-tag strong{ display:flex !important; align-items:center; gap:6px; color:var(--brand) !important; letter-spacing:.3px; }
+.map-code-tag .ic{ width:12px; height:12px; opacity:.8; }
+.map-code-tag:hover{ background:rgba(0,255,136,.14) !important; }
+.team-card-actions{ display:flex; justify-content:flex-end; align-items:center; gap:8px; padding:8px 10px 10px; margin-top:auto; }
+.rules-btn{ display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line2); background:rgba(255,255,255,.04); color:#cfd6de; font-size:11px; font-weight:600; padding:6px 11px; border-radius:8px; cursor:pointer; font-family:inherit; }
+.rules-btn:hover{ border-color:rgba(0,255,136,.45); color:var(--brand); background:rgba(0,255,136,.06); }
+.rules-btn .ic{ width:13px; height:13px; }
+.rules-modal{ width:min(640px,100%); }
+.rules-body{ padding:6px 22px 22px; }
+.rules-section{ padding:16px 0; border-bottom:1px solid var(--line); }
+.rules-section:last-child{ border-bottom:0; }
+.rules-section h3{ display:flex; align-items:center; gap:10px; font-size:14px; margin:0 0 10px; color:#fff; }
+.rules-num{ flex:none; width:24px; height:24px; border-radius:7px; display:grid; place-items:center; font-size:12px; font-weight:800; color:#06120b; background:var(--brand); }
+.rules-section ul{ margin:0; padding-left:18px; display:flex; flex-direction:column; gap:7px; }
+.rules-section li{ font-size:12.5px; line-height:1.55; color:#c9ced6; }
+.rules-section li strong{ color:#fff; }
 .report-cheater-btn:hover{ background:rgba(255,77,94,.16); border-color:rgba(255,77,94,.55); }
 .team-card-head span:first-child{ font-size:10px; font-weight:900; letter-spacing:1px; color:var(--muted); }
 .team-card.guest .team-card-head span:first-child{ color:#ff8a3d; }
@@ -3586,6 +3603,40 @@ input[type="datetime-local"].input{ color-scheme:dark; }
   <div style="padding:20px;" id="depositModalBody"></div>
 </div>
 </div>
+<div class="overlay" id="rulesOverlay" onclick="if(event.target===this)closeRulesModal()">
+<div class="modal rules-modal">
+  <div class="modal-head">
+    <h2>Match Rules</h2>
+    <button class="close" onclick="closeRulesModal()">×</button>
+  </div>
+  <div class="rules-body">
+    <div class="rules-section">
+      <h3><span class="rules-num">1</span>Availability & AFK</h3>
+      <ul><li>Players have a maximum of <strong>10 minutes</strong> from the start of the match to join the lobby. If you are not ready within this time, you will be declared forfeit.</li><li>If your opponent does not join the lobby within the 10 minutes, you must prove it by providing a screenshot.</li><li>In ranked tournaments, the maximum time to join the lobby is reduced to <strong>5 minutes</strong>.</li><li>If teammates do not arrive in time, the match can continue without them.</li><li>Whenever an opponent is AFK during the game, you may eliminate them <strong>only once</strong>.</li><li>A match can only be cancelled if <strong>both sides agree</strong>.</li></ul>
+    </div>
+    <div class="rules-section">
+      <h3><span class="rules-num">2</span>Disconnections</h3>
+      <ul><li>Whenever a player goes AFK or disconnects during the game, the game can be paused for a maximum of <strong>6 minutes</strong>. After this period, the match must resume or the absent player will be declared forfeit.</li><li>This 6-minute period is <strong>cumulative for each team</strong>. A player or teammate may leave several times, as long as the total time does not exceed 6 minutes. Once the 6 minutes are up, the match must resume or the absent player will be declared forfeit.</li><li>To prevent the siphon from going to the opponents, you may not respawn during a round.</li><li>If a team member leaves during a round, the round must continue without them and will count.</li><li>If a team member leaves before a round starts, the game is paused.</li></ul>
+    </div>
+    <div class="rules-section">
+      <h3><span class="rules-num">3</span>Bugs & glitch exploits</h3>
+      <ul><li>If a bug occurs during a round and negatively affects one of the players, the round does not count. If needed, you can restart the game to fix the bug, but you must resume with the current score.</li><li>Anyone exploiting a bug to their advantage will be sanctioned.</li><li>Game crashes and other system errors are not considered bugs, but an AFK or disconnection situation.</li></ul>
+    </div>
+    <div class="rules-section">
+      <h3><span class="rules-num">4</span>Lobby & map rules</h3>
+      <ul><li>The match must be played on the region and map indicated.</li><li>The host must play on <strong>Team 1</strong> and the opponents on <strong>Team 2</strong>. Rounds credited to the wrong team still count.</li><li>If the wrong map is used, you must restart on the correct map with the current score.</li><li>Kicking your opponent from the party during the game results in the loss of a round.</li><li>All rounds or matches played with the wrong game or host settings remain valid and will count.</li><li>When the <strong>No Simple Edit</strong> option is selected, if a team member uses Simple Edit, their team automatically loses the entire match.</li></ul>
+    </div>
+    <div class="rules-section">
+      <h3><span class="rules-num">5</span>Miscellaneous</h3>
+      <ul><li>Spectators are not allowed. If a round is played with a spectator, the spectator must be removed and the team that did not invite them is awarded a round.</li><li>Trash talk is allowed. However, any form of racism, homophobia or hate speech will result in a suspension from the platform. The win will go to the user who won the match.</li><li>You must not try to deceive your opponent by lying about the match rules for your own benefit.</li><li>Staff will take the context into account and make the appropriate decisions, including awarding rounds or deciding the overall winner. This may cover time wasting, repeated disconnections for no reason, unsportsmanlike behaviour, etc.</li><li><strong>Staff decisions are final</strong> and must be respected.</li></ul>
+    </div>
+    <div class="rules-section">
+      <h3><span class="rules-num">6</span>Reporting an opponent</h3>
+      <ul><li>If you are sure your opponent broke the rules, you must stop playing immediately and report your opponent.</li><li>If you are unsure, finish the match and report it once the game is over.</li></ul>
+    </div>
+  </div>
+</div>
+</div>
 <div class="overlay" id="vipInfoOverlay">
 <div class="modal" style="width:min(420px,100%);">
   <div class="modal-head">
@@ -4548,6 +4599,10 @@ function closeCheaterReportModal(){
   document.getElementById("cheaterReportOverlay").classList.remove("open");
   pendingCheaterReportMatchId = null;
 }
+
+function openRulesModal(){ document.getElementById("rulesOverlay").classList.add("open"); }
+function closeRulesModal(){ document.getElementById("rulesOverlay").classList.remove("open"); }
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeRulesModal(); });
 
 function openVipInfoModal(){
   document.getElementById("vipInfoOverlay").classList.add("open");
@@ -7434,6 +7489,7 @@ function render(){
             <div class="lobby-tag"><strong>${firstToLabel(lobby)}</strong><span>First To</span></div>
             <div class="lobby-tag"><strong>${lobby.killLead ? lobby.killLead : "OFF"}</strong><span>Kill Lead</span></div>
             <div class="lobby-tag"><strong>${lobby.simpleEdit ? "ON" : "OFF"}</strong><span>Simple Edit</span></div>
+            ${mapCodeFor(lobby) ? `<button type="button" class="lobby-tag map-code-tag" onclick="copyMapCode(${jsArg(mapCodeFor(lobby))})" title="Click to copy the map code"><strong>${escapeHTML(mapCodeFor(lobby))} ${icon('copy')}</strong><span>Map Code</span></button>` : ''}
             ${lobby.team ? `<div class="lobby-tag"><strong>${escapeHTML(lobby.team.name)}</strong><span>Team</span></div>` : ''}
             ${lobby.coverBet ? `<div class="lobby-tag"><strong style="color:var(--gold); display:flex; align-items:center; gap:5px;">${coinIcon(11)} Host</strong><span>Covers Bet</span></div>` : ''}
           </div>
@@ -7485,11 +7541,12 @@ function render(){
                 <span class="team-card-tag">${lobby.team ? escapeHTML(lobby.team.name) : 'TEAM'}</span>
               </div>
               ${hostSlotsHTML}
-              ${isGuest && lobby.locked && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
-                <div style="padding:8px 10px 10px; text-align:right;">
+              <div class="team-card-actions">
+                <button class="rules-btn" onclick="openRulesModal()">${icon('gavel')} Rules</button>
+                ${isGuest && lobby.locked && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
                   <button class="report-cheater-btn" onclick="openCheaterReportModal(${jsArg(lobby.id)})">${icon('flag')} Report</button>
-                </div>
-              ` : ''}
+                ` : ''}
+              </div>
             </div>
 
             <div class="lobby-center">
@@ -9818,6 +9875,20 @@ function requestWithdraw(){
   if(head) head.innerHTML = `${icon('wallet')} Withdraw`;
   document.getElementById("depositOverlay").classList.add("open");
 }
+/* =========================================================
+   CODES DE MAP (îles Fortnite) — affichés dans le lobby selon
+   le mode du match. Pour ajouter un mode : "Nom du mode": "code".
+========================================================= */
+const MAP_CODES = {
+  "Realistic": "9854-1829-8735"
+};
+function mapCodeFor(m){ return (m && MAP_CODES[m.mode]) || ""; }
+function copyMapCode(code){
+  const done = () => toast("Map code copied: " + code);
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done).catch(() => fallbackCopy(code, done));
+  else fallbackCopy(code, done);
+}
+
 function copyWithdrawMsg(){
   const text = (document.getElementById("withdrawMsg") || {}).textContent || "";
   const done = () => toast("Message copied — paste it in your Discord ticket.");
