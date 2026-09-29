@@ -4945,9 +4945,22 @@ function declareResult(matchId, type){
     const status = res && res.status;
     if(status === "finalized"){
       playTingSound();
-      if(state.currentLobby === matchId) state.currentLobby = null;
+      // On reste sur la page du match (comme pour une victoire) : le joueur
+      // voit l'écran de fin et peut lancer un Rematch. Avant, une défaite
+      // renvoyait directement vers "Matches".
       toast(type === 'WIN' ? "Victory recorded!" : "Defeat recorded.");
-      setPage("matches");
+      const local = state.matches.find(m => m.id === matchId);
+      if(local){ // affichage immédiat du résultat en attendant la synchro Firestore
+        const t = matchTeamsOf(local);
+        const mine = t.hostPlayers.includes(state.username) ? t.hostPlayers : t.guestPlayers;
+        const theirs = mine === t.hostPlayers ? t.guestPlayers : t.hostPlayers;
+        const res = Object.assign({}, local.results);
+        mine.forEach(u => { res[u] = type; });
+        theirs.forEach(u => { res[u] = type === 'WIN' ? 'LOSS' : 'WIN'; });
+        local.results = res; local.completed = true;
+      }
+      state.currentLobby = matchId;
+      render();
     } else if(status === "claimed"){
       const timerMs = res.timerMs || VICTORY_TIMER_MS;
       playTingSound();
