@@ -1458,6 +1458,8 @@ button.is-loading > *{ visibility:hidden; }
 button.is-loading::after{ content:""; position:absolute; left:50%; top:50%; width:15px; height:15px; margin:-9px 0 0 -9px; border:2.5px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:btnspin .7s linear infinite; }
 button.btn.green.is-loading::after, button.btn-primary.is-loading::after{ border-color:rgba(0,0,0,.25); border-top-color:#06120b; }
 @keyframes btnspin{ to{ transform:rotate(360deg); } }
+#killLeadGroup button:disabled{ opacity:.25; cursor:not-allowed; text-decoration:line-through; }
+#killSwitch.locked{ opacity:.35; cursor:not-allowed; }
 .team-card-actions{ display:flex; justify-content:flex-end; align-items:center; gap:8px; padding:8px 10px 10px; margin-top:auto; }
 .rules-btn{ display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line2); background:rgba(255,255,255,.04); color:#cfd6de; font-size:11px; font-weight:600; padding:6px 11px; border-radius:8px; cursor:pointer; font-family:inherit; }
 .rules-btn:hover{ border-color:rgba(0,255,136,.45); color:var(--brand); background:rgba(0,255,136,.06); }
@@ -3350,7 +3352,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
       <div class="form-group full">
         <label>First To (rounds to win)</label>
         <div class="segment five">
-          <button class="active" onclick="setFirstTo(this,1)">1<sup class="ft-plus">+2</sup></button>
+          <button class="active" onclick="setFirstTo(this,1)">1</button>
           <button onclick="setFirstTo(this,2)">2<sup class="ft-plus">+2</sup></button>
           <button onclick="setFirstTo(this,3)">3<sup class="ft-plus">+2</sup></button>
           <button onclick="setFirstTo(this,4)">4<sup class="ft-plus">+2</sup></button>
@@ -3363,7 +3365,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
         <div class="toggle-line">
           <div class="toggle-text">
             <strong>Kill Lead</strong>
-            <span>Enable this option only if the match uses a kill advantage.</span>
+            <span id="killLeadNote">Enable this option only if the match uses a kill advantage.</span>
           </div>
           <button class="switch" id="killSwitch" onclick="toggleKillLead()"><span></span></button>
         </div>
@@ -3371,7 +3373,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 
       <div class="form-group full kill-wrap" id="killWrap">
         <label>Kill Lead Amount</label>
-        <div class="segment four">
+        <div class="segment four" id="killLeadGroup">
           <button class="active" onclick="setKillLead(this,1)">1</button>
           <button onclick="setKillLead(this,2)">2</button>
           <button onclick="setKillLead(this,3)">3</button>
@@ -6664,6 +6666,7 @@ function openCreateModal(){
   document.getElementById("createOverlay").classList.add("open");
   toggleCreateTeamWrap();
   updateFirstToHint();
+  syncKillLeadLimits();
   const betInput = document.getElementById("createBet");
   if(betInput) betInput.value = 0.5;
   const betGroup = document.getElementById("betPresetGroup");
@@ -6733,6 +6736,7 @@ function setFirstTo(btn, val){
   btn.classList.add("active");
   selectedFirstTo = val;
   updateFirstToHint();
+  syncKillLeadLimits();
 }
 
 /* =========================================================
@@ -6741,7 +6745,8 @@ function setFirstTo(btn, val){
    (6-4, 7-5…). C'est la SEULE source de vérité : toute
    l'interface passe par ces fonctions.
 ========================================================= */
-function isWinBy2(m){ return !(m && m.tournamentId); }
+// Pas de +2 en "premier à 1" (un seul round, pas d'écart possible) ni en tournoi.
+function isWinBy2(m){ return !(m && m.tournamentId) && firstToValue(m) >= 2; }
 function firstToValue(m){ return parseInt((m && m.firstTo) || 1, 10) || 1; }
 function firstToLabel(m){ const n = firstToValue(m); return isWinBy2(m) ? `${n}<sup class="ft-plus">+2</sup>` : String(n); }
 function winBy2Text(n){
@@ -6764,16 +6769,42 @@ function onCustomBetInput(){
   if(group) group.querySelectorAll("button").forEach(b => b.classList.remove("active"));
 }
 
+/* Kill lead : jamais plus que (First To - 1).
+   First To 1 -> pas de kill lead, First To 2 -> 1 max, First To 3 -> 2 max… */
+function maxKillLeadFor(firstTo){ return Math.max(0, (parseInt(firstTo, 10) || 1) - 1); }
+function syncKillLeadLimits(){
+  const max = maxKillLeadFor(selectedFirstTo);
+  const sw = document.getElementById("killSwitch");
+  const wrap = document.getElementById("killWrap");
+  const note = document.getElementById("killLeadNote");
+  const group = document.getElementById("killLeadGroup");
+  if(max < 1 && killLeadEnabled) killLeadEnabled = false;
+  if(sw){ sw.classList.toggle("active", killLeadEnabled); sw.classList.toggle("locked", max < 1); }
+  if(wrap) wrap.classList.toggle("visible", killLeadEnabled);
+  if(note) note.textContent = max < 1
+    ? "Not available in First To 1 — pick First To 2 or more to use a kill lead."
+    : `Enable this option only if the match uses a kill advantage (max ${max} with First To ${selectedFirstTo}).`;
+  if(selectedKillLead > max && max >= 1) selectedKillLead = max;
+  if(group) group.querySelectorAll("button").forEach((b, i) => {
+    const v = i + 1;
+    b.disabled = v > max;
+    b.classList.toggle("active", v === selectedKillLead && v <= max);
+  });
+}
 function toggleKillLead(){
+  if(maxKillLeadFor(selectedFirstTo) < 1){
+    toast("Kill lead isn't available in First To 1.");
+    syncKillLeadLimits();
+    return;
+  }
   killLeadEnabled = !killLeadEnabled;
-  document.getElementById("killSwitch").classList.toggle("active", killLeadEnabled);
-  document.getElementById("killWrap").classList.toggle("visible", killLeadEnabled);
+  syncKillLeadLimits();
 }
 
 function setKillLead(btn, val){
-  btn.parentElement.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
+  if(val > maxKillLeadFor(selectedFirstTo)) return;
   selectedKillLead = val;
+  syncKillLeadLimits();
 }
 
 function toggleSimpleEdit(){
@@ -6854,7 +6885,7 @@ function createMatch(){
     bet,
     mode,
     firstTo: selectedFirstTo,
-    killLead: killLeadEnabled ? selectedKillLead : null,
+    killLead: (killLeadEnabled && maxKillLeadFor(selectedFirstTo) >= 1) ? Math.min(selectedKillLead, maxKillLeadFor(selectedFirstTo)) : null,
     simpleEdit: !simpleEditEnabled,
     status: "OPEN",
     players: [state.username],
