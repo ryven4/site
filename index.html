@@ -5540,6 +5540,7 @@ function spinWheel(){
   if(!dial) return;
 
   wheelSpinning = true;
+  wheelRevealPending = true;
   if(btn){
     btn.disabled = true;
     btn.textContent = "···";
@@ -5571,10 +5572,12 @@ function spinWheel(){
       // — sinon le garde-fou anti-interruption de l'animation (voir render())
       // bloquerait aussi CE rendu, et le bouton resterait bloqué sur "···".
       wheelSpinning = false;
+      flushDeferredUserDoc({ silent:true }); // le popup de la roue annonce déjà le gain
       showWheelResult(WHEEL_SEGMENTS[idx], res.resultText);
     }, 5600);
   }).catch(err => {
     wheelSpinning = false;
+    flushDeferredUserDoc();
     if(btn){ btn.disabled = false; btn.className = "wheel-center-btn"; }
     render();
     toast(fnErrorMessage(err));
@@ -7054,7 +7057,24 @@ function initOwnCoinsSync(){
     if(docSnap.metadata.hasPendingWrites) return;
     const data = docSnap.data();
     if(!data) return;
+    // Roue en train de tourner : le serveur a déjà crédité la récompense,
+    // mais on ne l'affiche (snipes, coins, toast) qu'à la fin de l'animation
+    // — sinon on voyait le gain avant que la roue s'arrête.
+    if(wheelRevealPending){ deferredUserDoc = data; return; }
+    applyUserDoc(data);
+  }, function(err){
+    console.warn("Erreur de synchronisation du solde :", err);
+  });
+}
 
+let wheelRevealPending = false;
+let deferredUserDoc = null;
+function flushDeferredUserDoc(opts){
+  wheelRevealPending = false;
+  if(deferredUserDoc){ const d = deferredUserDoc; deferredUserDoc = null; applyUserDoc(d, opts); }
+}
+
+function applyUserDoc(data, opts = {}){
     let changed = false;
 
     if(typeof data.coins === "number"){
@@ -7065,7 +7085,7 @@ function initOwnCoinsSync(){
         changed = true;
         if(newCoins > oldCoins){
           animateCoinIncrease(oldCoins, newCoins);
-          toast(`💰 You received ${formatCoins(roundToCents(newCoins - oldCoins))} coins!`);
+          if(!opts.silent) toast(`💰 You received ${formatCoins(roundToCents(newCoins - oldCoins))} coins!`);
         }
       }
     }
@@ -7138,9 +7158,6 @@ function initOwnCoinsSync(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderHeaderUI();
     render();
-  }, function(err){
-    console.warn("Erreur de synchronisation du solde :", err);
-  });
 }
 
 function renderHeaderUI(){
