@@ -2,7 +2,7 @@
   "name": "prime-token-functions",
   "description": "Serveur (Cloud Functions) pour Prime Token : creation des paiements Stripe et credit securise des coins apres paiement confirme.",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

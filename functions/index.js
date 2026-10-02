@@ -144,6 +144,13 @@ exports.stripeWebhook = onRequest(
       return;
     }
 
+    // Le montant réellement payé doit correspondre aux coins demandés (EUR).
+    if (session.currency !== "eur" || session.amount_total !== Math.round(coins * COIN_PRICE_EUR * 100)) {
+      logger.error("Amount mismatch on deposit", { sessionId: session.id, amount: session.amount_total, currency: session.currency, coins });
+      res.status(200).send("amount mismatch");
+      return;
+    }
+
     try {
       // Ticket de dépôt = même principe que le "ledger" déjà utilisé côté
       // site pour les gains/remboursements de match (settledMatchIds) :

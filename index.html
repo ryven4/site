@@ -3926,6 +3926,11 @@ function callFn(name, data){
   const done = () => { if(btn){ btn.classList.remove("is-loading"); btn.disabled = false; } };
   return fns.httpsCallable(name)(data || {}).then(res => { done(); return res.data; }, err => { done(); throw err; });
 }
+/* Variante sans spinner de bouton (appels automatiques en arrière-plan). */
+function callFnSilent(name, data){
+  if(!fns) return Promise.reject(new Error("Server unavailable."));
+  return fns.httpsCallable(name)(data || {}).then(res => res.data);
+}
 /* Erreur d'une Cloud Function -> message lisible pour un toast. */
 function fnErrorMessage(err){
   return (err && err.message) ? err.message : "Something went wrong, please try again.";
@@ -3939,9 +3944,8 @@ function fnErrorMessage(err){
 /* Crée le document d'un TOUT NOUVEAU match (seul cas où un set() du doc
    entier est légitime — voir la règle `create` dans firestore.rules). */
 function createMatchInCloud(match){
-  if(!db || !match || !match.id) return;
-  db.collection("matches").doc(match.id).set(match)
-    .catch(err => console.warn("Erreur de création du match :", err));
+  if(!db || !match || !match.id) return Promise.reject(new Error("Server unavailable."));
+  return db.collection("matches").doc(match.id).set(match);
 }
 
 /* Met à jour un match EXISTANT — restreint aux champs "sociaux" que le
@@ -3966,6 +3970,18 @@ function pushMatchToCloud(match){
     proofs: match.proofs || {}
   }).catch(err => console.warn("Erreur de synchronisation du match :", err));
 }
+
+/* Mise à jour CIBLÉE d'un seul champ (mon "prêt", ma preuve, un message,
+   le verrou) — au lieu de renvoyer tout le match. Avant, deux joueurs qui
+   cliquaient "Ready" en même temps s'écrasaient (l'un des deux "prêt"
+   disparaissait) et un message de chat pouvait effacer un joueur qui
+   venait de rejoindre. FieldPath : un pseudo peut contenir un "." */
+function patchMatchInCloud(matchId, ...pathsAndValues){
+  if(!db || !matchId) return Promise.resolve();
+  return db.collection("matches").doc(matchId).update(...pathsAndValues)
+    .catch(err => console.warn("Erreur de synchronisation du match :", err));
+}
+function matchFieldPath(field, key){ return new firebase.firestore.FieldPath(field, key); }
 
 // Suppression d'un match : plus possible en direct depuis le site (voir
 // `allow delete: if false;` dans firestore.rules) — passe désormais
@@ -4022,12 +4038,17 @@ function checkMatchNotifications(matches){
     // à la création/au join d'un match normal — jamais décidé par le client.
     if(!prev && matchNotifyPrimed && m.rematchOf && amParticipant){
       if(state.currentLobby === m.rematchOf) state.currentLobby = m.id;
-      const alreadyEscrowed = (m.escrowedBy || []).includes(state.username);
-      if(!alreadyEscrowed){
-        callFn("matchEscrow", { matchId: m.id }).then(res => {
-          toast((res && res.stake > 0) ? `🔁 Rematch! ${formatCoins(res.stake)} coins locked in.` : "🔁 Rematch started!");
-        }).catch(err => toast(fnErrorMessage(err)));
-      }
+    }
+    // Paiement automatique de ma mise si je suis dans le roster d'un match
+    // ouvert sans l'avoir encore payée (rematch, ou retry si l'appel avait
+    // échoué) — une seule tentative par match et par session.
+    if(amParticipant && !m.completed && !m.cancelled && !m.locked && !m.tournamentId
+       && !(m.escrowedBy || []).includes(state.username) && !autoEscrowTried.has(m.id)){
+      autoEscrowTried.add(m.id);
+      callFnSilent("matchEscrow", { matchId: m.id }).then(res => {
+        if(res && res.stake > 0) toast(`${m.rematchOf ? "🔁 Rematch! " : ""}${formatCoins(res.stake)} coins locked in.`);
+        else if(m.rematchOf) toast("🔁 Rematch started!");
+      }).catch(err => toast(fnErrorMessage(err) + " Leave the match to get everyone refunded."));
     }
     if(prev){
       if(amHost && guestCount > prev.guestCount){
@@ -4043,6 +4064,9 @@ function checkMatchNotifications(matches){
   });
   matchNotifyPrimed = true;
 }
+
+const autoEscrowTried = new Set();
+const tryLockSent = new Set();
 
 function initCloudSync(){
   if(!db) return;
@@ -4090,10 +4114,19 @@ function checkMatchLocks(){
     if(hostPlayers.length < maxPerSide || guestPlayers.length < maxPerSide) return;
     const allPlayers = [...hostPlayers, ...guestPlayers];
     if(allPlayers.length === 0 || !match.readies) return;
+    // Tout le monde doit avoir payé sa mise (les bots de test du proprio
+    // ne paient pas : leur match finira remboursé côté serveur).
+    const paid = match.escrowedBy || [];
+    const everyonePaid = allPlayers.every(p => paid.includes(p) || /^Bot_Opponent\d+$/.test(p));
+    if(!everyonePaid) return;
     if(allPlayers.every(p => match.readies[p])){
       match.locked = true;
-      pushMatchToCloud(match);
+      patchMatchInCloud(match.id, "locked", true);
       lockedIds.push(match.id);
+      if(allPlayers.includes(state.username) && !tryLockSent.has(match.id)){
+        tryLockSent.add(match.id);
+        callFnSilent("matchTryLock", { matchId: match.id }).catch(err => console.warn("matchTryLock", err));
+      }
     }
   });
   return lockedIds;
@@ -4263,26 +4296,23 @@ function addModerator(){
   if(!username){ toast("Enter a username."); return; }
   if(username === SUPER_ADMIN || moderatorUsernames.includes(username)){ toast("This username is already a moderator."); return; }
 
-  db.collection("config").doc("moderators").set({
-    usernames: firebase.firestore.FieldValue.arrayUnion(username)
-  }, { merge:true }).then(() => {
+  // Par le serveur (vérifie que c'est bien le vrai compte propriétaire).
+  callFn("adminSetModerator", { username, action: "add" }).then(() => {
     input.value = "";
     toast(username + " added as moderator!");
   }).catch(err => {
     console.warn(err);
-    toast("Error while adding.");
+    toast(fnErrorMessage(err));
   });
 }
 
 function removeModerator(username){
   if(!isSuperAdmin()) return;
-  db.collection("config").doc("moderators").set({
-    usernames: firebase.firestore.FieldValue.arrayRemove(username)
-  }, { merge:true }).then(() => {
+  callFn("adminSetModerator", { username, action: "remove" }).then(() => {
     toast(username + " removed from moderators.");
   }).catch(err => {
     console.warn(err);
-    toast("Error while removing.");
+    toast(fnErrorMessage(err));
   });
 }
 
@@ -4814,6 +4844,9 @@ async function modDeleteMatch(id){
 /* Renvoie les deux camps (host/guest) d'un match, avec compat pour les
    anciens matchs qui n'avaient qu'un simple `players` array. */
 function matchTeamsOf(match){
+  const fixed = (match.serverLock && match.serverLock.hostPlayers) ? match.serverLock
+    : (match.serverRoster && match.serverRoster.hostPlayers) ? match.serverRoster : null;
+  if(fixed) return { hostPlayers: fixed.hostPlayers, guestPlayers: fixed.guestPlayers || [] };
   const hostPlayers = match.hostPlayers || [match.host];
   const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
   return { hostPlayers, guestPlayers };
@@ -4999,6 +5032,9 @@ function declareResult(matchId, type){
     } else if(status === "over"){
       toast("This match is already settled.");
       render();
+    } else if(status === "refunded"){
+      toast("This match wasn't valid (a bet was missing) — it was cancelled and everyone was refunded.");
+      render();
     }
   }).catch(err => toast(fnErrorMessage(err)));
 }
@@ -5024,7 +5060,7 @@ function uploadProof(matchId, inputEl){
       if(!match) return;
       match.proofs = match.proofs || {};
       match.proofs[state.username] = dataUrl;
-      pushMatchToCloud(match);
+      patchMatchInCloud(match.id, matchFieldPath("proofs", state.username), dataUrl);
       render();
       toast("Proof uploaded!");
     };
@@ -5072,14 +5108,16 @@ function sendLobbyMessage(e, matchId){
   if(!match) return;
 
   match.chat = match.chat || [];
-  match.chat.push({
+  const chatMsg = {
     user: state.username,
     text: msg,
-    time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
-  });
+    time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+    at: Date.now()
+  };
+  match.chat.push(chatMsg);
 
   input.value = "";
-  pushMatchToCloud(match);
+  patchMatchInCloud(match.id, "chat", firebase.firestore.FieldValue.arrayUnion(chatMsg));
 
   const box = document.getElementById("lobbyChatMessages");
   if(box){
@@ -6913,8 +6951,8 @@ function createMatch(){
 
   state.matches.unshift(newMatch);
   state.currentLobby = newMatch.id;
+  autoEscrowTried.add(newMatch.id);
   save();
-  createMatchInCloud(newMatch);
   closeCreateModal();
   setPage("lobby");
 
@@ -6922,9 +6960,16 @@ function createMatch(){
   // création du match, même si personne n'a encore rejoint — vérifié et
   // débité côté serveur. Remboursé s'il annule avant que le match se
   // verrouille (voir leaveMatchById -> matchLeave).
-  callFn("matchEscrow", { matchId: newMatch.id }).then(res => {
-    toast((res && res.stake > 0) ? `Match created! 🔒 ${formatCoins(res.stake)} coins locked in.` : "Match created successfully!");
-  }).catch(err => toast(fnErrorMessage(err)));
+  createMatchInCloud(newMatch)
+    .then(() => callFnSilent("matchEscrow", { matchId: newMatch.id }))
+    .then(res => {
+      toast((res && res.stake > 0) ? `Match created! 🔒 ${formatCoins(res.stake)} coins locked in.` : "Match created successfully!");
+    })
+    .catch(err => {
+      toast(fnErrorMessage(err));
+      // Mise refusée (ex. solde insuffisant) : on annule le match tout de suite.
+      leaveMatchById(newMatch.id, { silent: true }).then(() => { if(state.currentLobby === newMatch.id){ state.currentLobby = null; } setPage("matches"); });
+    });
 }
 
 /* CHAT GÉNÉRAL (synchronisé via Firebase) */
@@ -6983,7 +7028,7 @@ function modDeleteLobbyMessage(matchId, index){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
   match.chat = (match.chat || []).filter((_, i) => i !== index);
-  pushMatchToCloud(match);
+  patchMatchInCloud(match.id, "chat", match.chat);
   const box = document.getElementById("lobbyChatMessages");
   if(box) box.innerHTML = renderLobbyChatMessages(match);
   toast("Message deleted.");
@@ -9024,70 +9069,45 @@ async function createTournamentSubmit(){
   if(regOpensAt && regOpensAt >= startAt){ toast("Registration must open before the tournament starts."); return; }
   if(!v("tnMode") || !v("tnRegion") || !v("tnPlatform")){ toast("Choose the game mode, region and platform."); return; }
   const t = {
-    id: "TR-" + Math.floor(100000 + Math.random() * 900000),
     name,
-    createdBy: state.username,
-    createdAt: Date.now(),
     regOpensAt,
     startAt,
     slots: parseInt(v("tnSlots"), 10) || 16,
     mode: v("tnMode"),
     weapon: v("tnWeapon"),
-    teamSize: "1v1",
     region: v("tnRegion"),
     platform: v("tnPlatform"),
     firstTo: parseInt(v("tnFirstTo"), 10) || 1,
     simpleEdit: v("tnSimpleEdit") !== "off",
-    prizes: { first: num("tnPrize1"), second: num("tnPrize2"), semis: num("tnPrize3") },
-    status: "upcoming",
-    players: [],
-    bracket: [],
-    paidOut: false
+    prizes: { first: num("tnPrize1"), second: num("tnPrize2"), semis: num("tnPrize3") }
   };
   try{
-    await db.collection("tournaments").doc(t.id).set(t);
+    // Créé par le serveur : c'est lui qui garde les prix (impossible à
+    // trafiquer depuis le navigateur).
+    const res = await callFn("adminCreateTournament", t);
     toast("Tournament created!");
-    openTournament(t.id);
+    if(res && res.id) openTournament(res.id);
   }catch(err){
     console.warn(err);
-    toast("Couldn't create the tournament (check Firestore permissions for 'tournaments').");
+    toast(fnErrorMessage(err));
   }
 }
 
 async function registerTournament(tid){
   if(!db) return;
   if(!requireVerifiedIdentity()) return;
-  const ref = db.collection("tournaments").doc(tid);
   try{
-    const msg = await db.runTransaction(async tx => {
-      const snap = await tx.get(ref);
-      if(!snap.exists) return "This tournament no longer exists.";
-      const t = snap.data();
-      if(t.status !== "upcoming") return "Registration is closed.";
-      if(t.regOpensAt && Date.now() < t.regOpensAt) return "Registration isn't open yet.";
-      const players = t.players || [];
-      if(players.includes(state.username)) return "You're already registered.";
-      if(players.length >= t.slots) return "This tournament is full.";
-      tx.update(ref, { players: [...players, state.username] });
-      return null;
-    });
-    toast(msg || "You're registered! Be online when the tournament starts.");
-  }catch(e){ console.warn(e); toast("Registration failed, please try again."); }
+    const res = await callFn("tournamentRegister", { tid });
+    toast(res && res.already ? "You're already registered." : "You're registered! Be online when the tournament starts.");
+  }catch(e){ console.warn(e); toast(fnErrorMessage(e)); }
 }
 
 async function unregisterTournament(tid){
   if(!db) return;
-  const ref = db.collection("tournaments").doc(tid);
   try{
-    await db.runTransaction(async tx => {
-      const snap = await tx.get(ref);
-      if(!snap.exists) return;
-      const t = snap.data();
-      if(t.status !== "upcoming") return;
-      tx.update(ref, { players: (t.players || []).filter(p => p !== state.username) });
-    });
+    await callFn("tournamentUnregister", { tid });
     toast("You left the tournament.");
-  }catch(e){ console.warn(e); }
+  }catch(e){ console.warn(e); toast(fnErrorMessage(e)); }
 }
 
 async function startTournamentNow(tid){
@@ -9485,33 +9505,23 @@ function confirmJoinPrivateMatch(){
   if(!match) return;
   if(code !== match.passcode){ toast("Incorrect code!"); return; }
   closePasscodeModal();
+  joinPassForServer = code;
   executeJoin(match);
 }
 
+/* Rejoindre = UN appel serveur (matchJoin) qui vérifie la place, le code
+   privé et le solde, m'ajoute au bon camp et débite ma mise en une seule
+   fois. Plus de course entre deux joueurs qui rejoignent en même temps. */
+let joinPassForServer = "";
 function executeJoin(match){
-  match.hostPlayers = match.hostPlayers || [match.host];
-  match.guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
-
-  const onHostTeam = isOnHostTeam(match, state.username);
-  if(onHostTeam){
-    match.hostPlayers.push(state.username);
-  } else {
-    match.guestPlayers.push(state.username);
-  }
-  match.players = [...match.hostPlayers, ...match.guestPlayers];
-
-  state.currentLobby = match.id;
-  save();
-  pushMatchToCloud(match);
-  setPage("lobby");
-
-  // Comme pour le host à la création : je paie ma mise DÈS que je rejoins
-  // le match (vérifié et débité côté serveur) — sauf si mon host me couvre
-  // (cover bet), auquel cas je ne paie rien.
-  callFn("matchEscrow", { matchId: match.id }).then(res => {
+  const passcode = joinPassForServer; joinPassForServer = "";
+  callFn("matchJoin", { matchId: match.id, passcode }).then(res => {
+    state.currentLobby = match.id;
+    save();
+    setPage("lobby");
     toast((res && res.stake > 0)
       ? `You joined the match! 🔒 ${formatCoins(res.stake)} coins locked in.`
-      : "You joined the match! Your host is covering your bet — you risk nothing.");
+      : (res && res.already) ? "You're already in this match!" : "You joined the match! Your host is covering your bet — you risk nothing.");
   }).catch(err => toast(fnErrorMessage(err)));
 }
 
@@ -9564,7 +9574,7 @@ function toggleReady(matchId){
   match.readies[state.username] = !match.readies[state.username];
 
   save();
-  pushMatchToCloud(match);
+  patchMatchInCloud(match.id, matchFieldPath("readies", state.username), match.readies[state.username]);
 
   const lockedIds = checkMatchLocks();
   if(lockedIds.includes(matchId)){
