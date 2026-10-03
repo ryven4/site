@@ -123,6 +123,21 @@ exports.stripeWebhook = onRequest(
       return;
     }
 
+    // Contestation bancaire (chargeback) ou remboursement fait depuis Stripe :
+    // on reprend les coins correspondants (le solde peut passer en négatif).
+    // À activer dans Stripe → Développeurs → Webhooks : charge.dispute.created
+    // et charge.refunded.
+    if (event.type === "charge.dispute.created" || event.type === "charge.refunded") {
+      try {
+        await handleClawback(stripe, event);
+        res.status(200).send("ok");
+      } catch (err) {
+        logger.error("Clawback failed", { error: err.message, type: event.type });
+        res.status(500).send("internal error");
+      }
+      return;
+    }
+
     if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") {
       // On ignore poliment tous les autres types d'événements Stripe.
       res.status(200).send("ignored");
@@ -169,6 +184,7 @@ exports.stripeWebhook = onRequest(
         tx.set(depositRef, {
           uid,
           coins,
+          paymentIntent: session.payment_intent || null,
           amountTotalCents: session.amount_total || null,
           currency: session.currency || "eur",
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -198,3 +214,45 @@ exports.stripeWebhook = onRequest(
     }
   }
 );
+/* Reprise des coins après une contestation (chargeback) ou un remboursement.
+   Idempotent : on mémorise sur le dépôt combien de coins ont déjà été repris. */
+async function handleClawback(stripe, event) {
+  const obj = event.data.object;
+  const pi = obj.payment_intent;
+  if (!pi) return;
+  const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+  const session = sessions.data[0];
+  if (!session) { logger.warn("Clawback: no checkout session for payment", { pi }); return; }
+  const depositRef = db.collection("deposits").doc(session.id);
+  const isDispute = event.type === "charge.dispute.created";
+  await db.runTransaction(async (tx) => {
+    const dep = await tx.get(depositRef);
+    if (!dep.exists) return;
+    const d = dep.data();
+    const total = Number(d.coins) || 0;
+    let target;
+    if (isDispute) target = total;
+    else {
+      const amount = Number(obj.amount) || 0;
+      const refunded = Number(obj.amount_refunded) || 0;
+      target = amount > 0 ? Math.round((total * refunded / amount) * 100) / 100 : total;
+    }
+    const already = Number(d.clawedBack) || 0;
+    const delta = Math.round((Math.min(total, target) - already) * 100) / 100;
+    if (delta <= 0) return;
+    const userRef = db.collection("users").doc(d.uid);
+    const update = {
+      coins: admin.firestore.FieldValue.increment(-delta),
+      notifications: admin.firestore.FieldValue.arrayUnion({
+        id: `cb_${event.id}`, type: "warning",
+        text: isDispute ? `Your payment of ${total} coins was disputed with your bank: ${delta} coins were removed and your account is suspended. Contact us on Discord.`
+                        : `Your deposit was refunded: ${delta} coins were removed from your balance.`,
+        at: Date.now(), read: false,
+      }),
+    };
+    if (isDispute) Object.assign(update, { banned: true, banReason: "Payment dispute (chargeback)", bannedBy: "system", bannedAt: Date.now() });
+    tx.set(userRef, update, { merge: true });
+    tx.update(depositRef, { clawedBack: Math.round((already + delta) * 100) / 100, [isDispute ? "disputedAt" : "refundedAt"]: Date.now() });
+  });
+  logger.warn("Coins clawed back", { type: event.type, pi });
+}

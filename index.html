@@ -3179,7 +3179,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
     <div class="chat-box">
       <div class="chat-messages" id="chatMessages"></div>
       <form class="chat-form" onsubmit="sendMessage(event)">
-        <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
+        <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off" maxlength="200">
         <button type="submit" class="btn green small">Send</button>
       </form>
     </div>
@@ -3315,7 +3315,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
           I'll cover my whole team's bet
         </label>
         <p style="margin-top:6px; font-size:9.5px; color:var(--muted); line-height:1.5;">
-          Only you risk coins on a loss. On a win, your teammates each get their normal bet back, and you get double everything you personally staked (your bet + what you covered for them).
+          Only you risk coins: you pay the bet for your whole team. On a win, each teammate receives one bet and you get your whole stake back plus one bet (5% platform fee on winnings).
         </p>
       </div>
 
@@ -4042,7 +4042,7 @@ function checkMatchNotifications(matches){
     // Paiement automatique de ma mise si je suis dans le roster d'un match
     // ouvert sans l'avoir encore payée (rematch, ou retry si l'appel avait
     // échoué) — une seule tentative par match et par session.
-    if(amParticipant && !m.completed && !m.cancelled && !m.locked && !m.tournamentId
+    if(amParticipant && m.rematchOf && !m.completed && !m.cancelled && !m.locked && !m.tournamentId
        && !(m.escrowedBy || []).includes(state.username) && !autoEscrowTried.has(m.id)){
       autoEscrowTried.add(m.id);
       callFnSilent("matchEscrow", { matchId: m.id }).then(res => {
@@ -4055,7 +4055,7 @@ function checkMatchNotifications(matches){
         playTingSound();
         toast("🔔 A player joined your match!");
       }
-      if(amParticipant && hasClaim && !prev.hasClaim && m.victoryClaim.by !== state.username){
+      if(amParticipant && hasClaim && !prev.hasClaim && !(hostPlayers.includes(state.username) ? hostPlayers : guestPlayers).includes(m.victoryClaim.by)){
         playTingSound();
         toast("🔔 Your opponent declared victory!");
       }
@@ -4065,13 +4065,38 @@ function checkMatchNotifications(matches){
   matchNotifyPrimed = true;
 }
 
+/* Le site ne charge que les matchs des dernières 48 h. Pour les modos, on
+   charge EN PLUS les litiges et signalements en cours, même plus anciens. */
+const extraMatchesById = {};
+let modListenersStarted = false;
+function mergeExtraMatches(list){
+  const ids = new Set(list.map(m => m.id));
+  Object.values(extraMatchesById).forEach(m => { if(m && !ids.has(m.id)) list.push(m); });
+  return list;
+}
+function startModMatchListeners(){
+  if(modListenersStarted || !db || !isAdmin()) return;
+  modListenersStarted = true;
+  const sources = {};
+  const listen = (key, q) => q.onSnapshot(snap => {
+    sources[key] = {};
+    snap.forEach(d => { const m = d.data(); if(m && m.id) sources[key][m.id] = m; });
+    Object.keys(extraMatchesById).forEach(k => delete extraMatchesById[k]);
+    Object.values(sources).forEach(src => Object.assign(extraMatchesById, src));
+    const fresh = state.matches.filter(m => !(m.id in extraMatchesById));
+    state.matches = mergeExtraMatches(fresh);
+    if(currentPage === "moderation" || currentPage === "lobby") render();
+  }, err => console.warn("mod listener", err));
+  listen("disputes", db.collection("matches").where("disputed", "==", true).where("completed", "==", false));
+  listen("reports", db.collection("matches").where("cheaterReport.status", "==", "pending"));
+}
 const autoEscrowTried = new Set();
 const tryLockSent = new Set();
 
 function initCloudSync(){
   if(!db) return;
   db.collection("matches").doc("shared").delete().catch(() => {}); // nettoyage de l'ancien système de synchro
-  db.collection("matches").onSnapshot(function(snapshot){
+  db.collection("matches").where("createdAt", ">", Date.now() - 48 * 3600 * 1000).onSnapshot(function(snapshot){
     cloudReady = true;
     syncingFromRemote = true;
     const remoteMatches = [];
@@ -4080,11 +4105,11 @@ function initCloudSync(){
       if(data && data.id) remoteMatches.push(data);
     });
     checkMatchNotifications(remoteMatches);
-    state.matches = remoteMatches;
+    state.matches = mergeExtraMatches(remoteMatches);
     // Coins, résultats, remboursements, expiration des matchs et avancement
     // des tournois sont désormais entièrement calculés côté serveur — le
     // site n'a plus qu'à afficher ce qui arrive par ce onSnapshot.
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persistState();
     syncingFromRemote = false;
 
     if(checkMatchLocks().length > 0) save();
@@ -4321,13 +4346,36 @@ function modGiveSelfCoins(amount){
   if(!isAdmin()) return;
   const n = Number(amount);
   if(!n || n <= 0) return;
-  state.coins = roundToCents((state.coins || 0) + n);
-  save();
-  renderHeaderUI();
-  toast(`+${formatCoins(n)} coins (mod)`);
-  render();
+  if(!isSuperAdmin()){ toast("Only the owner can add coins."); return; }
+  callFn("adminAdjustCoins", { targetUsername: state.username, amount: n })
+    .then(() => toast(`+${formatCoins(n)} coins (owner)`))
+    .catch(err => toast(fnErrorMessage(err)));
 }
 
+let modWithdrawalsCache = null;
+function withdrawalsHTML(){
+  if(modWithdrawalsCache === null) return `<div style="color:var(--muted2); font-size:10px;">Click Load to see the requests.</div>`;
+  if(!modWithdrawalsCache.length) return `<div style="color:var(--muted2); font-size:10px;">No pending withdrawal.</div>`;
+  return modWithdrawalsCache.map(w => `
+    <div class="stats-history-row" style="gap:8px; flex-wrap:wrap;">
+      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins</span>
+      <span class="stats-history-meta">${escapeHTML(w.epic || "—")} · ${escapeHTML(w.discordUsername || "—")} · ID ${escapeHTML(w.id)} · ${new Date(Number(w.createdAt) || 0).toLocaleString()}</span>
+      <span style="display:flex; gap:6px;">
+        <button class="btn green small" onclick="resolveWithdrawal(${jsArg(w.id)}, 'paid')">Paid</button>
+        <button class="btn danger small" onclick="resolveWithdrawal(${jsArg(w.id)}, 'rejected')">Decline</button>
+      </span>
+    </div>`).join("");
+}
+function loadWithdrawals(){
+  callFn("adminListWithdrawals", {}).then(res => {
+    modWithdrawalsCache = (res && res.items) || [];
+    const box = document.getElementById("modWithdrawals"); if(box) box.innerHTML = withdrawalsHTML();
+  }).catch(err => toast(fnErrorMessage(err)));
+}
+async function resolveWithdrawal(id, action){
+  if(!(await siteConfirm(action === "paid" ? "Mark this withdrawal as PAID? Only do it once the money is sent." : "Decline this withdrawal? The coins go back to the player.", { title:"Withdrawal", okLabel: action === "paid" ? "Mark paid" : "Decline" }))) return;
+  callFn("adminResolveWithdrawal", { id, action }).then(() => { toast("Done."); loadWithdrawals(); }).catch(err => toast(fnErrorMessage(err)));
+}
 function modGiveSelfCoinsCustom(){
   if(!isAdmin()) return;
   const input = document.getElementById("modCoinsInput");
@@ -4545,7 +4593,7 @@ async function modUnlinkPlayerDiscord(){
       state.discordId = null;
       state.discordUsername = null;
       state.discordAvatar = null;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persistState();
       render();
     }
   }).catch(err => {
@@ -4799,7 +4847,7 @@ function confirmModWarn(){
       if(uid === currentUid){
         state.notifications = update.notifications;
         state.warnings = update.warnings;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        persistState();
         renderHeaderUI();
       }
       return triggersBan;
@@ -5033,7 +5081,7 @@ function declareResult(matchId, type){
       toast("This match is already settled.");
       render();
     } else if(status === "refunded"){
-      toast("This match wasn't valid (a bet was missing) — it was cancelled and everyone was refunded.");
+      toast("This match was cancelled and everyone was refunded.");
       render();
     }
   }).catch(err => toast(fnErrorMessage(err)));
@@ -5101,7 +5149,7 @@ function renderLobbyChatMessages(lobby){
 function sendLobbyMessage(e, matchId){
   e.preventDefault();
   const input = document.getElementById("lobbyChatInput");
-  const msg = input.value.trim();
+  const msg = input.value.trim().slice(0, 300);
   if(!msg) return;
 
   const match = state.matches.find(m => m.id === matchId);
@@ -5159,7 +5207,9 @@ function renderRematchBlock(lobby, hostPlayers, guestPlayers){
 
 function requestRematch(matchId){
   callFn("matchRematch", { matchId }).then(res => {
-    if(res.status === "waiting"){
+    if(res.status === "insufficient"){
+      toast(`Rematch impossible: not enough coins for ${(res.players || []).join(", ")}.`);
+    } else if(res.status === "waiting"){
       toast(`Rematch vote registered (${res.votes}/${res.total})`);
     } else if(res.status === "created" || res.status === "already_created"){
       toast("🔁 Rematch! New match created.");
@@ -5174,9 +5224,19 @@ function openRematchLobby(matchId){
   setPage("lobby");
 }
 
+function cancelReasonLabel(r){
+  const map = { expired:"Nobody locked it in within 30 minutes.", left:"The host left (or a rematch player left).", cancel_vote:"All players voted to cancel.", stale_no_result:"No result was entered within 6 hours.", admin_delete:"Cancelled by a moderator." };
+  if(map[r]) return map[r];
+  if(r && String(r).startsWith("invalid_")) return "A player's bet was missing.";
+  return "";
+}
+function closeLobbyView(){
+  state.currentLobby = null;
+  persistState();
+  setPage("matches");
+}
+
 function renderResultSection(lobby){
-  const players = lobby.players || [];
-  const opponent = players.find(p => p !== state.username);
   const { hostPlayers: rsHostPlayers, guestPlayers: rsGuestPlayers } = matchTeamsOf(lobby);
   const myTeam = rsHostPlayers.includes(state.username) ? rsHostPlayers : rsGuestPlayers;
   const isParticipant = rsHostPlayers.includes(state.username) || rsGuestPlayers.includes(state.username);
@@ -5205,7 +5265,7 @@ function renderResultSection(lobby){
       <div style="padding:20px; background:${win ? 'rgba(0,255,136,.06)' : 'rgba(255,71,87,.06)'}; border-top:1px solid var(--line); text-align:center;">
         <h3 style="color:${win ? 'var(--green)' : 'var(--red)'}; margin-bottom:6px;">${win ? icon('trophy') : icon('xCircle')} ${winnerLabel ? `Victory — ${winnerLabel}` : (win ? 'Victory recorded' : 'Defeat recorded')}</h3>
         <p style="color:var(--muted); font-size:11px;">${win ? 'This match is over.' : (winnerLabel ? `${winnerLabel} won this match.` : 'This match is over.')}</p>
-        ${isParticipant ? renderRematchBlock(lobby, rsHostPlayers, rsGuestPlayers) : ''}
+        ${(isParticipant && !lobby.tournamentId) ? renderRematchBlock(lobby, rsHostPlayers, rsGuestPlayers) : ''}
       </div>
     `;
   }
@@ -5220,7 +5280,8 @@ function renderResultSection(lobby){
       `;
     }
     const myProof = (lobby.proofs || {})[state.username];
-    const oppProof = opponent ? (lobby.proofs || {})[opponent] : null;
+    const oppTeam = rsHostPlayers.includes(state.username) ? rsGuestPlayers : rsHostPlayers;
+    const oppProof = oppTeam.map(p => (lobby.proofs || {})[p]).find(Boolean) || null;
     return `
       <div style="padding:20px; background:rgba(255,171,64,.06); border-top:1px solid var(--line); text-align:center;">
         <h3 style="color:#ffab40; margin-bottom:6px;">${icon('alert')} Dispute — You both declared victory</h3>
@@ -5239,6 +5300,9 @@ function renderResultSection(lobby){
             <div style="font-size:9px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Opponent's proof</div>
             ${oppProof ? `<img src="${safeImgSrc(oppProof)}" style="width:100%; border-radius:10px; border:1px solid var(--line);">` : `<div style="color:var(--muted2); font-size:10px; padding:20px 0;">Waiting...</div>`}
           </div>
+        </div>
+        <div style="margin-top:16px;">
+          <button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">${icon('xCircle')} Actually, we lost (concede)</button>
         </div>
       </div>
     `;
@@ -5303,7 +5367,12 @@ function renderResultSection(lobby){
 /* STATE */
 const STORAGE_KEY = "primeTokenV11";
 
-let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {
+/* Sauvegarde locale SANS la liste des matchs (elle venait du serveur et
+   finissait par dépasser la limite du navigateur → plus rien ne marchait). */
+function persistState(){
+  try{ const { matches, ...rest } = state; localStorage.setItem(STORAGE_KEY, JSON.stringify(rest)); }catch(e){}
+}
+let state = (function(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); }catch(e){ return null; } })() || {
   username: "Player" + Math.floor(1000 + Math.random() * 9000),
   epic:"",
   matches:[],
@@ -5382,8 +5451,9 @@ const MATCH_TTL_MS = 30 * 60 * 1000;
    ne JAMAIS la renvoyer ici, sous peine de voir TOUT ce set() rejeté par
    les règles dès qu'elle diverge, même d'un centime, de la vraie valeur
    serveur. */
+if(!Array.isArray(state.matches)) state.matches = [];
 function save(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persistState();
   if(currentUid && db){
     db.collection("users").doc(currentUid).set({
       username: state.username,
@@ -5527,7 +5597,7 @@ const WHEEL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 function canSpinWheelToday(){
   // Les modérateurs peuvent tourner la roue autant de fois qu'ils veulent
   // (pratique pour tester les gains, ou juste un petit privilège de mod).
-  if(isAdmin()) return true;
+  if(isSuperAdmin()) return true;
   if(!state.lastWheelSpin) return true;
   // Vrai cooldown de 24h glissantes depuis le dernier spin (et non plus un
   // simple changement de date calendaire, qui laissait tourner la roue deux
@@ -5603,7 +5673,7 @@ function spinWheel(){
     const spins = 8;
     wheelRotation += spins * 360 + delta;
     dial.style.transform = `rotate(${wheelRotation}deg)`;
-    if(!isAdmin()) state.lastWheelSpin = Date.now();
+    if(!isSuperAdmin()) state.lastWheelSpin = Date.now();
 
     setTimeout(() => {
       // Important : on repasse wheelSpinning à false AVANT le render() final
@@ -6543,7 +6613,7 @@ function pushNotificationForUid(uid, notif){
       // tout de suite plutôt que d'attendre le prochain cycle de sync.
       if(uid === currentUid){
         state.notifications = list;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        persistState();
         renderHeaderUI();
       }
     });
@@ -6567,7 +6637,7 @@ function renderNotifPanel(){
       <button onclick="clearAllNotifications()">Clear all</button>
     </div>
     ${list.map(n => `
-      <div class="notif-item type-${n.type} ${n.read ? '' : 'unread'}">
+      <div class="notif-item type-${escapeHTML(String(n.type || "").replace(/[^a-z_-]/gi, ""))} ${n.read ? '' : 'unread'}">
         <div class="notif-item-icon">${icon(NOTIF_ICONS[n.type] || 'bell')}</div>
         <div class="notif-item-body">
           <p>${escapeHTML(n.text)}</p>
@@ -6602,7 +6672,7 @@ function toggleNotifPanel(e){
     const list = state.notifications || [];
     if(list.some(n => !n.read)){
       state.notifications = list.map(n => ({ ...n, read: true }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persistState();
       if(currentUid && db){
         db.collection("users").doc(currentUid).update({ notifications: state.notifications }).catch(() => {});
       }
@@ -6624,7 +6694,7 @@ function closeNotifPanel(){
 }
 function clearAllNotifications(){
   state.notifications = [];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persistState();
   if(currentUid && db){
     db.collection("users").doc(currentUid).update({ notifications: [] }).catch(() => {});
   }
@@ -6754,7 +6824,7 @@ function renderCreateTeamOptions(){
     return;
   }
 
-  select.innerHTML = myTeams.map(t => `<option value="${t.id}">${escapeHTML(t.name)} (${(t.members || []).length}/${TEAM_SIZE_MAX[t.size] || '?'})</option>`).join("");
+  select.innerHTML = myTeams.map(t => `<option value="${escapeHTML(t.id)}">${escapeHTML(t.name)} (${(t.members || []).length}/${TEAM_SIZE_MAX[t.size] || '?'})</option>`).join("");
   if(!myTeams.some(t => t.id === selectedTeamId)){
     selectedTeamId = myTeams[0].id;
   }
@@ -6989,7 +7059,7 @@ function initGlobalChatSync(){
 function sendMessage(e){
   e.preventDefault();
   const input = document.getElementById("chatInput");
-  const msg = input.value.trim();
+  const msg = input.value.trim().slice(0, 200);
   if(!msg) return;
   if(!db){
     toast("Chat unavailable while offline.");
@@ -7006,8 +7076,14 @@ function sendMessage(e){
     messages: firebase.firestore.FieldValue.arrayUnion(entry)
   }, { merge:true }).then(function(){
     if(globalChatCache.length > 180){
-      const trimmed = globalChatCache.slice(-120).concat([entry]);
-      db.collection("global_chat").doc("main").set({ messages: trimmed }).catch(()=>{});
+      // Nettoyage dans une transaction : on relit la vraie liste, pour ne
+      // jamais effacer un message envoyé au même moment par quelqu'un d'autre.
+      const ref = db.collection("global_chat").doc("main");
+      db.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        const list = (snap.exists && snap.data().messages) || [];
+        if(list.length > 180) tx.set(ref, { messages: list.slice(-120) });
+      }).catch(()=>{});
     }
   }).catch(function(err){
     console.warn("Error sending message:", err);
@@ -7200,7 +7276,7 @@ function applyUserDoc(data, opts = {}){
     }
 
     if(!changed) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persistState();
     renderHeaderUI();
     render();
 }
@@ -7313,7 +7389,37 @@ document.addEventListener("click", function(e){
   if(!wrap.contains(e.target)) box.classList.remove("open");
 });
 
+/* Chaque mise à jour en direct (un match qui change n'importe où) redessine
+   la page : on garde ce que le joueur est en train de taper (chat du lobby,
+   montant de tip/dépôt/retrait, recherche...) et où se trouve son curseur. */
 function render(){
+  const content = document.getElementById("content");
+  const saved = {};
+  let focusId = null, selS = null, selE = null;
+  if(content){
+    content.querySelectorAll("input[id], textarea[id]").forEach(el => {
+      if(el.type === "checkbox" || el.type === "radio" || el.type === "file") return;
+      saved[el.id] = el.value;
+    });
+    const a = document.activeElement;
+    if(a && a.id && content.contains(a) && (a.tagName === "INPUT" || a.tagName === "TEXTAREA")){
+      focusId = a.id; try{ selS = a.selectionStart; selE = a.selectionEnd; }catch(e){}
+    }
+  }
+  const page = currentPage, lobbyId = state.currentLobby;
+  renderInner();
+  if(!content || page !== currentPage || lobbyId !== state.currentLobby) return;
+  Object.entries(saved).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if(el && content.contains(el) && el.value !== v) el.value = v;
+  });
+  if(focusId){
+    const el = document.getElementById(focusId);
+    if(el && content.contains(el)){ el.focus({ preventScroll:true }); try{ if(selS !== null) el.setSelectionRange(selS, selE); }catch(e){} }
+  }
+}
+
+function renderInner(){
   renderHeaderUI();
   const container = document.getElementById("content");
 
@@ -7438,7 +7544,8 @@ function render(){
           </div>
         ` : pool.map(m => {
           const entry = roundToCents(m.bet !== undefined ? m.bet : 0.5);
-          const earn = matchTotalPot(m);
+          // Gain par joueur (sa mise + celle d'un adversaire, −5 %), comme le serveur.
+          const earn = roundToCents(2 * entry * (1 - MATCH_TAX_RATE));
           const elapsed = Date.now() - (m.createdAt || Date.now());
           const remainingMs = Math.max(0, MATCH_TTL_MS - elapsed);
           const remainingMin = Math.ceil(remainingMs / 60000);
@@ -7595,6 +7702,14 @@ function render(){
     container.innerHTML = `
       <div class="lobby-layout">
         <div class="lobby-main">
+          ${lobby.cancelled ? `
+            <div style="margin:0 0 16px; padding:16px 18px; border:1px solid rgba(255,77,94,.35); border-radius:12px; background:rgba(255,77,94,.07); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <div>
+                <strong style="color:var(--red); font-size:14px;">${icon('xCircle')} This match was cancelled</strong>
+                <div style="color:var(--muted); font-size:11px; margin-top:4px;">${cancelReasonLabel(lobby.cancelReason)} Every bet that was paid has been refunded.</div>
+              </div>
+              <button class="btn" onclick="closeLobbyView()">Back to matches</button>
+            </div>` : ''}
 
           <div class="lobby-banner">
             <div class="lobby-banner-info">
@@ -7603,7 +7718,7 @@ function render(){
             </div>
             <div class="lobby-banner-code">
               <span>Match Code</span>
-              <strong>${lobby.id}</strong>
+              <strong>${escapeHTML(lobby.id)}</strong>
             </div>
           </div>
 
@@ -7612,7 +7727,7 @@ function render(){
             <div class="lobby-tag"><strong>${escapeHTML(lobby.region)}</strong><span>Region</span></div>
             <div class="lobby-tag"><strong>${escapeHTML(lobby.platform)}</strong><span>Platform</span></div>
             <div class="lobby-tag"><strong>${firstToLabel(lobby)}</strong><span>First To</span></div>
-            <div class="lobby-tag"><strong>${lobby.killLead ? lobby.killLead : "OFF"}</strong><span>Kill Lead</span></div>
+            <div class="lobby-tag"><strong>${(parseInt(lobby.killLead,10) > 0) ? parseInt(lobby.killLead,10) : "OFF"}</strong><span>Kill Lead</span></div>
             <div class="lobby-tag"><strong>${lobby.simpleEdit ? "ON" : "OFF"}</strong><span>Simple Edit</span></div>
             ${mapCodeFor(lobby) ? `<button type="button" class="lobby-tag map-code-tag" onclick="copyMapCode(${jsArg(mapCodeFor(lobby))})" title="Click to copy the map code"><strong>${escapeHTML(mapCodeFor(lobby))} ${icon('copy')}</strong><span>Map Code</span></button>` : ''}
             ${lobby.team ? `<div class="lobby-tag"><strong>${escapeHTML(lobby.team.name)}</strong><span>Team</span></div>` : ''}
@@ -7628,12 +7743,12 @@ function render(){
           <div class="match-economy" style="margin-bottom:16px;">
             <div class="eco-block in">
               <span>Your Bet</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(myBetInfo.baseBet)}</strong>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins((isHost || isGuest) ? myBetInfo.stake : myBetInfo.baseBet)}</strong>
             </div>
             <div class="eco-arrow">→</div>
             <div class="eco-block out">
               <span>If You Win</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins(matchTotalPot(lobby))}</strong>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins((isHost || isGuest) ? roundToCents(myBetInfo.winReward * (1 - MATCH_TAX_RATE)) : roundToCents(2 * myBetInfo.baseBet * (1 - MATCH_TAX_RATE)))}</strong>
             </div>
           </div>
           ${myBetInfo.covered ? `
@@ -7668,7 +7783,7 @@ function render(){
               ${hostSlotsHTML}
               <div class="team-card-actions">
                 <button class="rules-btn" onclick="openRulesModal()">${icon('gavel')} Rules</button>
-                ${isGuest && lobby.locked && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
+                ${isGuest && lobby.locked && !lobby.completed && !lobby.cancelled && !lobby.cheaterReport ? `
                   <button class="report-cheater-btn" onclick="openCheaterReportModal(${jsArg(lobby.id)})">${icon('flag')} Report</button>
                 ` : ''}
               </div>
@@ -7677,7 +7792,7 @@ function render(){
             <div class="lobby-center">
               <div class="vs-badge">VS</div>
 
-              ${((isHost || isGuest) && !lobby.locked) ? `
+              ${((isHost || isGuest) && !lobby.locked && !lobby.cancelled) ? `
                 <button class="btn ${userReady ? 'danger' : 'green'}" onclick="toggleReady(${jsArg(lobby.id)})">
                   ${userReady ? 'Cancel Ready' : 'READY UP'}
                 </button>
@@ -7687,7 +7802,9 @@ function render(){
                 <button class="btn" onclick="simulateOpponent(${jsArg(lobby.id)})">${icon('bot')} Simulate an Opponent</button>
               ` : ''}
 
-              ${!(isHost || isGuest) ? `
+              ${lobby.cancelled ? `
+                <span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">MATCH CANCELLED</span>
+              ` : !(isHost || isGuest) ? `
                 <span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center; display:inline-flex; align-items:center; gap:5px; justify-content:center;">${icon('eye')} SPECTATING — VIEW ONLY</span>
                 ${lobby.cheaterReport && lobby.cheaterReport.status === "pending"
                   ? `<span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">UNDER REVIEW</span>`
@@ -7723,7 +7840,7 @@ function render(){
                 <span class="team-card-tag">TEAM</span>
               </div>
               ${guestSlotsHTML}
-              ${isHost && lobby.locked && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") ? `
+              ${isHost && lobby.locked && !lobby.completed && !lobby.cancelled && !lobby.cheaterReport ? `
                 <div style="padding:8px 10px 10px; text-align:right;">
                   <button class="report-cheater-btn" onclick="openCheaterReportModal(${jsArg(lobby.id)})">${icon('flag')} Report</button>
                 </div>
@@ -7738,16 +7855,21 @@ function render(){
             </div>
           ` : ''}
 
-          ${bothReady ? `
+          ${(bothReady && !lobby.locked && !lobby.cancelled && !lobby.tournamentId) ? `
+            <div style="margin:0 20px 18px; padding:12px 15px; border:1px dashed rgba(255,171,64,.5); border-radius:10px; background:rgba(255,171,64,.06); font-size:10px; color:#ffab40;">
+              ${icon('clock')} Waiting for every bet to be locked in: ${escapeHTML(allPlayers.filter(p => !(lobby.escrowedBy || []).includes(p)).join(", ") || "almost done…")}. A player without enough coins should leave — everyone gets refunded.
+            </div>
+          ` : ''}
+          ${(bothReady && lobby.locked && !lobby.cancelled) ? `
             <div style="margin:0 20px 18px; padding:12px 15px; border:1px solid rgba(0,255,136,.25); border-radius:10px; background:rgba(0,255,136,.06); font-size:10px; color:var(--green);">
               ${icon('checkCircle')} Identities revealed — you can now meet up in-game.
             </div>
           ` : ''}
 
           <!-- END OF MATCH RESULTS SECTION -->
-          ${lobby.locked ? renderResultSection(lobby) : ''}
+          ${(lobby.locked && !lobby.cancelled) ? renderResultSection(lobby) : ''}
 
-          ${(isAdmin() && (isSuperAdmin() || (!isHost && !isGuest)) && !lobby.completed && !lobby.cancelled) ? `
+          ${(isAdmin() && !isHost && !isGuest && !lobby.completed && !lobby.cancelled) ? `
             <div class="mod-override-box" style="margin:0 20px 18px; padding:16px; border:1px solid rgba(169,112,255,.4); border-radius:12px; background:rgba(169,112,255,.08);">
               <h3 style="color:#c9a8ff; margin-bottom:4px; font-size:14px; font-weight:600;">${icon('shield')} Moderator Override</h3>
               <p style="color:var(--muted); font-size:10px; margin-bottom:14px;">Only visible to you as a moderator. Force-assign victory to either side — this settles the match and coins immediately, no player action needed.</p>
@@ -7772,7 +7894,7 @@ function render(){
           <div class="lobby-chat-messages" id="lobbyChatMessages">${renderLobbyChatMessages(lobby)}</div>
           ${(isHost || isGuest || isAdmin())
             ? `<form class="lobby-chat-form" onsubmit="sendLobbyMessage(event, ${jsArg(lobby.id)})">
-                 <input type="text" id="lobbyChatInput" placeholder="Message your opponent..." autocomplete="off">
+                 <input type="text" id="lobbyChatInput" placeholder="Message your opponent..." autocomplete="off" maxlength="300">
                  <button type="submit" class="btn green small">Send</button>
                </form>`
             : `<div style="padding:12px; text-align:center; font-size:10px; color:var(--muted2); border-top:1px solid var(--line);">${icon('eye')} You're only spectating this match — chat is read-only.</div>`
@@ -7873,8 +7995,8 @@ function render(){
         <div class="wheel-side">
           <div class="wheel-card wheel-status-card ${canSpin ? 'ready' : ''}">
             <span class="wheel-card-label">${canSpin ? 'Ready' : 'Next spin'}</span>
-            <strong>${isAdmin() ? 'Unlimited spins' : (canSpin ? 'Your free spin is ready' : 'in ' + wheelTimeUntilReset())}</strong>
-            <p>${isAdmin() ? 'Moderator privilege — hit SPIN whenever you want.' : (canSpin ? 'Hit SPIN in the middle of the wheel.' : 'Come back later for your next free spin.')}</p>
+            <strong>${isSuperAdmin() ? 'Unlimited spins' : (canSpin ? 'Your free spin is ready' : 'in ' + wheelTimeUntilReset())}</strong>
+            <p>${isSuperAdmin() ? 'Owner privilege — hit SPIN whenever you want.' : (canSpin ? 'Hit SPIN in the middle of the wheel.' : 'Come back later for your next free spin.')}</p>
           </div>
           <div class="wheel-card">
             <span class="wheel-card-label">Possible rewards</span>
@@ -8338,15 +8460,15 @@ function render(){
           <div class="profile-stats-grid team-stats-grid" style="margin-top:18px;">
             <div class="profile-stat-tile">
               <span>Victory</span>
-              <strong class="green"><span class="stat-emoji">${icon('flame')}</span>${team.stats ? team.stats.wins || 0 : 0}</strong>
+              <strong class="green"><span class="stat-emoji">${icon('flame')}</span>${team.stats ? (Number(team.stats.wins) || 0) : 0}</strong>
             </div>
             <div class="profile-stat-tile">
               <span>Defeat</span>
-              <strong class="red"><span class="stat-emoji">${icon('skull')}</span>${team.stats ? team.stats.losses || 0 : 0}</strong>
+              <strong class="red"><span class="stat-emoji">${icon('skull')}</span>${team.stats ? (Number(team.stats.losses) || 0) : 0}</strong>
             </div>
             <div class="profile-stat-tile">
               <span>Earning</span>
-              <strong>${coinIcon(14)}${team.stats ? team.stats.earnings || 0 : 0}</strong>
+              <strong>${coinIcon(14)}${team.stats ? (Number(team.stats.earnings) || 0) : 0}</strong>
             </div>
             <div class="profile-stat-tile">
               <span>Size</span>
@@ -8553,6 +8675,7 @@ function render(){
   }
 
   else if(currentPage === "moderation"){
+    startModMatchListeners();
     if(!isAdmin()){
       container.innerHTML = `<div class="empty"><strong>Access Denied</strong><span>This page is reserved for moderators.</span></div>`;
     } else {
@@ -8584,6 +8707,13 @@ function render(){
             `).join("")}
           </div>
         ` : ''}
+
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">${icon('wallet')} Pending withdrawals</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:12px;">The coins are already removed from the player's balance. Pay the player, then mark it as paid. Declining gives the coins back.</p>
+          <button class="btn small" onclick="loadWithdrawals()">${icon('refresh')} Load</button>
+          <div id="modWithdrawals" style="margin-top:12px;">${withdrawalsHTML()}</div>
+        </div>
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
           <h3 style="margin-bottom:6px; font-size:14px;">${icon('zap')} My Moderator Powers</h3>
@@ -8693,7 +8823,7 @@ function render(){
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
                   <div>
                     <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode || "—")} — ${escapeHTML(m.teamSize || "—")} — FT ${firstToLabel(m)}</strong>
-                    <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${m.id}</div>
+                    <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${escapeHTML(m.id)}</div>
                     <div style="color:var(--muted); font-size:10.5px; margin-top:6px;">Reported by <strong style="color:#fff;">${escapeHTML(m.cheaterReport.by)}</strong> against <strong style="color:var(--red);">${escapeHTML(against)}</strong></div>
                   </div>
                   <span style="font-size:9px; color:var(--muted2);">${new Date(m.cheaterReport.at).toLocaleString("en-US", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
@@ -8724,7 +8854,7 @@ function render(){
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                   <div>
                     <strong style="color:#fff; font-size:12px;">${escapeHTML(m.mode)} — ${escapeHTML(m.teamSize)} — FT ${firstToLabel(m)}</strong>
-                    <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${m.id}</div>
+                    <div style="color:var(--muted2); font-size:9px; margin-top:2px;">Match ${escapeHTML(m.id)}</div>
                   </div>
                 </div>
                 <div style="display:flex; gap:16px; flex-wrap:wrap;">
@@ -8751,7 +8881,7 @@ function render(){
               const winner = Object.entries(m.results || {}).find(([, r]) => r === 'WIN');
               return `
                 <div class="stats-history-row">
-                  <div><span class="stats-history-mode">${escapeHTML(m.mode)}</span><span class="stats-history-meta">${escapeHTML(m.teamSize)} · FT ${firstToLabel(m)} · ${m.id}</span></div>
+                  <div><span class="stats-history-mode">${escapeHTML(m.mode)}</span><span class="stats-history-meta">${escapeHTML(m.teamSize)} · FT ${firstToLabel(m)} · ${escapeHTML(m.id)}</span></div>
                   <span class="stats-history-result win">Won by ${escapeHTML(winner ? winner[0] : "—")}</span>
                 </div>
               `;
@@ -9698,11 +9828,9 @@ function doBuyAvatar(id){
   if(state.ownedAvatars.includes(id)){ toast("You already own this avatar!"); return; }
   if((state.coins || 0) < a.price){ toast("Not enough coins! Win matches to earn more."); return; }
 
-  state.coins = roundToCents((state.coins || 0) - a.price);
-  state.ownedAvatars.push(id);
-  save();
-  renderHeaderUI();
-  toast(`Avatar "${a.name}" unlocked!`);
+  callFn("shopPurchase", { item: "avatar", avatarId: id }).then(() => {
+    toast(`Avatar "${a.name}" unlocked!`);
+  }).catch(err => toast(fnErrorMessage(err)));
   render();
   const pickerOverlay = document.getElementById("avatarPickerOverlay");
   if(pickerOverlay && pickerOverlay.classList.contains("open")){
@@ -9938,8 +10066,8 @@ function withdrawHTML(){
         <ol class="wd-steps">
           <li><b>Request</b> your withdrawal here (minimum ${formatEur(WITHDRAW_MIN)}).</li>
           <li><b>Open a ticket</b> on our Discord and paste the message we prepare for you.</li>
-          <li>A staff member <b>verifies</b> your balance and sends your payment.</li>
-          <li>The withdrawn coins are then <b>removed</b> from your balance.</li>
+          <li>The coins are <b>reserved</b> right away (removed from your balance).</li>
+          <li>A staff member sends your payment — if the request is declined, the coins come back.</li>
         </ol>
         <a class="btn wd-discord" href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer">${icon('discord')} Open our Discord</a>
       </div>
@@ -9952,10 +10080,13 @@ function requestWithdraw(){
   const bal = state.coins || 0;
   if(isNaN(amount) || amount < WITHDRAW_MIN){ toast(`The minimum withdrawal is ${formatEur(WITHDRAW_MIN)}.`); return; }
   if(amount > bal){ toast("You don't have that many coins."); return; }
-  const msg = `Withdrawal request\nUsername: ${state.username}\nEpic: ${state.epic || "—"}\nAmount: ${amount} coins (${formatEur(amount * COIN_PRICE_EUR)})`;
+  callFn("requestWithdrawal", { amount }).then(res => showWithdrawTicket(amount, res && res.id)).catch(err => toast(fnErrorMessage(err)));
+}
+function showWithdrawTicket(amount, wid){
+  const msg = `Withdrawal request\nID: ${wid || "—"}\nUsername: ${state.username}\nEpic: ${state.epic || "—"}\nAmount: ${amount} coins (${formatEur(amount * COIN_PRICE_EUR)})`;
   const body = document.getElementById("depositModalBody");
   body.innerHTML = `
-    <p style="font-size:14px; color:#c9ced6; line-height:1.6; margin-bottom:12px;">Open a ticket on our Discord and paste this message. A staff member will handle your withdrawal of <strong style="color:#fff;">${formatEur(amount * COIN_PRICE_EUR)}</strong>.</p>
+    <p style="font-size:14px; color:#c9ced6; line-height:1.6; margin-bottom:12px;">Your ${amount} coins are now reserved for this withdrawal. Open a ticket on our Discord and paste this message. A staff member will send your <strong style="color:#fff;">${formatEur(amount * COIN_PRICE_EUR)}</strong>.</p>
     <pre class="wd-msg" id="withdrawMsg">${escapeHTML(msg)}</pre>
     <div style="display:flex; gap:10px; margin-top:16px;">
       <button class="btn" style="flex:1;" onclick="copyWithdrawMsg()">${icon('copy')} Copy message</button>
@@ -10445,7 +10576,11 @@ async function loadProfileAndStart(uid){
       // coins/snipes/vipUntil étant verrouillés côté règles, c'est la
       // Cloud Function selfEcoReset (idempotente) qui l'applique vraiment ;
       // on met juste à jour l'affichage local en attendant sa réponse.
-      if((profile.ecoResetVersion || 0) < ECO_RESET_VERSION){
+      if(profile.ecoResetVersion === undefined && !profile.stats){
+        // Compte tout neuf pas encore initialisé (ou initialisation ratée) :
+        // on (re)lance initAccount, jamais le reset (sinon plus d'avatar de départ).
+        callFn("initAccount", { starterAvatar: (typeof pendingStarterAvatar !== "undefined" && pendingStarterAvatar) || "default" }).catch(err => console.warn("initAccount", err));
+      } else if((profile.ecoResetVersion || 0) < ECO_RESET_VERSION){
         state.coins = 0;
         state.snipes = 0;
         state.vipUntil = null;
@@ -10478,7 +10613,7 @@ async function loadProfileAndStart(uid){
     console.warn("Impossible de charger le profil :", e);
   }
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persistState();
   hideAuthScreen();
   render();
   // Les écouteurs globaux ne doivent être branchés QU'UNE fois par page :

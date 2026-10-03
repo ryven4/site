@@ -338,6 +338,10 @@ module.exports = function (admin, db) {
       if (!onHostTeam && guestPlayers.length >= maxPerSide) throw new HttpsError("failed-precondition", "Match full!");
 
       const after = { ...match, hostPlayers: newHost, guestPlayers: newGuest };
+      if ((match.escrowedBy || []).includes(username)) {
+        tx.update(matchRef, { hostPlayers: newHost, guestPlayers: newGuest, players: [...newHost, ...newGuest] });
+        return { ok: true, stake: 0, side: onHostTeam ? "host" : "guest" };
+      }
       const stake = computePlayerStake(after, username);
       const coins = me.coins || 0;
       if (coins < stake) {
@@ -378,6 +382,12 @@ module.exports = function (admin, db) {
       const { hostPlayers, guestPlayers } = matchRoster(match);
       if (!hostPlayers.includes(username) && !guestPlayers.includes(username)) {
         throw new HttpsError("permission-denied", "You're not part of this match.");
+      }
+      // Un roster écrit par le navigateur peut contenir n'importe qui : on
+      // ne prélève donc que le host, ou un joueur d'un roster fixé par le
+      // serveur (rematch). Les autres passent par matchJoin.
+      if (username !== match.host && !match.serverRoster) {
+        throw new HttpsError("permission-denied", "Join the match with the Join button.");
       }
       const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
       if (hostPlayers.length > maxPerSide || guestPlayers.length > maxPerSide) {
@@ -442,7 +452,7 @@ module.exports = function (admin, db) {
     for (const uname of toRefund) {
       const amount = roundToCents((m.escrowAmounts && m.escrowAmounts[uname]) || 0);
       const uid = uidMap[uname];
-      if (uid && amount > 0) tx.update(db.collection("users").doc(uid), { coins: FieldValue.increment(amount) });
+      if (uid && amount > 0) tx.set(db.collection("users").doc(uid), { coins: FieldValue.increment(amount) }, { merge: true });
     }
     tx.update(matchRef, { cancelled: true, refundedBy: [...refundedBy, ...toRefund], ...(extra || {}) });
   }
@@ -462,6 +472,14 @@ module.exports = function (admin, db) {
       if (!matchSnap.exists) return { status: "gone" };
       const match = matchSnap.data();
       if (match.completed || match.cancelled) return { status: "over" };
+      if (spec && spec.fromSweep) {
+        const rep = match.cheaterReport;
+        if (!match.victoryClaim || match.victoryClaim.by !== spec.winner || match.disputed ||
+            (rep && (rep.status === "pending" || rep.status === "confirmed")) ||
+            Date.now() - match.victoryClaim.at < (match.victoryClaim.timerMs || VICTORY_TIMER_MS)) {
+          return { status: "skipped" };
+        }
+      }
 
       const chk = checkPayable(match);
       const everyone = [...new Set([...(match.escrowedBy || []), ...(chk.ok ? [...chk.hostPlayers, ...chk.guestPlayers] : [])])];
@@ -591,6 +609,11 @@ module.exports = function (admin, db) {
       if (!snap.exists) return;
       const m = snap.data();
       if (m.completed) return; // déjà payé : on ne rembourse pas en plus
+      if (m.cancelled && !(m.escrowedBy || []).some((u) => !(m.refundedBy || []).includes(u))) return;
+      // Expiration (30 min) : seulement un match jamais verrouillé par le serveur.
+      if (reason === "expired" && (m.serverLock || m.victoryClaim || m.disputed)) return;
+      // Match abandonné (6 h) : pas si un résultat ou un signalement est en cours.
+      if (reason === "stale_no_result" && (m.victoryClaim || m.disputed || m.cheaterReport)) return;
       const uidMap = await resolveUidMap(m.escrowedBy || [], m.escrowUids || {});
       writeRefunds(tx, matchRef, m, uidMap, reason ? { cancelReason: reason } : {});
     });
@@ -602,8 +625,12 @@ module.exports = function (admin, db) {
      à écrire, ou null si déjà figé). */
   function ensureServerLock(match) {
     if (match.serverLock) return null;
+    if (match.locked) {
+      const res0 = serverLockUpdate(match, { requireReady: true });
+      if (!res0.error) return res0.update;
+    }
     if (!match.locked) throw new HttpsError("failed-precondition", "The match isn't locked yet — both teams must be full and ready.");
-    const res = serverLockUpdate(match, { requireReady: false });
+    const res = serverLockUpdate(match, { requireReady: true });
     if (res.error === "stake_missing") throw new HttpsError("failed-precondition", "Every player must lock in their bet first. A player without enough coins should leave the match (everyone gets refunded).");
     if (res.error) throw new HttpsError("failed-precondition", "This match isn't valid (" + res.error + "). Leave it to get refunded.");
     return res.update;
@@ -646,6 +673,10 @@ module.exports = function (admin, db) {
       const myTeam = onHost ? roster.hostPlayers : roster.guestPlayers;
       const otherTeam = onHost ? roster.guestPlayers : roster.hostPlayers;
 
+      if (result === "LOSS" && computePlayerStake(locked, username) === 0 && Number(locked.bet) > 0 &&
+          myTeam.some((p) => computePlayerStake(locked, p) > 0)) {
+        throw new HttpsError("permission-denied", "Your host is covering your bet: only the host can declare the defeat.");
+      }
       if (result === "LOSS") {
         if (lockUpdate) tx.update(matchRef, lockUpdate);
         return { status: "finalize" };
@@ -664,7 +695,7 @@ module.exports = function (admin, db) {
 
     if (outcome.status === "finalize") {
       const r = await finalizeMatch(String(matchId), { loser: username });
-      return { status: r.status === "refunded" ? "refunded" : "finalized" };
+      return { status: r.status === "refunded" ? "refunded" : r.status === "finalized" ? "finalized" : "over" };
     }
     return outcome;
   });
@@ -684,10 +715,10 @@ module.exports = function (admin, db) {
     for (const doc of snap.docs) {
       const match = doc.data();
       if (match.cancelled) continue;
-      if (match.cheaterReport && match.cheaterReport.status === "pending") continue;
+      if (match.cheaterReport && (match.cheaterReport.status === "pending" || match.cheaterReport.status === "confirmed")) continue;
       if (!match.victoryClaim) {
         const since = (match.serverLock && match.serverLock.at) || match.createdAt || now;
-        if (!match.disputed && !match.tournamentId && now - since >= STALE_LOCKED_MS) {
+        if (!match.disputed && !match.tournamentId && !match.cheaterReport && now - since >= STALE_LOCKED_MS) {
           try { await refundMatch(doc.id, "stale_no_result"); } catch (e) { logger.error("stale refund failed", { id: doc.id, error: e.message }); }
         }
         continue;
@@ -696,7 +727,7 @@ module.exports = function (admin, db) {
       const elapsed = now - match.victoryClaim.at;
       const timerMs = match.victoryClaim.timerMs || VICTORY_TIMER_MS;
       if (elapsed < timerMs) continue;
-      try { await finalizeMatch(doc.id, { winner: match.victoryClaim.by }); } catch (e) { logger.error("sweep finalize failed", { id: doc.id, error: e.message }); }
+      try { await finalizeMatch(doc.id, { winner: match.victoryClaim.by, fromSweep: true }); } catch (e) { logger.error("sweep finalize failed", { id: doc.id, error: e.message }); }
     }
 
     const expiredSnap = await db.collection("matches")
@@ -770,11 +801,14 @@ module.exports = function (admin, db) {
       const isGuest = guestPlayers.includes(username);
       if (!isHost && !isGuest) return { status: "not_in_match" };
 
-      if (match.locked || match.serverLock || match.tournamentId) {
+      if (match.serverLock || match.tournamentId) {
         if (match.victoryClaim || match.disputed) return { status: "result_in_progress" };
         const myTeam = isHost ? hostPlayers : guestPlayers;
         const otherTeam = isHost ? guestPlayers : hostPlayers;
         if (myTeam.length === 0 || otherTeam.length === 0) return { status: "cancel" };
+        if (computePlayerStake(match, username) === 0 && Number(match.bet) > 0 && myTeam.some((p) => computePlayerStake(match, p) > 0)) {
+          throw new HttpsError("permission-denied", "Your host is covering your bet: only the host can forfeit this match.");
+        }
         return { status: "forfeit" };
       }
 
@@ -837,8 +871,13 @@ module.exports = function (admin, db) {
       if (match.cheaterReport && match.cheaterReport.status === "pending") {
         throw new HttpsError("failed-precondition", "A report is already pending.");
       }
+      if ((match.reportedBy || []).includes(username)) {
+        throw new HttpsError("failed-precondition", "You already reported this match.");
+      }
+      if (!match.serverLock && !match.locked) throw new HttpsError("failed-precondition", "The match hasn't started yet.");
       tx.update(matchRef, {
         cheaterReport: { by: username, against: onHost ? guestPlayers : hostPlayers, at: Date.now(), status: "pending" },
+        reportedBy: [...(match.reportedBy || []), username],
       });
     });
     return { ok: true };
@@ -848,7 +887,21 @@ module.exports = function (admin, db) {
     const uid = requireAuth(request);
     const { matchId, decision } = request.data || {}; // 'dismiss' | 'confirm'
     const me = await requireAdmin(uid);
-    await db.collection("matches").doc(String(matchId)).update({
+    const mref = db.collection("matches").doc(String(matchId));
+    const msnap = await mref.get();
+    if (!msnap.exists) throw new HttpsError("not-found", "Match not found.");
+    const m = msnap.data();
+    const rep = m.cheaterReport || {};
+    if (decision === "confirm" && !m.completed && !m.cancelled && rep.by) {
+      // Triche confirmée : le camp de celui qui a signalé gagne.
+      await mref.update({ "cheaterReport.status": "confirmed" });
+      await finalizeMatch(String(matchId), { winner: rep.by });
+      await adminLog(uid, me.data.username, "confirmCheater", { matchId, winner: rep.by });
+      return { ok: true };
+    }
+    // Rejeté : le timer de victoire repart de zéro (l'autre camp peut répondre).
+    if (decision !== "confirm" && m.victoryClaim) await mref.update({ "victoryClaim.at": Date.now() });
+    await mref.update({
       "cheaterReport.status": decision === "confirm" ? "confirmed" : "dismissed",
       "cheaterReport.resolvedBy": me.data.username,
       "cheaterReport.resolvedAt": Date.now(),
@@ -862,9 +915,16 @@ module.exports = function (admin, db) {
     const me = await requireAdmin(uid);
     const matchSnap = await db.collection("matches").doc(String(matchId)).get();
     if (!matchSnap.exists) throw new HttpsError("not-found", "Match not found.");
-    const { hostPlayers, guestPlayers } = matchRoster(matchSnap.data());
+    const md = matchSnap.data();
+    const { hostPlayers, guestPlayers } = matchRoster(md);
     if (!winnerUsername || ![...hostPlayers, ...guestPlayers].includes(winnerUsername)) {
       throw new HttpsError("invalid-argument", "Unknown winner.");
+    }
+    if ([...hostPlayers, ...guestPlayers].includes(me.data.username)) {
+      throw new HttpsError("permission-denied", "You can't settle a match you're playing in.");
+    }
+    if (!md.serverLock && !md.locked && !md.tournamentId) {
+      throw new HttpsError("failed-precondition", "This match hasn't started yet.");
     }
     const r = await finalizeMatch(String(matchId), { winner: winnerUsername });
     await adminLog(uid, me.data.username, "resolveDispute", { matchId, winnerUsername, status: r.status });
@@ -902,6 +962,22 @@ module.exports = function (admin, db) {
       const votes = { ...(match.rematchVotes || {}), [username]: true };
       const everyoneIn = all.length > 0 && all.every((p) => votes[p]);
 
+      if (everyoneIn) {
+        // Tout le monde doit pouvoir payer sa mise, sinon pas de rematch.
+        const probe = { ...match, hostPlayers, guestPlayers };
+        const uidMap = await resolveUidMap(all, match.escrowUids || {});
+        const poor = [];
+        for (const p of all) {
+          const need = computePlayerStake(probe, p);
+          if (need <= 0) continue;
+          const us = uidMap[p] ? await tx.get(db.collection("users").doc(uidMap[p])) : null;
+          if (!us || !us.exists || (us.data().coins || 0) < need) poor.push(p);
+        }
+        if (poor.length) {
+          tx.update(matchRef, { rematchVotes: votes });
+          return { status: "insufficient", players: poor };
+        }
+      }
       if (!everyoneIn) {
         tx.update(matchRef, { rematchVotes: votes });
         return { status: "waiting", votes: all.filter((p) => votes[p]).length, total: all.length };
@@ -1028,7 +1104,7 @@ module.exports = function (admin, db) {
       const coins = me.coins || 0;
 
       if (item === "avatar") {
-        const price = AVATAR_PRICES[avatarId];
+        const price = Object.prototype.hasOwnProperty.call(AVATAR_PRICES, String(avatarId)) ? AVATAR_PRICES[avatarId] : undefined;
         if (price === undefined) throw new HttpsError("invalid-argument", "Unknown avatar.");
         if ((me.ownedAvatars || []).includes(avatarId)) throw new HttpsError("failed-precondition", "Already owned.");
         if (coins < price) throw new HttpsError("failed-precondition", "Not enough coins.");
@@ -1215,6 +1291,8 @@ module.exports = function (admin, db) {
     if (!snap.exists) throw new HttpsError("failed-precondition", "Profile not found.");
     const data = snap.data();
     if ((data.ecoResetVersion || 0) >= ECO_RESET_VERSION) return { ok: true, already: true };
+    // Compte jamais initialisé : c'est initAccount qui s'en charge.
+    if (data.ecoResetVersion === undefined && !data.stats) return { ok: true, skipped: "not_initialized" };
     await userRef.update({ coins: 0, snipes: 0, vipUntil: null, ecoResetVersion: ECO_RESET_VERSION });
     return { ok: true };
   });
@@ -1554,7 +1632,70 @@ module.exports = function (admin, db) {
     return { ok: true };
   });
 
+  /* =========================================================
+     RETRAITS — la demande RÉSERVE les coins tout de suite (ils sortent du
+     solde et ne peuvent plus être joués ni envoyés). Le staff paie, puis
+     marque la demande "payée" ; s'il la refuse, les coins sont rendus.
+  ========================================================= */
+  const WITHDRAW_MIN = 15;
+  const requestWithdrawal = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const me = await getVerifiedMe(uid);
+    const amount = Math.floor(Number((request.data || {}).amount));
+    if (!Number.isFinite(amount) || amount < WITHDRAW_MIN || amount > 100000) {
+      throw new HttpsError("invalid-argument", `The minimum withdrawal is ${WITHDRAW_MIN} coins.`);
+    }
+    const pending = await db.collection("withdrawals").where("uid", "==", uid).where("status", "==", "pending").limit(1).get();
+    if (!pending.empty) throw new HttpsError("failed-precondition", "You already have a pending withdrawal. Wait until staff handles it.");
+    const userRef = db.collection("users").doc(uid);
+    const wRef = db.collection("withdrawals").doc();
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(userRef);
+      const coins = (snap.data() || {}).coins || 0;
+      if (coins < amount) throw new HttpsError("failed-precondition", "Not enough coins.");
+      tx.update(userRef, { coins: roundToCents(coins - amount) });
+      tx.set(wRef, {
+        id: wRef.id, uid, username: me.data.username, epic: me.data.epic || null,
+        discordUsername: me.data.discordUsername || null, amount, status: "pending", createdAt: Date.now(),
+      });
+    });
+    return { ok: true, id: wRef.id };
+  });
+
+  const adminListWithdrawals = onCall(async (request) => {
+    const uid = requireAuth(request);
+    await requireAdmin(uid);
+    const snap = await db.collection("withdrawals").where("status", "==", "pending").limit(200).get();
+    return { ok: true, items: snap.docs.map((d) => d.data()).sort((a, b) => a.createdAt - b.createdAt) };
+  });
+
+  const adminResolveWithdrawal = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const me = await requireAdmin(uid);
+    const { id, action } = request.data || {};
+    if (action !== "paid" && action !== "rejected") throw new HttpsError("invalid-argument", "Invalid action.");
+    const wRef = db.collection("withdrawals").doc(String(id || "x"));
+    const res = await db.runTransaction(async (tx) => {
+      const w = await tx.get(wRef);
+      if (!w.exists) throw new HttpsError("not-found", "Withdrawal not found.");
+      const d = w.data();
+      if (d.status !== "pending") return { already: d.status };
+      const userRef = db.collection("users").doc(d.uid);
+      const u = await tx.get(userRef);
+      const notifs = ((u.data() || {}).notifications || []).slice(0, 29);
+      const text = action === "paid" ? `Your withdrawal of ${d.amount} coins has been paid.` : `Your withdrawal of ${d.amount} coins was declined — the coins are back on your balance.`;
+      const userUpdate = { notifications: [{ id: "w" + Date.now(), type: action === "paid" ? "tip" : "warning", text, at: Date.now(), read: false }, ...notifs] };
+      if (action === "rejected") userUpdate.coins = FieldValue.increment(d.amount);
+      tx.set(userRef, userUpdate, { merge: true });
+      tx.update(wRef, { status: action, resolvedBy: me.data.username, resolvedAt: Date.now() });
+      return { ok: true };
+    });
+    await adminLog(uid, me.data.username, "withdrawal_" + action, { id });
+    return res;
+  });
+
   return {
+    requestWithdrawal, adminListWithdrawals, adminResolveWithdrawal,
     initAccount, selfEcoReset,
     matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
     matchFileCheaterReport, matchAdminReportDecision, matchAdminResolveDispute, matchAdminDelete,
