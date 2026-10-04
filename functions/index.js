@@ -26,6 +26,10 @@ const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const Stripe = require("stripe");
 
+// Garde-fou de coût : au maximum 20 serveurs par fonction (chacun traite
+// jusqu'à 80 requêtes à la fois — largement assez pour le lancement).
+require("firebase-functions/v2").setGlobalOptions({ maxInstances: 20 });
+
 admin.initializeApp();
 const db = admin.firestore();
 
@@ -160,8 +164,15 @@ exports.stripeWebhook = onRequest(
     }
 
     // Le montant réellement payé doit correspondre aux coins demandés (EUR).
-    if (session.currency !== "eur" || session.amount_total !== Math.round(coins * COIN_PRICE_EUR * 100)) {
-      logger.error("Amount mismatch on deposit", { sessionId: session.id, amount: session.amount_total, currency: session.currency, coins });
+    // Si Stripe a converti la devise pour l'acheteur (Adaptive Pricing), on
+    // compare le montant d'origine en euros.
+    const cc = session.currency_conversion;
+    const payCurrency = cc && cc.source_currency ? cc.source_currency : session.currency;
+    const payAmount = cc && typeof cc.amount_total === "number" ? cc.amount_total : session.amount_total;
+    if (payCurrency !== "eur" || payAmount !== Math.round(coins * COIN_PRICE_EUR * 100)) {
+      logger.error("Amount mismatch on deposit", { sessionId: session.id, amount: payAmount, currency: payCurrency, coins });
+      // Gardé pour vérification manuelle (jamais perdu en silence).
+      await db.collection("flaggedDeposits").doc(session.id).set({ uid, coins, amount: payAmount, currency: payCurrency, at: Date.now() }, { merge: true });
       res.status(200).send("amount mismatch");
       return;
     }
@@ -181,6 +192,18 @@ exports.stripeWebhook = onRequest(
           logger.info("Deposit already processed, skipping", { sessionId: session.id });
           return;
         }
+        const userSnap = await tx.get(userRef);
+        const ud = userSnap.data() || {};
+        // Remboursement / contestation arrivé AVANT ce crédit : on retire la part concernée.
+        const cbSnap = await tx.get(db.collection("clawbackBySession").doc(session.id));
+        const cb = cbSnap.exists ? cbSnap.data() : null;
+        const clawed = cb ? (cb.isDispute ? coins : Math.round(coins * (Number(cb.fraction) || 0) * 100) / 100) : 0;
+        const credit = Math.round((coins - clawed) * 100) / 100;
+        // Ancien compte jamais passé à la remise à zéro v4 : on la fait ici,
+        // pour que le reset ne puisse jamais effacer ce dépôt plus tard.
+        if (ud.stats && (ud.ecoResetVersion || 0) < 4) {
+          tx.set(userRef, { coins: Math.min(0, Number(ud.coins) || 0), snipes: 0, vipUntil: null, ecoResetVersion: 4 }, { merge: true });
+        }
         tx.set(depositRef, {
           uid,
           coins,
@@ -188,11 +211,13 @@ exports.stripeWebhook = onRequest(
           amountTotalCents: session.amount_total || null,
           currency: session.currency || "eur",
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          ...(cb ? { clawedBack: clawed, [cb.isDispute ? "disputedAt" : "refundedAt"]: Date.now() } : {}),
         });
+        if (cb && cb.isDispute) tx.set(userRef, { banned: true, banReason: "Payment dispute (chargeback)", bannedBy: "system", bannedAt: Date.now() }, { merge: true });
         tx.set(
           userRef,
           {
-            coins: admin.firestore.FieldValue.increment(coins),
+            coins: admin.firestore.FieldValue.increment(credit),
             notifications: admin.firestore.FieldValue.arrayUnion({
               id: `dep_${session.id}`,
               type: "tip", // réutilise le style visuel "gain d'argent" déjà existant côté site
@@ -225,9 +250,20 @@ async function handleClawback(stripe, event) {
   if (!session) { logger.warn("Clawback: no checkout session for payment", { pi }); return; }
   const depositRef = db.collection("deposits").doc(session.id);
   const isDispute = event.type === "charge.dispute.created";
+  let retryLater = false;
   await db.runTransaction(async (tx) => {
     const dep = await tx.get(depositRef);
-    if (!dep.exists) return;
+    retryLater = !dep.exists && session.payment_status === "paid";
+    if (!dep.exists) {
+      // Dépôt pas (encore) crédité : on laisse une marque que le crédit lira
+      // (il retirera la part remboursée/contestée), et on répond 500 pour que
+      // Stripe renvoie l'événement plus tard (avant : la reprise était perdue).
+      const amount = Number(obj.amount) || 0;
+      const fraction = isDispute ? 1 : (amount > 0 ? Math.min(1, (Number(obj.amount_refunded) || 0) / amount) : 1);
+      tx.set(db.collection("pendingClawbacks").doc(event.id), { type: event.type, pi, sessionId: session.id, at: Date.now() });
+      tx.set(db.collection("clawbackBySession").doc(session.id), { isDispute, fraction, eventId: event.id, at: Date.now() }, { merge: true });
+      return;
+    }
     const d = dep.data();
     const total = Number(d.coins) || 0;
     let target;
@@ -254,5 +290,6 @@ async function handleClawback(stripe, event) {
     tx.set(userRef, update, { merge: true });
     tx.update(depositRef, { clawedBack: Math.round((already + delta) * 100) / 100, [isDispute ? "disputedAt" : "refundedAt"]: Date.now() });
   });
+  if (retryLater) throw new Error("deposit not credited yet, retry later");
   logger.warn("Coins clawed back", { type: event.type, pi });
 }

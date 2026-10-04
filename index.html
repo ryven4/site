@@ -1112,7 +1112,7 @@ button:active{ transform:scale(.97) !important; }
 .chat-avatar svg, .chat-avatar img{ width:100%; height:100%; }
 .chat-content{ min-width:0; }
 .chat-meta{ display:inline; }
-.chat-meta strong{ font-size:13.5px; color:#fff; }
+.chat-meta strong{ font-size:13.5px; color:#fff; overflow-wrap:anywhere; min-width:0; }
 .chat-meta strong .vip-name{ color:var(--gold); }
 .vip-name-wrap{ display:inline-flex !important; align-items:center !important; gap:3px !important; color:var(--gold) !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; letter-spacing:normal !important; font-weight:inherit !important; }
 .vip-crown{ display:inline-flex !important; align-items:center !important; justify-content:center !important; line-height:1 !important; margin:0 !important; font-size:inherit !important; text-transform:none !important; }
@@ -2469,7 +2469,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 /* Bracket */
 .bk-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
 .bk-head h3{ margin:0; }
-.bk-tools{ display:flex; gap:8px; }
+.bk-tools{ display:flex; gap:8px; flex-wrap:wrap; }
 .bk-tools .input{ width:220px; height:38px; }
 .bk-scroll{ overflow:auto; padding:6px 2px 16px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
 .bk{ display:flex; gap:34px; padding:16px; min-width:max-content; }
@@ -2766,6 +2766,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 .site-confirm-msg{ font-size:14px; line-height:1.6; color:#c9ced6; }
 .site-confirm-label{ display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:var(--muted); }
 #siteConfirmOverlay{ z-index:300; }
+#buyConfirmOverlay{ z-index:200; }
 
 /* ===== RANKING (podium + liste) ===== */
 .rk-stage{
@@ -3044,7 +3045,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
       </div>
       <div class="form-group full">
         <label>Password</label>
-        <input class="input" type="password" id="loginPassword" placeholder="••••••••">
+        <input class="input" type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter'){event.preventDefault();doLogin();}">
       </div>
       <button class="btn green" style="width:100%; margin-top:6px;" onclick="doLogin()">Log In</button>
       <div class="auth-error" id="loginError"></div>
@@ -3053,7 +3054,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
     <div id="authSignupForm" style="display:none;">
       <div class="form-group full">
         <label>Username</label>
-        <input class="input" type="text" id="signupUsername" placeholder="YourUsername" maxlength="18">
+        <input class="input" type="text" id="signupUsername" placeholder="YourUsername" maxlength="20">
       </div>
       <div class="form-group full">
         <label>Email</label>
@@ -3206,7 +3207,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
   </div>
 
   <div class="footer-bottom">
-    <span>© 2026 Prime Token — Community project. No real money is involved on this platform.</span>
+    <span>© 2026 Prime Token — Coins can be bought and withdrawn (1 coin = 1 €). Play responsibly. 18+.</span>
   </div>
 </footer>
 
@@ -3315,7 +3316,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
           I'll cover my whole team's bet
         </label>
         <p style="margin-top:6px; font-size:9.5px; color:var(--muted); line-height:1.5;">
-          Only you risk coins: you pay the bet for your whole team. On a win, each teammate receives one bet and you get your whole stake back plus one bet (5% platform fee on winnings).
+          Only you risk coins: you pay the bet for your whole team. On a win, each teammate receives one bet and you get your whole stake back plus one bet (5% platform fee on the payout).
         </p>
       </div>
 
@@ -3979,7 +3980,14 @@ function pushMatchToCloud(match){
 function patchMatchInCloud(matchId, ...pathsAndValues){
   if(!db || !matchId) return Promise.resolve();
   return db.collection("matches").doc(matchId).update(...pathsAndValues)
-    .catch(err => console.warn("Erreur de synchronisation du match :", err));
+    .catch(err => { console.warn("Erreur de synchronisation du match :", err); return { __failed: err }; });
+}
+// Heure d'un message de chat dans le fuseau de CELUI QUI LIT (avant :
+// l'heure texte de l'expéditeur).
+function chatTimeText(m){
+  const t = Number(m && (m.at || m.ts));
+  if(t > 0){ try{ return new Date(t).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }); }catch(e){} }
+  return (m && m.time) || "";
 }
 function matchFieldPath(field, key){ return new firebase.firestore.FieldPath(field, key); }
 
@@ -4074,29 +4082,38 @@ function mergeExtraMatches(list){
   Object.values(extraMatchesById).forEach(m => { if(m && !ids.has(m.id)) list.push(m); });
   return list;
 }
-function startModMatchListeners(){
-  if(modListenersStarted || !db || !isAdmin()) return;
-  modListenersStarted = true;
-  const sources = {};
-  const listen = (key, q) => q.onSnapshot(snap => {
+const extraSources = {};
+let lastRemoteMatches = null;
+function listenExtraMatches(key, q){
+  const sources = extraSources;
+  return q.onSnapshot(snap => {
     sources[key] = {};
     snap.forEach(d => { const m = d.data(); if(m && m.id) sources[key][m.id] = m; });
     Object.keys(extraMatchesById).forEach(k => delete extraMatchesById[k]);
     Object.values(sources).forEach(src => Object.assign(extraMatchesById, src));
-    const fresh = state.matches.filter(m => !(m.id in extraMatchesById));
-    state.matches = mergeExtraMatches(fresh);
-    if(currentPage === "moderation" || currentPage === "lobby") render();
-  }, err => console.warn("mod listener", err));
+    const base = lastRemoteMatches ? lastRemoteMatches.slice() : state.matches.filter(m => !(m.id in extraMatchesById));
+    state.matches = mergeExtraMatches(base);
+    if(currentPage === "moderation" || currentPage === "lobby" || currentPage === "matches" || currentPage === "home") renderSoon();
+  }, err => console.warn("extra matches listener", err));
+}
+function startModMatchListeners(){
+  if(modListenersStarted || !db || !isAdmin()) return;
+  modListenersStarted = true;
+  const listen = listenExtraMatches;
   listen("disputes", db.collection("matches").where("disputed", "==", true).where("completed", "==", false));
   listen("reports", db.collection("matches").where("cheaterReport.status", "==", "pending"));
 }
 const autoEscrowTried = new Set();
-const tryLockSent = new Set();
 
 function initCloudSync(){
   if(!db) return;
-  db.collection("matches").doc("shared").delete().catch(() => {}); // nettoyage de l'ancien système de synchro
-  db.collection("matches").where("createdAt", ">", Date.now() - 48 * 3600 * 1000).onSnapshot(function(snapshot){
+  // Mes propres matchs, même plus vieux que 48 h (litige en cours, historique).
+  if(state.username){
+    listenExtraMatches("mineOpen", db.collection("matches").where("players", "array-contains", state.username).where("completed", "==", false));
+    listenExtraMatches("mine", db.collection("matches").where("players", "array-contains", state.username).limit(60));
+  }
+  listenExtraMatches("recent", db.collection("matches").orderBy("createdAt", "desc").limit(100));
+  db.collection("matches").where("active", "==", true).onSnapshot(function(snapshot){
     cloudReady = true;
     syncingFromRemote = true;
     const remoteMatches = [];
@@ -4105,6 +4122,7 @@ function initCloudSync(){
       if(data && data.id) remoteMatches.push(data);
     });
     checkMatchNotifications(remoteMatches);
+    lastRemoteMatches = remoteMatches.slice();
     state.matches = mergeExtraMatches(remoteMatches);
     // Coins, résultats, remboursements, expiration des matchs et avancement
     // des tournois sont désormais entièrement calculés côté serveur — le
@@ -4112,15 +4130,23 @@ function initCloudSync(){
     persistState();
     syncingFromRemote = false;
 
-    if(checkMatchLocks().length > 0) save();
+    checkMatchLocks();
 
-    render();
+    renderSoon();
+    const lobbyNow = state.currentLobby && state.matches.find(m => m.id === state.currentLobby);
+    if(lobbyNow) ensurePlayersKnown([...(lobbyNow.hostPlayers || []), ...(lobbyNow.guestPlayers || [])]);
   }, function(err){
     console.warn("Erreur d'écoute Firestore :", err);
   });
 
   setInterval(function(){
-    if(checkMatchLocks().length > 0){ save(); render(); }
+    if(checkMatchLocks().length > 0) render();
+    // Roue : le bouton se réactive tout seul quand les 24 h sont passées.
+    if(currentPage === "roue" && !wheelSpinning){
+      const can = canSpinWheelToday();
+      if(window.__lastCanSpin === false && can) render();
+      window.__lastCanSpin = can;
+    }
   }, 30000);
 }
 
@@ -4129,10 +4155,11 @@ function initCloudSync(){
    handler) avoids a race where two players ready up almost simultaneously
    and each one's local check runs before it has seen the other's update —
    which used to leave 2v2/3v3/4v4 matches stuck on "Ready?" forever. */
+const tryLockAt = {};
 function checkMatchLocks(){
   const lockedIds = [];
   (state.matches || []).forEach(match => {
-    if(match.completed || match.cancelled || match.locked) return;
+    if(match.completed || match.cancelled || match.serverLock) return;
     const hostPlayers = match.hostPlayers || [match.host];
     const guestPlayers = match.guestPlayers || (match.players || []).filter(p => p !== match.host);
     const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
@@ -4142,16 +4169,20 @@ function checkMatchLocks(){
     // Tout le monde doit avoir payé sa mise (les bots de test du proprio
     // ne paient pas : leur match finira remboursé côté serveur).
     const paid = match.escrowedBy || [];
-    const everyonePaid = allPlayers.every(p => paid.includes(p) || /^Bot_Opponent\d+$/.test(p));
+    if(allPlayers.some(p => /^Bot_Opponent\d+$/.test(p))) return; // bots de test : jamais verrouillés par le serveur
+    const everyonePaid = allPlayers.every(p => paid.includes(p));
     if(!everyonePaid) return;
-    if(allPlayers.every(p => match.readies[p])){
-      match.locked = true;
-      patchMatchInCloud(match.id, "locked", true);
-      lockedIds.push(match.id);
-      if(allPlayers.includes(state.username) && !tryLockSent.has(match.id)){
-        tryLockSent.add(match.id);
-        callFnSilent("matchTryLock", { matchId: match.id }).catch(err => console.warn("matchTryLock", err));
+    if(allPlayers.every(p => match.readies[p]) && allPlayers.includes(state.username)){
+      // Seul le serveur verrouille (serverLock). On lui redemande au plus
+      // toutes les 4 s tant que ce n'est pas fait.
+      const now = Date.now();
+      if(!tryLockAt[match.id] || now - tryLockAt[match.id] > 4000){
+        tryLockAt[match.id] = now;
+        callFnSilent("matchTryLock", { matchId: match.id })
+          .then(res => { if(res && res.locked === false && res.reason === "not_ready") setTimeout(checkMatchLocks, 4200); })
+          .catch(err => console.warn("matchTryLock", err));
       }
+      if(!match.locked) lockedIds.push(match.id);
     }
   });
   return lockedIds;
@@ -4358,7 +4389,7 @@ function withdrawalsHTML(){
   if(!modWithdrawalsCache.length) return `<div style="color:var(--muted2); font-size:10px;">No pending withdrawal.</div>`;
   return modWithdrawalsCache.map(w => `
     <div class="stats-history-row" style="gap:8px; flex-wrap:wrap;">
-      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins</span>
+      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins${w.banned ? ' · <strong style="color:var(--red);">BANNED</strong>' : ''}${typeof w.balance === "number" ? ` · balance <strong style="color:${w.balance < 0 ? 'var(--red)' : 'inherit'};">${formatCoins(w.balance)}</strong>` : ''}</span>
       <span class="stats-history-meta">${escapeHTML(w.epic || "—")} · ${escapeHTML(w.discordUsername || "—")} · ID ${escapeHTML(w.id)} · ${new Date(Number(w.createdAt) || 0).toLocaleString()}</span>
       <span style="display:flex; gap:6px;">
         <button class="btn green small" onclick="resolveWithdrawal(${jsArg(w.id)}, 'paid')">Paid</button>
@@ -4374,7 +4405,7 @@ function loadWithdrawals(){
 }
 async function resolveWithdrawal(id, action){
   if(!(await siteConfirm(action === "paid" ? "Mark this withdrawal as PAID? Only do it once the money is sent." : "Decline this withdrawal? The coins go back to the player.", { title:"Withdrawal", okLabel: action === "paid" ? "Mark paid" : "Decline" }))) return;
-  callFn("adminResolveWithdrawal", { id, action }).then(() => { toast("Done."); loadWithdrawals(); }).catch(err => toast(fnErrorMessage(err)));
+  callFn("adminResolveWithdrawal", { id, action }).then(res => { toast(res && res.already ? `Already handled (${res.already}).` : "Done."); loadWithdrawals(); }).catch(err => toast(fnErrorMessage(err)));
 }
 function modGiveSelfCoinsCustom(){
   if(!isAdmin()) return;
@@ -4490,6 +4521,21 @@ function modRemovePlayerVIP(){
 }
 
 /* --- Pouvoirs modérateur : gestion des joueurs (ban / coins) --- */
+/* Recherche modo : complète avec les joueurs hors du top 400 (début du pseudo). */
+const modSearchDone = new Set();
+function modServerSearch(q, rerender){
+  q = (q || "").trim();
+  if(!db || q.length < 2 || modSearchDone.has(q.toLowerCase())) return;
+  modSearchDone.add(q.toLowerCase());
+  const l = q.toLowerCase();
+  const starts = [...new Set([q, l, l.charAt(0).toUpperCase() + l.slice(1), q.toUpperCase()])];
+  Promise.all(starts.map(v => db.collection("users").where("username", ">=", v).where("username", "<=", v + "\uf8ff").limit(15).get().catch(() => null)))
+    .then(snaps => {
+      let added = false;
+      snaps.forEach(snap => snap && snap.forEach(d => { const x = d.data(); if(x && x.username && !allPlayersCache.some(p => p.uid === d.id)){ const p = { ...x, uid: d.id }; onDemandPlayers[p.username] = p; allPlayersCache.push(p); added = true; } }));
+      if(added) rerender();
+    });
+}
 function modFindUser(query){
   const q = (query || "").trim().toLowerCase();
   if(!q) return [];
@@ -4506,6 +4552,7 @@ function modSearchUsers(){
     box.innerHTML = `<div style="color:var(--muted2); font-size:10px; padding:10px 0;">Type a username to search.</div>`;
     return;
   }
+  if(results.length < 5) modServerSearch(q, modSearchUsers);
   if(results.length === 0){
     box.innerHTML = `<div style="color:var(--muted2); font-size:10px; padding:10px 0;">No player found.</div>`;
     return;
@@ -4543,6 +4590,7 @@ function modSearchEpicUsers(){
   const input = document.getElementById("modEpicSearch");
   const q = input ? input.value : "";
   const results = modFindUser(q);
+  if(results.length < 5) modServerSearch(q, modSearchEpicUsers);
   const box = document.getElementById("modEpicResults");
   if(!box) return;
   if(!q.trim()){
@@ -4579,7 +4627,7 @@ async function modUnlinkPlayerDiscord(){
   if(!username){ toast("Enter a username."); return; }
 
   const target = allPlayersCache.find(p => (p.username || "").toLowerCase() === username.toLowerCase());
-  if(!target){ toast("This player doesn't exist."); return; }
+  if(!target){ fetchPlayerByName(username).then(p => p ? toast("Player loaded — click again.") : toast("This player doesn't exist.")); return; }
   if(!(await siteConfirm(`Unlink ${target.username}'s Discord account?`, { title:"Unlink Discord", okLabel:"Unlink" }))) return;
 
   db.collection("users").doc(target.uid).update({
@@ -4738,7 +4786,7 @@ async function modConfirmCheaterReport(matchId){
   const targetUsername = against[0];
   if(!targetUsername){ toast("No reported player found on this match."); return; }
   const target = allPlayersCache.find(p => p.username === targetUsername);
-  if(!target){ toast("Couldn't find this player's account."); return; }
+  if(!target){ fetchPlayerByName(targetUsername).then(p => p ? toast("Player loaded — click again.") : toast("Couldn't find this player's account.")); return; }
 
   // Action destructrice (ban) — on demande une confirmation explicite pour
   // éviter qu'un simple mis-clic bannisse quelqu'un par erreur.
@@ -4815,7 +4863,11 @@ function confirmModWarn(){
   const username = pendingWarnUsername;
   closeWarnReasonModal();
 
-  db.collection("users").doc(uid).get().then(docSnap => {
+  // Transaction : un tip / une invitation / un autre modo au même moment
+  // ne peut plus être écrasé (avant : lecture puis écriture séparées).
+  const warnRef = db.collection("users").doc(uid);
+  let triggersBan = false;
+  db.runTransaction(tx => tx.get(warnRef).then(docSnap => {
     if(!docSnap.exists) return Promise.reject(new Error("player not found"));
     const profile = docSnap.data() || {};
     const newCount = (profile.warnings || 0) + 1;
@@ -4825,7 +4877,7 @@ function confirmModWarn(){
       warningHistory: firebase.firestore.FieldValue.arrayUnion(entry)
     };
 
-    const triggersBan = newCount >= WARNINGS_BEFORE_TEMP_BAN;
+    triggersBan = newCount >= WARNINGS_BEFORE_TEMP_BAN;
     if(triggersBan){
       update.warnings = 0; // le compteur repart à zéro après la sanction
       update.banUntil = Date.now() + TEMP_BAN_DURATION_MS;
@@ -4842,17 +4894,16 @@ function confirmModWarn(){
       : `You received a warning (${newCount}/${WARNINGS_BEFORE_TEMP_BAN}). Reason: ${reason}`;
     const notifEntry = { id: 'n' + Date.now() + Math.random().toString(36).slice(2,7), type:'warning', text: notifText, at: Date.now(), read:false };
     update.notifications = [notifEntry, ...(profile.notifications || [])].slice(0, 30);
-
-    return db.collection("users").doc(uid).update(update).then(() => {
-      if(uid === currentUid){
-        state.notifications = update.notifications;
-        state.warnings = update.warnings;
-        persistState();
-        renderHeaderUI();
-      }
-      return triggersBan;
-    });
-  }).then(triggersBan => {
+    tx.update(warnRef, update);
+    return update;
+  })).then(update => {
+    if(uid === currentUid){
+      state.notifications = update.notifications;
+      state.warnings = update.warnings;
+      persistState();
+      renderHeaderUI();
+    }
+  }).then(() => {
     toast(triggersBan
       ? `⚠️ ${username} warned — 3rd warning reached, banned for 7 days.`
       : `⚠️ Warning given to ${username}.`);
@@ -4953,7 +5004,7 @@ setInterval(function(){
     // Le décompte affiché est à 0 : le résultat sera confirmé
     // automatiquement côté serveur (sweepMatchTimers) d'un instant à
     // l'autre — pas besoin (et plus possible) de le faire depuis le site.
-    el.textContent = "00:00";
+    el.textContent = "Confirming…";
     return;
   }
   el.textContent = formatCountdown(remaining);
@@ -5013,17 +5064,14 @@ function computePlayerBetInfo(match, username){
 // finalizeMatch (functions/economy.js). DOIT rester identique à
 // MATCH_TAX_RATE là-bas, sinon "If You Win" mentirait aux joueurs.
 const MATCH_TAX_RATE = 0.05;
+// Même arrondi que le serveur : au centime inférieur.
+function payoutAfterFee(x){ return Math.floor(Math.round(x * 100) * (1 - MATCH_TAX_RATE) + 1e-6) / 100; }
 
 /* Pot total du match = ce que l'équipe gagnante récupère collectivement,
    taxe de plateforme déjà déduite (affichage uniquement, ex: 2v2 à 0,5 →
    4 joueurs à 0,5 = pot de 2, moins 5% = 1,90). Ne sert jamais au règlement
    réel (voir computePlayerBetInfo pour la répartition individuelle exacte,
    y compris cover bet — également affichage seulement). */
-function matchTotalPot(match){
-  const baseBet = roundToCents(match.bet !== undefined ? match.bet : 0.5);
-  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-  return roundToCents(2 * maxPerSide * baseBet * (1 - MATCH_TAX_RATE));
-}
 
 /* Toute la logique d'escrow, de remboursement et de règlement des résultats
    vit désormais côté serveur (matchEscrow / matchDeclareResult / refundMatch /
@@ -5096,21 +5144,22 @@ function uploadProof(matchId, inputEl){
     const img = new Image();
     img.onload = function(){
       const maxW = 700;
-      const scale = Math.min(1, maxW / img.width);
+      const scale = Math.min(1, maxW / img.width, maxW / img.height);
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
 
       const match = state.matches.find(m => m.id === matchId);
       if(!match) return;
       match.proofs = match.proofs || {};
       match.proofs[state.username] = dataUrl;
-      patchMatchInCloud(match.id, matchFieldPath("proofs", state.username), dataUrl);
       render();
-      toast("Proof uploaded!");
+      db.collection("matches").doc(match.id).update(matchFieldPath("proofs", state.username), dataUrl)
+        .then(() => toast("Proof uploaded!"))
+        .catch(err => { console.warn(err); toast("Upload failed — try a smaller screenshot."); });
     };
     img.src = ev.target.result;
   };
@@ -5138,7 +5187,7 @@ function renderLobbyChatMessages(lobby){
     <div class="lobby-chat-msg ${m.user === state.username ? 'me' : ''}">
       ${hidden(m.user) ? `<div class="chat-avatar" style="background:var(--panel3);">?</div>` : chatAvatarHTML(m.user)}
       <div class="lobby-chat-msg-col">
-        <div class="lobby-chat-msg-meta"><span class="lobby-chat-msg-name">${hidden(m.user) ? 'Opponent' : vipNameHTML(m.user)}</span>${(!hidden(m.user) && isUsernameAdmin(m.user)) ? ' <span class="mod-badge" title="Moderator">' + icon('shieldCheck') + '</span>' : ''} · ${escapeHTML(m.time)}</div>
+        <div class="lobby-chat-msg-meta"><span class="lobby-chat-msg-name">${hidden(m.user) ? 'Opponent' : vipNameHTML(m.user)}</span>${(!hidden(m.user) && isUsernameAdmin(m.user)) ? ' <span class="mod-badge" title="Moderator">' + icon('shieldCheck') + '</span>' : ''} · ${escapeHTML(chatTimeText(m))}</div>
         <div class="lobby-chat-msg-bubble">${escapeHTML(m.text)}</div>
       </div>
       ${isAdmin() ? `<button class="mod-chat-delete" title="Delete message" onclick="modDeleteLobbyMessage(${jsArg(lobby.id)}, ${i})">✕</button>` : ''}
@@ -5165,7 +5214,13 @@ function sendLobbyMessage(e, matchId){
   match.chat.push(chatMsg);
 
   input.value = "";
-  patchMatchInCloud(match.id, "chat", firebase.firestore.FieldValue.arrayUnion(chatMsg));
+  patchMatchInCloud(match.id, "chat", firebase.firestore.FieldValue.arrayUnion(chatMsg)).then(r => {
+    if(r && r.__failed){
+      match.chat = (match.chat || []).filter(x => x !== chatMsg);
+      const b = document.getElementById("lobbyChatMessages"); if(b) b.innerHTML = renderLobbyChatMessages(match);
+      toast("Your message couldn't be sent.");
+    }
+  });
 
   const box = document.getElementById("lobbyChatMessages");
   if(box){
@@ -5196,9 +5251,11 @@ function renderRematchBlock(lobby, hostPlayers, guestPlayers){
     `;
   }
 
+  const blocked = lobby.rematchBlocked && Array.isArray(lobby.rematchBlocked.players) ? lobby.rematchBlocked.players : null;
   return `
+    ${blocked ? `<div style="margin-top:10px; color:#ffab40; font-size:11px;">Rematch impossible: not enough coins for ${escapeHTML(blocked.join(", "))}.</div>` : ''}
     <div style="margin-top:14px;">
-      <button class="btn ${iVoted ? '' : 'btn-primary'}" ${iVoted ? 'disabled' : ''} onclick="requestRematch(${jsArg(lobby.id)})">
+      <button class="btn ${iVoted && votedCount < all.length ? '' : 'btn-primary'}" ${iVoted && votedCount < all.length ? 'disabled' : ''} onclick="requestRematch(${jsArg(lobby.id)})">
         ${iVoted ? `${icon('check') || '✓'} Waiting for others (${votedCount}/${all.length})` : `🔁 Rematch (${votedCount}/${all.length})`}
       </button>
     </div>
@@ -5224,6 +5281,10 @@ function openRematchLobby(matchId){
   setPage("lobby");
 }
 
+async function concedeMatch(id){
+  if(!(await siteConfirm("Concede this match? The other side wins right away and your bet is lost.", { title:"Concede", okLabel:"Concede" }))) return;
+  declareResult(id, 'LOSS');
+}
 function cancelReasonLabel(r){
   const map = { expired:"Nobody locked it in within 30 minutes.", left:"The host left (or a rematch player left).", cancel_vote:"All players voted to cancel.", stale_no_result:"No result was entered within 6 hours.", admin_delete:"Cancelled by a moderator." };
   if(map[r]) return map[r];
@@ -5240,6 +5301,9 @@ function renderResultSection(lobby){
   const { hostPlayers: rsHostPlayers, guestPlayers: rsGuestPlayers } = matchTeamsOf(lobby);
   const myTeam = rsHostPlayers.includes(state.username) ? rsHostPlayers : rsGuestPlayers;
   const isParticipant = rsHostPlayers.includes(state.username) || rsGuestPlayers.includes(state.username);
+  // Seul le capitaine (le host / le 1er invité) peut déclarer la défaite de son équipe.
+  const isCaptainMe = rsHostPlayers.includes(state.username) ? lobby.host === state.username : rsGuestPlayers[0] === state.username;
+  const captainNote = `<div style="color:var(--muted2); font-size:10px;">Only your team captain (${escapeHTML(rsHostPlayers.includes(state.username) ? lobby.host : (rsGuestPlayers[0] || ''))}) can declare a defeat for your team.</div>`;
 
   if(lobby.cheaterReport && lobby.cheaterReport.status === "pending"){
     return `
@@ -5302,7 +5366,7 @@ function renderResultSection(lobby){
           </div>
         </div>
         <div style="margin-top:16px;">
-          <button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">${icon('xCircle')} Actually, we lost (concede)</button>
+          ${isCaptainMe ? `<button class="btn danger" onclick="concedeMatch(${jsArg(lobby.id)})">${icon('xCircle')} Actually, we lost (concede)</button>` : captainNote}
         </div>
       </div>
     `;
@@ -5336,7 +5400,7 @@ function renderResultSection(lobby){
         <h3 style="color:#fff; margin-bottom:6px;">${icon('clock')} Your opponent declared victory</h3>
         <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">If you don't respond within ${countdownHtml}, their victory will be confirmed automatically.</p>
         <div style="display:flex; justify-content:center; gap:15px;">
-          <button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">Confirm My Defeat</button>
+          ${isCaptainMe ? `<button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">Confirm My Defeat</button>` : ''}
           <button class="btn green" onclick="declareResult(${jsArg(lobby.id)}, 'WIN')">I Dispute, I Won</button>
         </div>
       </div>
@@ -5358,8 +5422,9 @@ function renderResultSection(lobby){
       <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Once the match is over on Fortnite, enter the result below. If you declare a defeat, victory is immediate for your opponent. If you declare a victory, your opponent has 15 minutes to respond.</p>
       <div style="display:flex; justify-content:center; gap:15px;">
         <button class="btn green" onclick="declareResult(${jsArg(lobby.id)}, 'WIN')">${icon('trophy')} Victory</button>
-        <button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">${icon('xCircle')} Defeat</button>
+        ${isCaptainMe ? `<button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">${icon('xCircle')} Defeat</button>` : ''}
       </div>
+      ${isCaptainMe ? '' : `<div style="margin-top:10px;">${captainNote}</div>`}
     </div>
   `;
 }
@@ -5456,7 +5521,6 @@ function save(){
   persistState();
   if(currentUid && db){
     db.collection("users").doc(currentUid).set({
-      username: state.username,
       epic: state.epic,
       equippedAvatar: state.equippedAvatar,
       customAvatar: state.customAvatar || null,
@@ -5567,6 +5631,7 @@ async function handleDiscordOAuthRedirect(){
     } catch(e){ console.warn("Erreur de vérification de la liste noire :", e); }
 
     state.discordId = discordId;
+    window.__identityEditAt = Date.now();
     state.discordUsername = discordUsername;
     state.discordAvatar = discordUser.avatar
       ? ("https://cdn.discordapp.com/avatars/" + discordId + "/" + discordUser.avatar + ".png")
@@ -5893,7 +5958,7 @@ function openFullHistoryModal(){
   fullHistoryVisibleCount = 20;
   const name = statsModalPlayerName;
   const isSelf = name === state.username;
-  document.getElementById("fullHistoryModalName").textContent = (isSelf ? "Your" : escapeHTML(name) + "'s") + " Match History";
+  document.getElementById("fullHistoryModalName").textContent = (isSelf ? "Your" : String(name) + "'s") + " Match History";
   renderFullHistoryList();
   document.getElementById("fullHistoryOverlay").classList.add("open");
 }
@@ -5939,13 +6004,13 @@ function openStatsModal(name, epic, stats, opts){
   stats = stats || {};
   const isSelf = !!opts.isSelf;
   const played = stats.played || 0;
-  const wins = stats.wins || 0;
+  const wins = Number(stats.wins || 0) || 0;
   const losses = stats.losses || 0;
   const winrate = played ? Math.round((wins / played) * 100) : 0;
   const earned = stats.totalEarned || 0;
   const best = stats.highestMatchEarning || 0;
-  const streak = opts.streak || 0;
-  const bestStreak = opts.bestStreak || 0;
+  const streak = Number(opts.streak || 0) || 0;
+  const bestStreak = Number(opts.bestStreak || 0) || 0;
   const tier = tierForWins(wins);
   const cached = allPlayersCache.find(pl => pl.username === name) || {};
   const joined = isSelf ? state.joinedAt : (cached.joinedAt || cached.createdAt || null);
@@ -6066,16 +6131,50 @@ function closeStatsModal(){
 let currentRankPeriod = "alltime";
 let allPlayersCache = [];
 
+/* Avant : chaque visiteur téléchargeait TOUS les comptes (des Mo, et chaque
+   changement de n'importe quel joueur était renvoyé à tout le monde). On ne
+   suit plus en direct que le top 400 du classement ; les autres joueurs
+   sont chargés à la demande (recherche, invitation, modération, lobby). */
+const onDemandPlayers = {};
+const playerFetchTried = new Set();
+function fetchPlayerByName(name){
+  if(!db || !name) return Promise.resolve(null);
+  const variants = [...new Set([name, name.toLowerCase(), name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()])].slice(0, 10);
+  const addDoc = d => { const x = d.data(); if(!x || !x.username) return null; const p = { ...x, uid: d.id }; onDemandPlayers[p.username] = p; if(!allPlayersCache.some(q => q.uid === p.uid)) allPlayersCache.push(p); return p; };
+  return db.collection("users").where("username", "in", variants).limit(5).get().then(async snap => {
+    let found = null;
+    snap.forEach(d => { const p = addDoc(d); if(p && (!found || p.username === name)) found = p; });
+    if(found) return found;
+    // Autre casse ("outsider_longname" pour "Outsider_LongName") : le serveur connaît le vrai pseudo.
+    const r = await callFnSilent("lookupUsername", { username: name }).catch(() => null);
+    if(r && r.uid){ const d = await db.collection("users").doc(r.uid).get(); if(d.exists) return addDoc(d); }
+    return null;
+  }).catch(() => null);
+}
+// Charge en arrière-plan les joueurs affichés (lobby, chat) qui ne sont pas dans le top 400.
+function ensurePlayersKnown(names){
+  const missing = [...new Set(names)].filter(n => n && !playerFetchTried.has(n) && !allPlayersCache.some(p => p.username === n)).slice(0, 10);
+  if(!missing.length || !db) return;
+  missing.forEach(n => playerFetchTried.add(n));
+  db.collection("users").where("username", "in", missing).get().then(snap => {
+    snap.forEach(d => { const x = d.data(); if(x && x.username){ const p = { ...x, uid: d.id }; onDemandPlayers[p.username] = p; if(!allPlayersCache.some(q => q.uid === p.uid)) allPlayersCache.push(p); } });
+    if(!snap.empty) renderSoon();
+  }).catch(() => {});
+}
+let renderSoonTimer = 0;
+function renderSoon(){ if(renderSoonTimer) return; renderSoonTimer = setTimeout(() => { renderSoonTimer = 0; render(); }, 250); }
+
 function initPlayersSync(){
   if(!db) return;
-  db.collection("users").onSnapshot(function(snapshot){
+  db.collection("users").orderBy("rp", "desc").limit(400).onSnapshot(function(snapshot){
     const players = [];
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
       if(data && data.username) players.push({ ...data, uid: docSnap.id });
     });
+    Object.values(onDemandPlayers).forEach(p => { if(!players.some(q => q.uid === p.uid)) players.push(p); });
     allPlayersCache = players;
-    if(currentPage === "ranking" || currentPage === "moderation") render();
+    if(currentPage === "ranking" || currentPage === "moderation" || currentPage === "home") renderSoon();
   }, function(err){
     console.warn("Erreur de synchronisation des joueurs :", err);
   });
@@ -6109,10 +6208,28 @@ function initTeamsSync(){
   });
 }
 
+/* Modifie une team en relisant la VRAIE version (transaction) : deux joueurs
+   qui acceptent une invitation en même temps ne s'écrasent plus. mutate(t)
+   modifie la copie ou renvoie un message d'erreur. */
+function teamTx(teamId, mutate){
+  if(!db) return Promise.reject(new Error("Server unavailable."));
+  const ref = db.collection("teams").doc(teamId);
+  return db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    if(!snap.exists) return "This team no longer exists.";
+    const t = snap.data();
+    t.members = Array.isArray(t.members) ? t.members : [];
+    t.pendingInvites = Array.isArray(t.pendingInvites) ? t.pendingInvites : [];
+    const err = mutate(t);
+    if(err) return err;
+    tx.update(ref, { members: t.members, pendingInvites: t.pendingInvites, owner: t.owner });
+    return null;
+  });
+}
 function pushTeamToCloud(team){
-  if(!db || !team || !team.id) return;
-  db.collection("teams").doc(team.id).set(team)
-    .catch(err => console.warn("Error syncing team:", err));
+  if(!db || !team || !team.id) return Promise.reject(new Error("offline"));
+  return db.collection("teams").doc(team.id).set(team)
+    .catch(err => { console.warn("Error syncing team:", err); throw err; });
 }
 
 function openCreateTeamView(){
@@ -6157,9 +6274,13 @@ function createTeamSubmit(){
     createdAt: Date.now()
   };
 
-  pushTeamToCloud(newTeam);
-  toast("Team created!");
-  openTeamDetail(newTeam.id);
+  if(window.__teamCreating) return;
+  window.__teamCreating = true;
+  pushTeamToCloud(newTeam).then(() => {
+    if(!teamsCache.some(t => t.id === newTeam.id)) teamsCache.push(newTeam);
+    toast("Team created!");
+    openTeamDetail(newTeam.id);
+  }).catch(() => toast("Couldn't create the team. Try again.")).finally(() => { window.__teamCreating = false; });
 }
 
 function inviteToTeam(teamId){
@@ -6171,10 +6292,11 @@ function inviteToTeam(teamId){
   const username = (input.value || "").trim();
   if(!username){ toast("Enter a username."); return; }
 
-  const exists = allPlayersCache.some(p => p.username && p.username.toLowerCase() === username.toLowerCase());
-  if(!exists){ toast("No account found with that username."); return; }
-
-  const match = allPlayersCache.find(p => p.username.toLowerCase() === username.toLowerCase());
+  let match = allPlayersCache.find(p => p.username && p.username.toLowerCase() === username.toLowerCase());
+  if(!match){
+    fetchPlayerByName(username).then(p => { if(p) inviteToTeam(teamId); else toast("No account found with that username."); });
+    return;
+  }
   const realUsername = match.username;
 
   const members = team.members || [];
@@ -6185,38 +6307,42 @@ function inviteToTeam(teamId){
   if(pending.includes(realUsername)){ toast("Invitation already sent."); return; }
   if(members.length >= maxSize){ toast("The team is already full."); return; }
 
-  team.pendingInvites = [...pending, realUsername];
-  pushTeamToCloud(team);
-  if(match.uid) pushNotificationForUid(match.uid, { type:'team_invite', text: `${state.username} invited you to join team "${team.name}".` });
-  input.value = "";
-  toast("Invitation sent to " + realUsername + "!");
-  render();
+  teamTx(teamId, t => {
+    if(t.members.includes(realUsername)) return "This player is already on the team.";
+    if(t.pendingInvites.includes(realUsername)) return "Invitation already sent.";
+    if(t.members.length >= maxSize) return "The team is already full.";
+    t.pendingInvites.push(realUsername);
+  }).then(err => {
+    if(err){ toast(err); return; }
+    if(match.uid) pushNotificationForUid(match.uid, { type:'team_invite', text: `${state.username} invited you to join team "${team.name}".` });
+    input.value = "";
+    toast("Invitation sent to " + realUsername + "!");
+    render();
+  }).catch(e => { console.warn(e); toast("Couldn't send the invitation, try again."); });
 }
 
 function acceptTeamInvite(teamId){
   const team = teamsCache.find(t => t.id === teamId);
   if(!team) return;
-  if((team.members || []).length >= (TEAM_SIZE_MAX[team.size] || 99)){
-    team.pendingInvites = (team.pendingInvites || []).filter(u => u !== state.username);
-    pushTeamToCloud(team);
-    toast("This team is already full.");
+  const maxSize = TEAM_SIZE_MAX[team.size] || 99;
+  let full = false;
+  teamTx(teamId, t => {
+    t.pendingInvites = t.pendingInvites.filter(u => u !== state.username);
+    if(t.members.includes(state.username)) return null;
+    if(t.members.length >= maxSize){ full = true; return null; }
+    t.members.push(state.username);
+  }).then(err => {
+    toast(err || (full ? "This team is already full." : "You joined the team!"));
     render();
-    return;
-  }
-  team.pendingInvites = (team.pendingInvites || []).filter(u => u !== state.username);
-  team.members = [...(team.members || []), state.username];
-  pushTeamToCloud(team);
-  toast("You joined the team!");
-  render();
+  }).catch(e => { console.warn(e); toast("Couldn't join the team, try again."); });
 }
 
 function declineTeamInvite(teamId){
   const team = teamsCache.find(t => t.id === teamId);
   if(!team) return;
-  team.pendingInvites = (team.pendingInvites || []).filter(u => u !== state.username);
-  pushTeamToCloud(team);
-  toast("Invitation declined.");
-  render();
+  teamTx(teamId, t => { t.pendingInvites = t.pendingInvites.filter(u => u !== state.username); })
+    .then(err => { toast(err || "Invitation declined."); render(); })
+    .catch(e => { console.warn(e); toast("Error, try again."); });
 }
 
 /* Quitter une team (même si on a déjà joué des matchs avec). Bloqué
@@ -6251,17 +6377,18 @@ async function leaveTeam(teamId){
     : `Leave "${team.name}"?`;
   if(!(await siteConfirm(msg, { title:"Leave team", okLabel:"Leave" }))) return;
 
-  team.members = others;
-  if(isOwner) team.owner = others[0];
-  pushTeamToCloud(team);
-  toast("You left the team.");
-  backToTeamsList();
+  teamTx(teamId, t => {
+    t.members = t.members.filter(u => u !== state.username);
+    if(t.owner === state.username) t.owner = t.members[0] || t.owner;
+  }).then(err => { toast(err || "You left the team."); backToTeamsList(); })
+    .catch(e => { console.warn(e); toast("Error, try again."); });
 }
 
 async function deleteTeam(teamId){
   const team = teamsCache.find(t => t.id === teamId);
   if(!team) return;
   if(team.owner !== state.username){ toast("Only the team owner can remove this team."); return; }
+  if((state.matches || []).some(m => m.team && m.team.id === teamId && !m.completed && !m.cancelled)){ toast("You can't remove this team while one of its matches is still in progress."); return; }
   if(!(await siteConfirm("Remove this team? This cannot be undone.", { title:"Remove team", okLabel:"Remove" }))) return;
   db.collection("teams").doc(teamId).delete().catch(err => console.warn("Error removing team:", err));
   backToTeamsList();
@@ -6510,7 +6637,7 @@ document.addEventListener("click", e => {
 ========================================================= */
 /* Accueil : matchs ouverts + meilleurs joueurs + prochain tournoi. */
 function homeExtrasHTML(){
-  const open = (state.matches || []).filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !m.tournamentId && m.host !== state.username && !(m.players || []).includes(state.username))
+  const open = (state.matches || []).filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !m.tournamentId && !m.serverRoster && !m.rematchOf && (m.guestPlayers || []).length < (TEAM_SIZE_MAX[m.teamSize] || 1) && m.host !== state.username && !(m.players || []).includes(state.username))
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 4);
   const top = (allPlayersCache || []).filter(p => p.username && !p.banned)
     .map(p => ({ name: p.username, rp: p.username === state.username ? (state.rp || 0) : (p.rp || 0) }))
@@ -6604,11 +6731,18 @@ const NOTIF_ICONS = { tip:'gift', warning:'alert', team_invite:'users' };
 function pushNotificationForUid(uid, notif){
   if(!db || !uid) return Promise.resolve();
   const entry = { id: 'n' + Date.now() + Math.random().toString(36).slice(2,7), type: notif.type, text: notif.text, at: Date.now(), read: false };
-  return db.collection("users").doc(uid).get().then(docSnap => {
+  const ref = db.collection("users").doc(uid);
+  let list = null;
+  // Transaction : deux notifications envoyées en même temps ne s'écrasent plus.
+  return db.runTransaction(async tx => {
+    const docSnap = await tx.get(ref);
     if(!docSnap.exists) return;
     const profile = docSnap.data() || {};
-    const list = [entry, ...(profile.notifications || [])].slice(0, 30);
-    return db.collection("users").doc(uid).update({ notifications: list }).then(() => {
+    list = [entry, ...(profile.notifications || [])].slice(0, 30);
+    tx.update(ref, { notifications: list });
+  }).then(() => {
+    if(!list) return;
+    {
       // Si on se notifie soi-même (cas rare), on met aussi l'état local à jour
       // tout de suite plutôt que d'attendre le prochain cycle de sync.
       if(uid === currentUid){
@@ -6616,7 +6750,7 @@ function pushNotificationForUid(uid, notif){
         persistState();
         renderHeaderUI();
       }
-    });
+    }
   }).catch(err => console.warn("Erreur notification :", err));
 }
 
@@ -6693,10 +6827,17 @@ function closeNotifPanel(){
   if(btn) btn.setAttribute("aria-expanded", "false");
 }
 function clearAllNotifications(){
+  // On n'efface que celles qui étaient affichées (une notif arrivée entre-temps reste).
+  const shownIds = new Set((state.notifications || []).map(n => n.id));
   state.notifications = [];
   persistState();
   if(currentUid && db){
-    db.collection("users").doc(currentUid).update({ notifications: [] }).catch(() => {});
+    const ref = db.collection("users").doc(currentUid);
+    db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const cur = (snap.exists && snap.data().notifications) || [];
+      tx.update(ref, { notifications: cur.filter(n => !shownIds.has(n.id)) });
+    }).catch(() => {});
   }
   renderNotifPanel();
   renderHeaderUI();
@@ -6980,66 +7121,31 @@ function createMatch(){
     return;
   }
 
-  const newMatch = {
-    id: "M-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
-    host: state.username,
-    hostEpic: state.epic || "N/A",
-    hostStats: {...state.stats},
-    visibility: createVisibility,
-    passcode: createVisibility === "private" ? passcode : null,
-    region,
-    platform,
-    weapon,
-    teamSize: selectedTeamSize,
-    team: matchTeam,
-    coverBet,
-    bet,
-    mode,
-    firstTo: selectedFirstTo,
-    killLead: (killLeadEnabled && maxKillLeadFor(selectedFirstTo) >= 1) ? Math.min(selectedKillLead, maxKillLeadFor(selectedFirstTo)) : null,
-    simpleEdit: !simpleEditEnabled,
-    status: "OPEN",
-    players: [state.username],
-    hostPlayers: [state.username],
-    guestPlayers: [],
-    readies: {},
-    results: {},
-    processedBy: [],
-    victoryClaim: null,
-    disputed: false,
-    proofs: {},
-    chat: [],
-    locked: false,
-    completed: false,
-    createdAt: Date.now(),
-    // La mise n'est plus débitée ici : dès que le doc existe, on appelle la
-    // Cloud Function matchEscrow (voir plus bas) qui vérifie tout côté
-    // serveur et débite réellement — jamais le navigateur qui décide.
-    escrowedBy: [],
-    escrowAmounts: {}
-  };
-
-  state.matches.unshift(newMatch);
-  state.currentLobby = newMatch.id;
-  autoEscrowTried.add(newMatch.id);
-  save();
-  closeCreateModal();
-  setPage("lobby");
-
-  // Le host paie sa mise (ou celle de toute son équipe s'il cover) DÈS la
-  // création du match, même si personne n'a encore rejoint — vérifié et
-  // débité côté serveur. Remboursé s'il annule avant que le match se
-  // verrouille (voir leaveMatchById -> matchLeave).
-  createMatchInCloud(newMatch)
-    .then(() => callFnSilent("matchEscrow", { matchId: newMatch.id }))
-    .then(res => {
-      toast((res && res.stake > 0) ? `Match created! 🔒 ${formatCoins(res.stake)} coins locked in.` : "Match created successfully!");
-    })
-    .catch(err => {
-      toast(fnErrorMessage(err));
-      // Mise refusée (ex. solde insuffisant) : on annule le match tout de suite.
-      leaveMatchById(newMatch.id, { silent: true }).then(() => { if(state.currentLobby === newMatch.id){ state.currentLobby = null; } setPage("matches"); });
-    });
+  const killLead = (killLeadEnabled && maxKillLeadFor(selectedFirstTo) >= 1) ? Math.min(selectedKillLead, maxKillLeadFor(selectedFirstTo)) : null;
+  // Création par le serveur (matchCreate) : il vérifie tout, crée le match et
+  // prend la mise du host en une seule fois.
+  callFn("matchCreate", {
+    visibility: createVisibility, passcode: createVisibility === "private" ? passcode : null,
+    region, platform, weapon, mode, teamSize: selectedTeamSize, teamId: matchTeam ? matchTeam.id : null,
+    coverBet, bet, firstTo: selectedFirstTo, killLead, simpleEdit: !simpleEditEnabled
+  }).then(res => {
+    const id = res && res.id;
+    if(!id) throw new Error("Something went wrong, please try again.");
+    if(!state.matches.some(m => m.id === id)){
+      state.matches.unshift({ id, host: state.username, hostEpic: state.epic || "N/A", hostStats: {...state.stats}, visibility: createVisibility,
+        passcode: createVisibility === "private" ? passcode : null, region, platform, weapon, teamSize: selectedTeamSize, team: matchTeam,
+        coverBet, bet, mode, firstTo: selectedFirstTo, killLead, simpleEdit: !simpleEditEnabled, status: "OPEN",
+        players: [state.username], hostPlayers: [state.username], guestPlayers: [], readies: {}, results: {}, victoryClaim: null,
+        disputed: false, proofs: {}, chat: [], locked: false, completed: false, createdAt: Date.now(),
+        escrowedBy: [state.username], escrowAmounts: {} });
+    }
+    state.currentLobby = id;
+    if(res.passcode){ state.myPasscodes = Object.assign({}, state.myPasscodes || {}, { [id]: res.passcode }); }
+    persistState();
+    closeCreateModal();
+    setPage("lobby");
+    toast((res.stake > 0) ? `Match created! 🔒 ${formatCoins(res.stake)} coins locked in.` : "Match created successfully!");
+  }).catch(err => toast(fnErrorMessage(err)));
 }
 
 /* CHAT GÉNÉRAL (synchronisé via Firebase) */
@@ -7093,8 +7199,15 @@ function sendMessage(e){
 
 function modDeleteGlobalMessage(index){
   if(!isAdmin() || !db) return;
-  const newMessages = globalChatCache.filter((_, i) => i !== index);
-  db.collection("global_chat").doc("main").set({ messages: newMessages }, { merge:true })
+  const target = globalChatCache[index];
+  if(!target) return;
+  const ref = db.collection("global_chat").doc("main");
+  db.runTransaction(async tx => {
+    const snap = await tx.get(ref);
+    const list = (snap.exists && snap.data().messages) || [];
+    const key = JSON.stringify(target);
+    tx.set(ref, { messages: list.filter(m => JSON.stringify(m) !== key) }, { merge:true });
+  })
     .then(() => toast("Message deleted."))
     .catch(err => { console.warn(err); toast("Failed to delete message."); });
 }
@@ -7103,8 +7216,11 @@ function modDeleteLobbyMessage(matchId, index){
   if(!isAdmin()) return;
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
+  const removed = (match.chat || [])[index];
+  if(!removed) return;
   match.chat = (match.chat || []).filter((_, i) => i !== index);
-  patchMatchInCloud(match.id, "chat", match.chat);
+  // arrayRemove : ne touche qu'à CE message (les messages envoyés au même moment restent).
+  patchMatchInCloud(match.id, "chat", firebase.firestore.FieldValue.arrayRemove(removed));
   const box = document.getElementById("lobbyChatMessages");
   if(box) box.innerHTML = renderLobbyChatMessages(match);
   toast("Message deleted.");
@@ -7113,6 +7229,8 @@ function modDeleteLobbyMessage(matchId, index){
 function renderChat(){
   const box = document.getElementById("chatMessages");
   if(!box) return;
+  const keepTop = box.innerHTML && box.scrollHeight - box.scrollTop - box.clientHeight > 40 ? box.scrollTop : null;
+  try{ ensurePlayersKnown(globalChatCache.map(c => c.user)); }catch(e){}
   if(!db){
     box.innerHTML = `<div style="color:var(--muted); font-size:10px; text-align:center; padding:20px;">Chat unavailable.</div>`;
     return;
@@ -7125,13 +7243,13 @@ function renderChat(){
     <div class="chat-message">
       ${chatAvatarHTML(c.user)}
       <div class="chat-content">
-        <div class="chat-meta"><strong>${vipNameHTML(c.user)}</strong>${isUsernameAdmin(c.user) ? ' <span class="mod-badge" title="Moderator">' + icon('shieldCheck') + '</span>' : ''}<span class="chat-time">${escapeHTML(c.time || "")}</span></div>
+        <div class="chat-meta"><strong>${vipNameHTML(c.user)}</strong>${isUsernameAdmin(c.user) ? ' <span class="mod-badge" title="Moderator">' + icon('shieldCheck') + '</span>' : ''}<span class="chat-time">${escapeHTML(chatTimeText(c))}</span></div>
         <p>${escapeHTML(c.text)}</p>
       </div>
       ${isAdmin() ? `<button class="mod-chat-delete" title="Delete message" onclick="modDeleteGlobalMessage(${i})">✕</button>` : ''}
     </div>
   `).join("");
-  box.scrollTop = box.scrollHeight;
+  box.scrollTop = keepTop !== null ? keepTop : box.scrollHeight;
 }
 
 /* RENDER */
@@ -7198,6 +7316,33 @@ function flushDeferredUserDoc(opts){
 function applyUserDoc(data, opts = {}){
     let changed = false;
 
+    // Banni (ou suspendu) pendant qu'il est connecté : on le déconnecte tout de suite.
+    if(data.banned || (data.banUntil && data.banUntil > Date.now())){
+      if(!window.__banKicked){
+        window.__banKicked = true;
+        const why = data.banReason ? "\n\nReason: " + data.banReason : "";
+        try{ auth.signOut(); }catch(e){}
+        alert((data.banned ? "Your account has been banned from Prime Token." : "Your account is temporarily suspended.") + why);
+        location.reload();
+      }
+      return;
+    }
+    // Identité modifiée par un modérateur (Discord délié, Epic déverrouillé) :
+    // on suit la vraie valeur, sinon la prochaine sauvegarde la remettrait.
+    if(!(window.__identityEditAt && Date.now() - window.__identityEditAt < 8000)) ["discordId", "discordUsername", "discordAvatar", "epic", "epicLocked"].forEach(k => {
+      if(k in data){
+        const v = k === "epicLocked" ? !!data[k] : (data[k] === undefined ? null : data[k]);
+        if(state[k] !== v && !(k === "epic" && !v && !state[k])){ state[k] = (k === "epic" ? (v || "") : v); changed = true; }
+      }
+    });
+
+    // Snipes déjà révélés : gardés sur le compte (même après déconnexion).
+    if(Array.isArray(data.snipedMatches)){
+      const cur = state.snipedMatches || [];
+      const add = data.snipedMatches.filter(id => !cur.includes(id));
+      if(add.length){ state.snipedMatches = cur.concat(add); changed = true; }
+    }
+
     if(typeof data.coins === "number"){
       const oldCoins = state.coins || 0;
       const newCoins = data.coins;
@@ -7259,9 +7404,15 @@ function applyUserDoc(data, opts = {}){
     if(Array.isArray(data.notifications) && JSON.stringify(data.notifications) !== JSON.stringify(state.notifications || [])){
       state.notifications = data.notifications;
       changed = true;
+      const np = document.getElementById("notifPanel");
+      if(np && np.classList.contains("open")) try{ renderNotifPanel(); }catch(e){}
     }
     if(typeof data.warnings === "number" && data.warnings !== (state.warnings || 0)){
       state.warnings = data.warnings;
+      changed = true;
+    }
+    if((data.pendingWithdrawalId || null) !== (state.pendingWithdrawalId || null)){
+      state.pendingWithdrawalId = data.pendingWithdrawalId || null;
       changed = true;
     }
     if(Array.isArray(data.warningHistory)){
@@ -7372,9 +7523,13 @@ function onPlayerSearchKeydown(e){
     const q = e.target.value.trim().toLowerCase();
     if(!q) return;
     const exact = (allPlayersCache || []).find(p => p.username && p.username.toLowerCase() === q);
-    const partial = exact || (allPlayersCache || []).find(p => p.username && p.username.toLowerCase().includes(q));
-    if(partial){ selectPlayerSearchResult(partial.username); }
-    else toast("No player found with that username.");
+    if(exact){ selectPlayerSearchResult(exact.username); return; }
+    const raw = e.target.value.trim();
+    fetchPlayerByName(raw).then(p => {
+      if(p){ selectPlayerSearchResult(p.username); return; }
+      const partial = (allPlayersCache || []).find(x => x.username && x.username.toLowerCase().includes(q));
+      if(partial) selectPlayerSearchResult(partial.username); else toast("No player found with that username.");
+    });
   } else if(e.key === "Escape"){
     const box = document.getElementById("playerSearchResults");
     if(box) box.classList.remove("open");
@@ -7397,7 +7552,7 @@ function render(){
   const saved = {};
   let focusId = null, selS = null, selE = null;
   if(content){
-    content.querySelectorAll("input[id], textarea[id]").forEach(el => {
+    content.querySelectorAll("input[id], textarea[id], select[id]").forEach(el => {
       if(el.type === "checkbox" || el.type === "radio" || el.type === "file") return;
       saved[el.id] = el.value;
     });
@@ -7407,7 +7562,26 @@ function render(){
     }
   }
   const page = currentPage, lobbyId = state.currentLobby;
+  // Chats : si on était remonté lire l'historique, on garde la position.
+  const chatScroll = {};
+  ["chatMessages", "lobbyChatMessages"].forEach(id => {
+    const b = document.getElementById(id);
+    if(b && b.scrollHeight - b.scrollTop - b.clientHeight > 40) chatScroll[id] = b.scrollTop;
+  });
   renderInner();
+  Object.entries(chatScroll).forEach(([id, top]) => {
+    const b = document.getElementById(id);
+    if(b && (id !== "lobbyChatMessages" || lobbyId === state.currentLobby)) b.scrollTop = top;
+  });
+  if(content && currentPage === "home"){
+    const cm = state.currentLobby && (state.matches || []).find(x => x.id === state.currentLobby);
+    if(cm && !cm.completed && !cm.cancelled && (cm.players || []).includes(state.username)){
+      content.insertAdjacentHTML("afterbegin", `<div style="margin:0 0 14px; padding:12px 16px; border:1px solid rgba(0,255,136,.35); border-radius:12px; background:rgba(0,255,136,.07); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;"><strong style="font-size:13px;">You have a match in progress</strong><button class="btn green small" onclick="setPage('lobby')">Back to my match</button></div>`);
+    }
+  }
+  if(content && currentPage === "moderation" && typeof modWithdrawalsCache !== "undefined" && modWithdrawalsCache === null && isAdmin() && !window.__wdAutoLoaded){
+    window.__wdAutoLoaded = true; setTimeout(() => { try{ loadWithdrawals(); }catch(e){} }, 0);
+  }
   if(!content || page !== currentPage || lobbyId !== state.currentLobby) return;
   Object.entries(saved).forEach(([id, v]) => {
     const el = document.getElementById(id);
@@ -7417,6 +7591,8 @@ function render(){
     const el = document.getElementById(focusId);
     if(el && content.contains(el)){ el.focus({ preventScroll:true }); try{ if(selS !== null) el.setSelectionRange(selS, selE); }catch(e){} }
   }
+  const rk = document.getElementById("rkSearch");
+  if(rk && rk.value && typeof filterRankList === "function"){ try{ filterRankList(rk.value); }catch(e){} }
 }
 
 function renderInner(){
@@ -7472,7 +7648,8 @@ function renderInner(){
     // formellement rejoint (et donc pas encore payé sa mise).
     const isMine = m => (m.host === state.username || (m.players || []).includes(state.username) || isOnHostTeam(m, state.username));
 
-    const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !m.tournamentId && !isMine(m));
+    const joinable = m => !m.serverRoster && !m.rematchOf && (m.guestPlayers || []).length < (TEAM_SIZE_MAX[m.teamSize] || 1);
+    const available = state.matches.filter(m => m.status === "OPEN" && !m.completed && !m.locked && !m.cancelled && !m.tournamentId && !isMine(m) && joinable(m));
     // "My Matches" doit garder mes matchs même une fois verrouillés (READY UP fait) —
     // avant, un match verrouillé disparaissait de cet onglet et n'était visible que
     // dans "In Progress", qui mélange ça avec les matchs des autres joueurs.
@@ -7545,7 +7722,7 @@ function renderInner(){
         ` : pool.map(m => {
           const entry = roundToCents(m.bet !== undefined ? m.bet : 0.5);
           // Gain par joueur (sa mise + celle d'un adversaire, −5 %), comme le serveur.
-          const earn = roundToCents(2 * entry * (1 - MATCH_TAX_RATE));
+          const earn = payoutAfterFee(2 * entry);
           const elapsed = Date.now() - (m.createdAt || Date.now());
           const remainingMs = Math.max(0, MATCH_TTL_MS - elapsed);
           const remainingMin = Math.ceil(remainingMs / 60000);
@@ -7633,6 +7810,7 @@ function renderInner(){
     const hostPlayers = lobby.hostPlayers || [lobby.host];
     const guestPlayers = lobby.guestPlayers || (lobby.players || []).filter(p => p !== lobby.host);
 
+    try{ ensurePlayersKnown(hostPlayers.concat(guestPlayers)); }catch(e){}
     const maxPerSide = TEAM_SIZE_MAX[lobby.teamSize] || 1;
     const isHost = hostPlayers.includes(state.username);
     const isGuest = guestPlayers.includes(state.username);
@@ -7719,6 +7897,7 @@ function renderInner(){
             <div class="lobby-banner-code">
               <span>Match Code</span>
               <strong>${escapeHTML(lobby.id)}</strong>
+              ${(lobby.visibility === "private" && lobby.host === state.username && state.myPasscodes && state.myPasscodes[lobby.id]) ? `<span style="margin-top:4px;">Private code: <strong>${escapeHTML(state.myPasscodes[lobby.id])}</strong></span>` : ''}
             </div>
           </div>
 
@@ -7748,7 +7927,7 @@ function renderInner(){
             <div class="eco-arrow">→</div>
             <div class="eco-block out">
               <span>If You Win</span>
-              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins((isHost || isGuest) ? roundToCents(myBetInfo.winReward * (1 - MATCH_TAX_RATE)) : roundToCents(2 * myBetInfo.baseBet * (1 - MATCH_TAX_RATE)))}</strong>
+              <strong><span class="coin-dot" style="width:10px;height:10px;"></span> ${formatCoins((isHost || isGuest) ? payoutAfterFee(myBetInfo.winReward) : payoutAfterFee(2 * myBetInfo.baseBet))}</strong>
             </div>
           </div>
           ${myBetInfo.covered ? `
@@ -7757,11 +7936,11 @@ function renderInner(){
           ${myBetInfo.covering ? `
             <div class="lobby-bet-note gold">${coinIcon(11)} You're covering your whole team's bet — you risk it all, but win the biggest share.</div>
           ` : ''}
-          <div class="lobby-bet-note">
+          ${(isHost || isGuest) ? `<div class="lobby-bet-note">
             ${(lobby.escrowedBy || []).includes(state.username)
               ? "Your bet has already been deducted from your coins for this match."
               : "Your bet will be deducted from your coins right away."}
-          </div>`}
+          </div>` : ''}`}
 
           <div class="lobby-stepper">
             ${steps.map((label, i) => `
@@ -7783,7 +7962,7 @@ function renderInner(){
               ${hostSlotsHTML}
               <div class="team-card-actions">
                 <button class="rules-btn" onclick="openRulesModal()">${icon('gavel')} Rules</button>
-                ${isGuest && lobby.locked && !lobby.completed && !lobby.cancelled && !lobby.cheaterReport ? `
+                ${isGuest && lobby.locked && !lobby.completed && !lobby.cancelled && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") && !(lobby.reportedBy || []).includes(state.username) ? `
                   <button class="report-cheater-btn" onclick="openCheaterReportModal(${jsArg(lobby.id)})">${icon('flag')} Report</button>
                 ` : ''}
               </div>
@@ -7815,7 +7994,7 @@ function renderInner(){
               ` : (lobby.tournamentId && !lobby.completed) ? `
                 <button class="btn danger" onclick="forfeitTournamentMatch(${jsArg(lobby.id)})">Forfeit</button>
                 <span style="font-size:9px; color:var(--muted2); font-weight:800; text-align:center;">TOURNAMENT MATCH</span>
-              ` : !lobby.locked ? `
+              ` : !lobby.serverLock ? `
                 <button class="btn danger" onclick="leaveLobby()">Leave Lobby</button>
               ` : (!lobby.completed && !lobby.victoryClaim && !lobby.disputed) ? `
                 <button class="btn danger cancel-vote-btn ${(lobby.cancelVotes && lobby.cancelVotes[state.username]) ? 'active' : ''}" onclick="toggleCancelVote(${jsArg(lobby.id)})">
@@ -7840,7 +8019,7 @@ function renderInner(){
                 <span class="team-card-tag">TEAM</span>
               </div>
               ${guestSlotsHTML}
-              ${isHost && lobby.locked && !lobby.completed && !lobby.cancelled && !lobby.cheaterReport ? `
+              ${isHost && lobby.locked && !lobby.completed && !lobby.cancelled && !(lobby.cheaterReport && lobby.cheaterReport.status === "pending") && !(lobby.reportedBy || []).includes(state.username) ? `
                 <div style="padding:8px 10px 10px; text-align:right;">
                   <button class="report-cheater-btn" onclick="openCheaterReportModal(${jsArg(lobby.id)})">${icon('flag')} Report</button>
                 </div>
@@ -7867,9 +8046,9 @@ function renderInner(){
           ` : ''}
 
           <!-- END OF MATCH RESULTS SECTION -->
-          ${(lobby.locked && !lobby.cancelled) ? renderResultSection(lobby) : ''}
+          ${((lobby.serverLock || lobby.completed || (lobby.tournamentId && lobby.locked)) && !lobby.cancelled) ? renderResultSection(lobby) : ''}
 
-          ${(isAdmin() && !isHost && !isGuest && !lobby.completed && !lobby.cancelled) ? `
+          ${(isAdmin() && !isHost && !isGuest && !lobby.completed && !lobby.cancelled && (lobby.locked || lobby.serverLock || lobby.tournamentId)) ? `
             <div class="mod-override-box" style="margin:0 20px 18px; padding:16px; border:1px solid rgba(169,112,255,.4); border-radius:12px; background:rgba(169,112,255,.08);">
               <h3 style="color:#c9a8ff; margin-bottom:4px; font-size:14px; font-weight:600;">${icon('shield')} Moderator Override</h3>
               <p style="color:var(--muted); font-size:10px; margin-bottom:14px;">Only visible to you as a moderator. Force-assign victory to either side — this settles the match and coins immediately, no player action needed.</p>
@@ -8198,10 +8377,10 @@ function renderInner(){
 
   else if(currentPage === "profile"){
     const played = state.stats.played || 0;
-    const wins = state.stats.wins || 0;
+    const wins = Number(state.stats.wins || 0) || 0;
     const losses = state.stats.losses || 0;
-    const streak = state.stats.streak || 0;
-    const bestStreak = state.stats.bestStreak || 0;
+    const streak = Number(state.stats.streak || 0) || 0;
+    const bestStreak = Number(state.stats.bestStreak || 0) || 0;
     const totalEarned = state.stats.totalEarned || 0;
     const highestMatchEarning = state.stats.highestMatchEarning || 0;
     const winrate = getWinRate();
@@ -8352,7 +8531,7 @@ function renderInner(){
           <div class="rk-pillar">
             <div class="rk-pillar-card">
               <span>Wins</span>
-              <strong>${p.wins}</strong>
+              <strong>${Number(p.wins) || 0}</strong>
               ${showEarned ? earnedHTML(p) : ''}
             </div>
           </div>
@@ -8371,7 +8550,7 @@ function renderInner(){
               ${rankPillHTML(p.name)}
             </div>
           </div>
-          <div class="rk-stat"><span>Wins</span><strong>${p.wins}</strong></div>
+          <div class="rk-stat"><span>Wins</span><strong>${Number(p.wins) || 0}</strong></div>
           <div class="rk-stat rk-hide-sm"><span>Winrate</span><strong>${wrOf(p)}%</strong></div>
           ${showEarned ? `<div class="rk-stat rk-hide-sm"><span>Earned</span><strong>${earnedHTML(p)}</strong></div>` : ''}
           <button class="btn small rk-stats-btn" onclick="showPlayerStats(${jsArg(p.name)})">Stats ${icon('chevronRight')}</button>
@@ -8383,7 +8562,7 @@ function renderInner(){
       <div class="section-head">
         <div>
           <h2>Ranking</h2>
-          <p>${you ? `You're currently <strong style="color:#fff;">#${you.place}</strong> out of ${board.length} players.` : "Prime Token community ranking."}</p>
+          <p>${you ? `You're currently <strong style="color:#fff;">#${you.place}</strong> among the top ${board.length} players.` : "Prime Token community ranking."}</p>
         </div>
         <div class="rank-tabs">
           ${periods.map(p => `<button class="rank-tab ${p.key === period ? 'active' : ''}" onclick="switchRankPeriod(${jsArg(p.key)})">${p.label}</button>`).join("")}
@@ -8398,7 +8577,7 @@ function renderInner(){
 
       <div class="rk-list-head">
         <h3>All players</h3>
-        <input type="text" class="input rk-search" placeholder="Search a player…" oninput="filterRankList(this.value)">
+        <input type="text" id="rkSearch" class="input rk-search" placeholder="Search a player…" oninput="filterRankList(this.value)">
       </div>
 
       <div class="rk-list" id="rankListBody">
@@ -8437,7 +8616,7 @@ function renderInner(){
     if(teamsView === "detail"){
       const team = teamsCache.find(t => t.id === activeTeamId);
       if(!team){
-        container.innerHTML = `<div class="empty"><strong>Team not found</strong><span>It may have been removed.</span></div>`;
+        container.innerHTML = `<div class="empty"><strong>Team not found</strong><span>It may have been removed.</span><button class="btn small" style="margin-top:10px;" onclick="backToTeamsList()">Back to teams</button></div>`;
         return;
       }
       const members = team.members || [];
@@ -8543,7 +8722,7 @@ function renderInner(){
       </div>
 
       <div class="matches-filters" style="margin-bottom:18px;">
-        <input type="text" class="input" style="flex:1; min-width:220px;" placeholder="Search a team…" value="${escapeHTML(teamSearchQuery)}" oninput="filterTeams(this.value)">
+        <input type="text" class="input" style="flex:1; min-width:220px;" id="teamSearchInput" placeholder="Search a team…" value="${escapeHTML(teamSearchQuery)}" oninput="filterTeams(this.value)">
       </div>
 
       ${myInvites.length > 0 ? `
@@ -8676,6 +8855,11 @@ function renderInner(){
 
   else if(currentPage === "moderation"){
     startModMatchListeners();
+    setTimeout(() => {
+      const a = document.getElementById("modUserSearch"), b = document.getElementById("modEpicSearch");
+      if(a && a.value.trim()) modSearchUsers();
+      if(b && b.value.trim()) modSearchEpicUsers();
+    }, 0);
     if(!isAdmin()){
       container.innerHTML = `<div class="empty"><strong>Access Denied</strong><span>This page is reserved for moderators.</span></div>`;
     } else {
@@ -8718,7 +8902,7 @@ function renderInner(){
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
           <h3 style="margin-bottom:6px; font-size:14px;">${icon('zap')} My Moderator Powers</h3>
           <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Give yourself coins or Snipes instantly. Only you can see and use this.</p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          <div style="display:${isSuperAdmin() ? 'flex' : 'none'}; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
             <button class="btn green small" onclick="modGiveSelfCoins(10)">+10 ${coinIcon(12)}</button>
             <button class="btn green small" onclick="modGiveSelfCoins(100)">+100 ${coinIcon(12)}</button>
             <button class="btn green small" onclick="modGiveSelfCoins(1000)">+1000 ${coinIcon(12)}</button>
@@ -8847,8 +9031,9 @@ function renderInner(){
           ` : disputes.map(m => {
             const players = m.players || [];
             const guest = (m.guestPlayers && m.guestPlayers[0]) || players.find(p => !(m.hostPlayers || [m.host]).includes(p));
-            const hostProof = (m.proofs || {})[m.host];
-            const guestProof = guest ? (m.proofs || {})[guest] : null;
+            const sides = matchTeamsOf(m);
+            const hostProof = sides.hostPlayers.map(p => (m.proofs || {})[p]).find(Boolean) || null;
+            const guestProof = sides.guestPlayers.map(p => (m.proofs || {})[p]).find(Boolean) || null;
             return `
               <div style="border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; background:var(--panel2);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -9142,7 +9327,7 @@ function initTournamentsSync(){
     const list = [];
     snap.forEach(d => { const t = d.data(); if(t && t.id) list.push(t); });
     tournamentsCache = list;
-    if(currentPage === "tournaments") render();
+    if(currentPage === "tournaments" || currentPage === "home") render();
   }, err => console.warn("Error syncing tournaments:", err));
 }
 
@@ -9261,8 +9446,11 @@ async function cancelTournament(tid){
   const t = tournamentsCache.find(x => x.id === tid);
   if(!t) return;
   if(!(await siteConfirm(`Cancel "${t.name}"? ${t.status === "running" ? "Matches already created will stay, but no prizes will be paid." : ""}`, { title:"Cancel tournament", okLabel:"Cancel tournament" }))) return;
-  await db.collection("tournaments").doc(tid).update({ status:"cancelled", cancelReason:"Cancelled by the organizer" });
-  toast("Tournament cancelled.");
+  try{
+    await callFn("adminCancelTournament", { tid });
+    try{ await db.collection("tournaments").doc(tid).update({ cancelReason:"Cancelled by the organizer" }); }catch(e){}
+    toast("Tournament cancelled.");
+  }catch(err){ toast(fnErrorMessage(err)); }
 }
 
 async function deleteTournament(tid){
@@ -9440,6 +9628,8 @@ function doBuyVIP(){
     if(bonus.indexOf("avatar:") === 0){
       const av = getAvatar(bonus.slice(7));
       avatarMsg = ` + new avatar: ${av ? av.name : "?"}`;
+    } else if(bonus.indexOf("snipes:") === 0){
+      avatarMsg = ` + ${bonus.slice(7)} extra Snipes (all avatars already owned)`;
     } else if(bonus.indexOf("coins:") === 0){
       avatarMsg = ` + ${bonus.slice(6)} coins (all avatars already owned)`;
     }
@@ -9454,6 +9644,9 @@ function openSnipeModal(matchId){
   snipeModalMatchId = matchId;
   renderSnipeModal();
   document.getElementById("snipeOverlay").classList.add("open");
+  if(match.host && !allPlayersCache.some(p => p.username === match.host)){
+    fetchPlayerByName(match.host).then(() => { if(snipeModalMatchId === matchId) renderSnipeModal(); });
+  }
 }
 
 function closeSnipeModal(){
@@ -9483,11 +9676,11 @@ function renderSnipeModal(){
   }
 
   const info = playerLiveInfo(match.host);
-  const wins = (info.stats && info.stats.wins) || 0;
+  const wins = Number((info.stats && info.stats.wins) || 0) || 0;
   const losses = (info.stats && info.stats.losses) || 0;
   const played = (info.stats && info.stats.played) || 0;
   const winrate = played ? Math.round((wins / played) * 100) : 0;
-  const bestStreak = (info.stats && info.stats.bestStreak) || 0;
+  const bestStreak = Number((info.stats && info.stats.bestStreak) || 0) || 0;
   const totalEarned = (info.stats && info.stats.totalEarned) || 0;
 
   body.innerHTML = `
@@ -9504,7 +9697,7 @@ function renderSnipeModal(){
       </div>
       <div class="snipe-card-substats">
         <span>Best streak <strong>${bestStreak}</strong></span>
-        <span>Total earned <strong>${formatEur(totalEarned)}</strong></span>
+        <span>Total earned <strong>${formatCoins(totalEarned)} coins</strong></span>
       </div>
     </div>
     <div class="snipe-modal-actions">
@@ -9524,17 +9717,37 @@ function revealSnipe(){
   // Le décompte du solde de Snipes est vérifié et débité côté serveur
   // (useSnipe dans functions/economy.js) — snipedMatches (juste "ai-je déjà
   // révélé CE match") n'est pas un champ d'argent, il reste local/simple.
-  callFn("useSnipe").then(() => {
+  if(window.__snipeInFlight) return;
+  window.__snipeInFlight = true;
+  callFn("useSnipe", { matchId: match.id }).then(() => {
     state.snipedMatches = state.snipedMatches || [];
-    state.snipedMatches.push(match.id);
+    if(!state.snipedMatches.includes(match.id)) state.snipedMatches.push(match.id);
     save();
     renderSnipeModal();
-  }).catch(err => toast(fnErrorMessage(err)));
+  }).catch(err => toast(fnErrorMessage(err))).finally(() => { window.__snipeInFlight = false; });
 }
 
 function enterMatchLobby(id){
   const match = state.matches.find(m => m.id === id);
-  if(!match){ toast("This match no longer exists."); return; }
+  if(!match){
+    // Match plus ancien que ceux chargés : on va le chercher une fois.
+    if(db && id){
+      db.collection("matches").doc(String(id)).get().then(snap => {
+        if(!snap.exists){ toast("This match no longer exists."); return; }
+        const m = snap.data();
+        // Gardé comme "source" (sinon effacé au prochain rafraîchissement des
+        // listes) et suivi en direct tant qu'on le regarde.
+        extraSources.viewed = { [m.id]: m }; extraMatchesById[m.id] = m;
+        if(!state.matches.some(x => x.id === m.id)) state.matches.push(m);
+        try{
+          if(window.__viewedUnsub) window.__viewedUnsub();
+          window.__viewedUnsub = listenExtraMatches("viewed", db.collection("matches").where(firebase.firestore.FieldPath.documentId(), "==", String(m.id)));
+        }catch(e){}
+        state.currentLobby = m.id; persistState(); setPage("lobby");
+      }).catch(() => toast("This match no longer exists."));
+    } else toast("This match no longer exists.");
+    return;
+  }
   state.currentLobby = id;
   save();
   setPage("lobby");
@@ -9633,7 +9846,7 @@ function confirmJoinPrivateMatch(){
   const match = state.matches.find(m => m.id === targetJoinMatchId);
   const code = document.getElementById("joinPasscodeInput").value.trim();
   if(!match) return;
-  if(code !== match.passcode){ toast("Incorrect code!"); return; }
+  if(!code){ toast("Enter the code."); return; }
   closePasscodeModal();
   joinPassForServer = code;
   executeJoin(match);
@@ -9683,8 +9896,13 @@ function generateFakeStats(){
   return { played, wins, losses };
 }
 
-function showPlayerStats(username){
+function showPlayerStats(username, _fetched){
   if(!username) return;
+  // Joueur hors du top 400 pas encore chargé : on le charge puis on rouvre.
+  if(!_fetched && username !== state.username && !allPlayersCache.some(p => p.username === username)){
+    fetchPlayerByName(username).then(() => showPlayerStats(username, true));
+    return;
+  }
   const info = playerLiveInfo(username);
   const isSelf = username === state.username;
   openStatsModal(username, info.epic, info.stats, {
@@ -9700,15 +9918,20 @@ function toggleReady(matchId){
   const match = state.matches.find(m => m.id === matchId);
   if(!match) return;
   if(!match.readies) match.readies = {};
+  // Double-clic : le 2e clic tombait sur "Cancel Ready" et annulait le 1er.
+  const lastT = (window.__readyClickAt || {})[matchId] || 0;
+  if(Date.now() - lastT < 600) return;
+  window.__readyClickAt = Object.assign(window.__readyClickAt || {}, { [matchId]: Date.now() });
 
   match.readies[state.username] = !match.readies[state.username];
 
-  save();
-  patchMatchInCloud(match.id, matchFieldPath("readies", state.username), match.readies[state.username]);
+  persistState();
+  patchMatchInCloud(match.id, matchFieldPath("readies", state.username), match.readies[state.username])
+    .then(() => { delete tryLockAt[match.id]; checkMatchLocks(); });
 
   const lockedIds = checkMatchLocks();
   if(lockedIds.includes(matchId)){
-    toast("Everyone is ready! Identities revealed — the match is LOCKED.");
+    toast("Everyone is ready — locking the match…");
   }
 
   render();
@@ -10044,6 +10267,8 @@ function withdrawHTML(){
           <div class="wd-row"><span>Available</span><strong>${coinIcon(14)}${formatCoins(bal)} <em>= ${formatEur(bal * COIN_PRICE_EUR)}</em></strong></div>
           <div class="wd-row"><span>Minimum withdrawal</span><strong>${formatEur(WITHDRAW_MIN)}</strong></div>
           <div class="wd-row"><span>Rate</span><strong>1 coin = 1 €</strong></div>
+          <div class="wd-row"><span>Requirement</span><strong>At least one deposit (or a tournament prize)</strong></div>
+          ${state.pendingWithdrawalId ? `<div class="wd-row"><span>Status</span><strong style="color:#ffab40;">A withdrawal request is pending</strong></div>` : ''}
         </div>
         ${can ? `
           <div class="form-group" style="margin-top:14px;">
@@ -10053,7 +10278,7 @@ function withdrawHTML(){
               <button class="btn" onclick="document.getElementById('withdrawAmount').value=${jsArg(Math.floor(bal))}">Max</button>
             </div>
           </div>
-          <button class="btn green wd-btn" onclick="requestWithdraw()">${icon('discord')} Request withdrawal</button>
+          <button class="btn green wd-btn" onclick="requestWithdraw()" ${state.pendingWithdrawalId ? 'disabled title="Wait until your current request is handled"' : ''}>${icon('discord')} ${state.pendingWithdrawalId ? 'Request pending…' : 'Request withdrawal'}</button>
         ` : `
           <div class="wd-locked">
             <div class="wd-bar"><div style="width:${pct}%;"></div></div>
@@ -10080,7 +10305,10 @@ function requestWithdraw(){
   const bal = state.coins || 0;
   if(isNaN(amount) || amount < WITHDRAW_MIN){ toast(`The minimum withdrawal is ${formatEur(WITHDRAW_MIN)}.`); return; }
   if(amount > bal){ toast("You don't have that many coins."); return; }
-  callFn("requestWithdrawal", { amount }).then(res => showWithdrawTicket(amount, res && res.id)).catch(err => toast(fnErrorMessage(err)));
+  if(state.pendingWithdrawalId){ toast("You already have a pending withdrawal request."); return; }
+  if(window.__wdInFlight) return;
+  window.__wdInFlight = true;
+  callFn("requestWithdrawal", { amount }).then(res => showWithdrawTicket(amount, res && res.id)).catch(err => toast(fnErrorMessage(err))).finally(() => { window.__wdInFlight = false; });
 }
 function showWithdrawTicket(amount, wid){
   const msg = `Withdrawal request\nID: ${wid || "—"}\nUsername: ${state.username}\nEpic: ${state.epic || "—"}\nAmount: ${amount} coins (${formatEur(amount * COIN_PRICE_EUR)})`;
@@ -10270,10 +10498,9 @@ function sendTip(){
     toast(`Not enough coins. You have ${formatCoins(state.coins || 0)}.`);
     return;
   }
-  if(amount < 0.01){ toast("Enter a valid amount to tip."); return; }
+  if(amount < 1){ toast("The minimum tip is 1 coin."); return; }
   if(window.__tipInFlight) return;
   window.__tipInFlight = true;
-  setTimeout(() => { window.__tipInFlight = false; }, 2500);
 
   // Le calcul (frais VIP, débit/crédit, notification au destinataire) est
   // désormais entièrement fait côté serveur (sendTip dans functions/
@@ -10287,7 +10514,7 @@ function sendTip(){
     if(amountInput) amountInput.value = "";
     if(usernameInput) usernameInput.value = "";
     render();
-  }).catch(err => toast(fnErrorMessage(err)));
+  }).catch(err => toast(fnErrorMessage(err))).finally(() => { window.__tipInFlight = false; });
 }
 
 async function saveSettings(){
@@ -10330,11 +10557,22 @@ async function saveSettings(){
     } catch(err){ console.warn("Erreur de vérification de la liste noire :", err); }
   }
 
+  // Un pseudo Epic ne peut appartenir qu'à un seul compte.
+  if(db){
+    try{
+      const l = e.toLowerCase();
+      const variants = [...new Set([e, l, e.toUpperCase(), l.charAt(0).toUpperCase() + l.slice(1)])];
+      const dup = await db.collection("users").where("epic", "in", variants).limit(3).get();
+      if(dup.docs.some(d => d.id !== currentUid)){ toast("This Epic username is already used by another account. Open a ticket on Discord if it's yours."); return; }
+    }catch(err){ console.warn("Epic check", err); }
+  }
+
   state.epic = e;
   // Une fois enregistré, le pseudo Epic ne peut plus être changé depuis le
   // site — il faut passer par un ticket Discord pour éviter les abus
   // (usurper le pseudo d'un autre joueur, changer sans vérification, etc).
   state.epicLocked = true;
+  window.__identityEditAt = Date.now();
   save();
   toast("Saved! Your Epic username is now locked.");
   render();
@@ -10364,7 +10602,7 @@ function hideAuthScreen(){
 function firebaseAuthErrorMessage(e){
   const code = e && e.code;
   if(code === "auth/email-already-in-use") return "This email is already in use.";
-  if(code === "auth/invalid-email") return "Email invalide.";
+  if(code === "auth/invalid-email") return "Invalid email.";
   if(code === "auth/weak-password") return "Password too weak (6 characters min).";
   if(code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") return "Incorrect email or password.";
   return "Error: " + (e && e.message ? e.message : "unknown");
@@ -10383,8 +10621,14 @@ async function doSignup(){
   if(!db || !auth){ errEl.textContent = "Service unavailable right now — try again in a moment."; return; }
 
   try{
-    const existing = await db.collection("users").where("username", "==", username).limit(1).get();
-    if(!existing.empty){ errEl.textContent = "This username is already taken."; return; }
+    // Pseudo libre, sans tenir compte des majuscules ("Bob" = "bob").
+    let available = null;
+    try{ const r = await callFnSilent("usernameAvailable", { username }); available = !!(r && r.available); }catch(e){}
+    if(available === null){
+      const existing = await db.collection("users").where("username", "==", username).limit(1).get();
+      available = existing.empty;
+    }
+    if(!available){ errEl.textContent = "This username is already taken."; return; }
 
     // Anti contournement de ban : on vérifie l'empreinte de CET appareil
     // AVANT même de créer le compte, pas seulement après — pour ne pas
@@ -10397,15 +10641,14 @@ async function doSignup(){
         const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
         const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
         const blacklistedFingerprints = (blacklist && Array.isArray(blacklist.deviceFingerprints)) ? blacklist.deviceFingerprints : [];
-        if(blacklistedFingerprints.includes(fingerprint)){
-          errEl.textContent = "This device has been banned from Prime Token.";
-          return;
-        }
+        // (plus de blocage sur l'empreinte : trop de faux positifs)
+        void blacklistedFingerprints;
       }
     } catch(e){ console.warn("Erreur de vérification d'empreinte au signup :", e); }
 
     const starterAvatar = pickStarterAvatar();
     pendingStarterAvatar = starterAvatar;
+    state.username = username;
     const cred = await auth.createUserWithEmailAndPassword(email, password);
     const uid = cred.user.uid;
 
@@ -10443,7 +10686,7 @@ async function doLogin(){
   const errEl = document.getElementById("loginError");
   errEl.textContent = "";
 
-  if(!email || !password){ errEl.textContent = "Email et mot de passe requis."; return; }
+  if(!email || !password){ errEl.textContent = "Email and password required."; return; }
   if(!auth){ errEl.textContent = "Service unavailable right now — try again in a moment."; return; }
 
   try{
@@ -10518,18 +10761,11 @@ async function loadProfileAndStart(uid){
         const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
         const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
         const blacklistedFingerprints = (blacklist && Array.isArray(blacklist.deviceFingerprints)) ? blacklist.deviceFingerprints : [];
+        // Même "empreinte" qu'un compte banni : PAS de bannissement automatique
+        // (deux téléphones du même modèle ont souvent la même empreinte) —
+        // on signale juste le compte pour qu'un modérateur vérifie.
         if(blacklistedFingerprints.includes(fp)){
-          currentUid = null;
-          try{ await auth.signOut(); }catch(e){}
-          showAuthScreen();
-          db.collection("users").doc(uid).set({
-            banned: true,
-            banReason: "Ban evasion: this browser/device is associated with a previously banned Prime Token account.",
-            bannedBy: "system",
-            bannedAt: Date.now()
-          }, { merge:true }).catch(()=>{});
-          alert("This device has already been banned from Prime Token.");
-          return;
+          db.collection("users").doc(uid).set({ fingerprintFlag: true }, { merge:true }).catch(()=>{});
         }
         // On mémorise l'empreinte sur ce compte pour pouvoir la blacklister
         // plus tard si jamais il se fait bannir. On ATTEND que l'écriture
@@ -10570,6 +10806,7 @@ async function loadProfileAndStart(uid){
       state.settledMatchIds = profile.settledMatchIds || [];
       state.warnings = profile.warnings || 0;
       state.warningHistory = profile.warningHistory || [];
+      if(profile.joinedAt) state.joinedAt = profile.joinedAt;
 
       // Reset économie forcé (v4) : tous les comptes existants repartent
       // à 0 coin, 0 snipe et perdent leur VIP — une seule fois par compte.
@@ -10638,6 +10875,10 @@ if(auth){
     if(user){
       loadProfileAndStart(user.uid);
     } else {
+      // Déconnecté alors qu'un compte était chargé (autre onglet, session
+      // expirée) : on recharge la page pour repartir propre (listeners,
+      // données de l'ancien compte).
+      if(currentUid){ currentUid = null; try{ localStorage.removeItem(STORAGE_KEY); }catch(e){} try{ location.reload(); }catch(e){} return; }
       currentUid = null;
       showAuthScreen();
     }
