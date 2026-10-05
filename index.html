@@ -10251,6 +10251,9 @@ function applyPendingAvatar(){
 ========================================================= */
 let walletTab = "deposit";
 const COIN_PRICE_EUR = 1;
+const DEPOSIT_FEE_RATE = 0.05; // 5 % de frais de service (identique à functions/index.js)
+function depositTotalEur(coins){ const c = Math.round(coins * COIN_PRICE_EUR * 100); return (c + Math.round(c * DEPOSIT_FEE_RATE)) / 100; }
+function depositFeeEur(coins){ return Math.round(Math.round(coins * COIN_PRICE_EUR * 100) * DEPOSIT_FEE_RATE) / 100; }
 const DEPOSIT_DISCORD_URL = "https://discord.gg/KXMpErxuSP";
 const DEPOSIT_PACKS = [
   { coins:5,   color:"#1fe38b" },
@@ -10400,7 +10403,7 @@ function depositShopHTML(){
           <button class="dc-buy" onclick="openDepositModal(${p.coins})">${formatEur(p.coins * COIN_PRICE_EUR)} — PURCHASE</button>
         </div>`).join("")}
     </div>
-    <div class="deposit-note">Coins are added to your balance once the payment is confirmed.</div>
+    <div class="deposit-note">Coins are added to your balance once the payment is confirmed. A 5% service fee is added at checkout.</div>
   `;
 }
 function depositCustomAmount(){
@@ -10419,6 +10422,7 @@ function openDepositModal(coins){
       ${chestSVG("#1fe38b")}
       <div style="font-size:22px; font-weight:700; color:#fff; margin-top:6px;">${coins} Coins</div>
       <div style="font-size:14px; color:var(--gold); font-weight:800; margin-top:2px;">${formatEur(coins * COIN_PRICE_EUR)}</div>
+      <div style="font-size:9.5px; color:var(--muted2); margin-top:3px;">+ ${formatEur(depositFeeEur(coins))} service fee (5%)</div>
     </div>
     <div style="border:1px solid var(--line2); background:var(--panel2); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin:18px 0; display:flex; align-items:center; gap:8px;">
       ${icon('shield')} Secure card payment via Stripe. Coins are credited automatically once the payment is confirmed.
@@ -10426,7 +10430,7 @@ function openDepositModal(coins){
     <div id="depositErrorBox" style="display:none; border:1px solid rgba(255,71,87,.4); background:rgba(255,71,87,.08); color:var(--red); border-radius:10px; padding:10px 14px; font-size:11px; margin-bottom:14px;"></div>
     <div style="display:flex; gap:10px;">
       <button class="btn ghost" style="flex:1;" onclick="closeDepositModal()">Cancel</button>
-      <button class="btn green" style="flex:1;" id="depositPayBtn" onclick="startCoinPurchase(${coins})">${icon('lock')} Pay ${formatEur(coins * COIN_PRICE_EUR)}</button>
+      <button class="btn green" style="flex:1;" id="depositPayBtn" onclick="startCoinPurchase(${coins})">${icon('lock')} Pay ${formatEur(depositTotalEur(coins))}</button>
     </div>
     <div style="text-align:center; margin-top:14px;">
       <a href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer" style="font-size:10px; color:var(--muted); text-decoration:underline;">Trouble paying by card? Ask on our Discord instead.</a>
@@ -10457,7 +10461,7 @@ function startCoinPurchase(coins){
     })
     .catch(err => {
       console.warn("Erreur lors de la création du paiement :", err);
-      if(btn){ btn.disabled = false; btn.innerHTML = `${icon('lock')} Pay ${formatEur(coins * COIN_PRICE_EUR)}`; }
+      if(btn){ btn.disabled = false; btn.innerHTML = `${icon('lock')} Pay ${formatEur(depositTotalEur(coins))}`; }
       if(errBox){
         errBox.textContent = (err && err.message) ? err.message : "Payment could not be started. Please try again.";
         errBox.style.display = "block";

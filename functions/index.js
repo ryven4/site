@@ -48,6 +48,9 @@ const SITE_URL = "https://ryven4.github.io/site/";
 const MIN_DEPOSIT_COINS = 5;
 const MAX_DEPOSIT_COINS = 500; // = 500 € max par paiement (même limite que côté site)
 const COIN_PRICE_EUR = 1; // 1 coin = 1 €, doit rester identique à COIN_PRICE_EUR dans index.html
+const DEPOSIT_FEE_RATE = 0.05; // 5 % de frais de service ajoutés au paiement (identique à index.html)
+const depositCoinsCents = (coins) => Math.round(coins * COIN_PRICE_EUR * 100);
+const depositFeeCents = (coins) => Math.round(depositCoinsCents(coins) * DEPOSIT_FEE_RATE);
 
 /* =========================================================
    1) createCheckoutSession — crée une session de paiement Stripe.
@@ -89,7 +92,15 @@ exports.createCheckoutSession = onCall(
           price_data: {
             currency: "eur",
             product_data: { name: `${coins} Prime Token Coins` },
-            unit_amount: Math.round(coins * COIN_PRICE_EUR * 100), // centimes
+            unit_amount: depositCoinsCents(coins), // centimes
+          },
+          quantity: 1,
+        },
+        {
+          price_data: {
+            currency: "eur",
+            product_data: { name: "Frais de service (5 %)" },
+            unit_amount: depositFeeCents(coins),
           },
           quantity: 1,
         },
@@ -175,7 +186,7 @@ exports.stripeWebhook = onRequest(
     const cc = session.currency_conversion;
     const payCurrency = cc && cc.source_currency ? cc.source_currency : session.currency;
     const payAmount = cc && typeof cc.amount_total === "number" ? cc.amount_total : session.amount_total;
-    if (payCurrency !== "eur" || payAmount !== Math.round(coins * COIN_PRICE_EUR * 100)) {
+    if (payCurrency !== "eur" || payAmount !== depositCoinsCents(coins) + depositFeeCents(coins)) {
       logger.error("Amount mismatch on deposit", { sessionId: session.id, amount: payAmount, currency: payCurrency, coins });
       // Gardé pour vérification manuelle (jamais perdu en silence).
       await db.collection("flaggedDeposits").doc(session.id).set({ uid, coins, amount: payAmount, currency: payCurrency, at: Date.now() }, { merge: true });
