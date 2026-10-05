@@ -4398,7 +4398,7 @@ function withdrawalsHTML(){
   if(!modWithdrawalsCache.length) return `<div style="color:var(--muted2); font-size:10px;">No pending withdrawal.</div>`;
   return modWithdrawalsCache.map(w => `
     <div class="stats-history-row" style="gap:8px; flex-wrap:wrap;">
-      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins${w.banned ? ' · <strong style="color:var(--red);">BANNED</strong>' : ''}${typeof w.balance === "number" ? ` · balance <strong style="color:${w.balance < 0 ? 'var(--red)' : 'inherit'};">${formatCoins(w.balance)}</strong>` : ''}</span>
+      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins · send <strong style="color:var(--green);">${formatEur(typeof w.payout === "number" ? w.payout : withdrawPayoutEur(Number(w.amount) || 0))}</strong>${w.banned ? ' · <strong style="color:var(--red);">BANNED</strong>' : ''}${typeof w.balance === "number" ? ` · balance <strong style="color:${w.balance < 0 ? 'var(--red)' : 'inherit'};">${formatCoins(w.balance)}</strong>` : ''}</span>
       <span class="stats-history-meta">${escapeHTML(w.epic || "—")} · ${escapeHTML(w.discordUsername || "—")} · ID ${escapeHTML(w.id)} · ${new Date(Number(w.createdAt) || 0).toLocaleString()}</span>
       <span style="display:flex; gap:6px;">
         <button class="btn green small" onclick="resolveWithdrawal(${jsArg(w.id)}, 'paid')">Paid</button>
@@ -10271,6 +10271,13 @@ function setWalletTab(tab){ walletTab = tab; render(); }
    virement fait (outil "Give Coins" avec un montant négatif).
 ========================================================= */
 const WITHDRAW_MIN = 15;
+const WITHDRAW_FEE_RATE = 0.10; // 10 % de frais (identique à functions/economy.js)
+function withdrawPayoutEur(amount){ return Math.round(amount * (1 - WITHDRAW_FEE_RATE) * 100) / 100; }
+function updateWithdrawReceive(){
+  const el = document.getElementById("withdrawAmount"), out = document.getElementById("withdrawReceive");
+  if(!el || !out) return; const a = Math.floor(parseFloat(el.value));
+  out.textContent = isNaN(a) || a <= 0 ? "" : `You receive ${formatEur(withdrawPayoutEur(a))} (10% fees)`;
+}
 function withdrawHTML(){
   const bal = state.coins || 0;
   const can = bal >= WITHDRAW_MIN;
@@ -10282,7 +10289,7 @@ function withdrawHTML(){
         <div class="wd-rows">
           <div class="wd-row"><span>Available</span><strong>${coinIcon(14)}${formatCoins(bal)} <em>= ${formatEur(bal * COIN_PRICE_EUR)}</em></strong></div>
           <div class="wd-row"><span>Minimum withdrawal</span><strong>${formatEur(WITHDRAW_MIN)}</strong></div>
-          <div class="wd-row"><span>Rate</span><strong>1 coin = 1 €</strong></div>
+          <div class="wd-row"><span>Rate</span><strong>1 coin = 1 € <em style="font-weight:500;">· 10% fees</em></strong></div>
           <div class="wd-row"><span>Requirement</span><strong>At least one deposit (or a tournament prize)</strong></div>
           ${state.pendingWithdrawalId ? `<div class="wd-row"><span>Status</span><strong style="color:#ffab40;">A withdrawal request is pending</strong></div>` : ''}
         </div>
@@ -10290,9 +10297,10 @@ function withdrawHTML(){
           <div class="form-group" style="margin-top:14px;">
             <label>Amount to withdraw (€)</label>
             <div class="wd-input-row">
-              <input type="number" class="input" id="withdrawAmount" min="${WITHDRAW_MIN}" max="${Math.floor(bal)}" step="1" value="${Math.floor(bal)}">
-              <button class="btn" onclick="document.getElementById('withdrawAmount').value=${jsArg(Math.floor(bal))}">Max</button>
+              <input type="number" class="input" id="withdrawAmount" min="${WITHDRAW_MIN}" max="${Math.floor(bal)}" step="1" value="${Math.floor(bal)}" oninput="updateWithdrawReceive()">
+              <button class="btn" onclick="document.getElementById('withdrawAmount').value=${jsArg(Math.floor(bal))}; updateWithdrawReceive()">Max</button>
             </div>
+            <div id="withdrawReceive" style="font-size:10.5px; color:var(--muted); margin-top:6px;">You receive ${formatEur(withdrawPayoutEur(Math.floor(bal)))} (10% fees)</div>
           </div>
           <button class="btn green wd-btn" onclick="requestWithdraw()" ${state.pendingWithdrawalId ? 'disabled title="Wait until your current request is handled"' : ''}>${icon('discord')} ${state.pendingWithdrawalId ? 'Request pending…' : 'Request withdrawal'}</button>
         ` : `
@@ -10305,7 +10313,7 @@ function withdrawHTML(){
       <div class="setting-card wd-card">
         <div class="wd-title">${icon('info')} How it works</div>
         <ol class="wd-steps">
-          <li><b>Request</b> your withdrawal here (minimum ${formatEur(WITHDRAW_MIN)}).</li>
+          <li><b>Request</b> your withdrawal here (minimum ${formatEur(WITHDRAW_MIN)}, 10% fees).</li>
           <li><b>Open a ticket</b> on our Discord and paste the message we prepare for you.</li>
           <li>The coins are <b>reserved</b> right away (removed from your balance).</li>
           <li>A staff member sends your payment — if the request is declined, the coins come back.</li>
@@ -10324,13 +10332,14 @@ function requestWithdraw(){
   if(state.pendingWithdrawalId){ toast("You already have a pending withdrawal request."); return; }
   if(window.__wdInFlight) return;
   window.__wdInFlight = true;
-  callFn("requestWithdrawal", { amount }).then(res => showWithdrawTicket(amount, res && res.id)).catch(err => toast(fnErrorMessage(err))).finally(() => { window.__wdInFlight = false; });
+  callFn("requestWithdrawal", { amount }).then(res => showWithdrawTicket(amount, res && res.id, res && res.payout)).catch(err => toast(fnErrorMessage(err))).finally(() => { window.__wdInFlight = false; });
 }
-function showWithdrawTicket(amount, wid){
-  const msg = `Withdrawal request\nID: ${wid || "—"}\nUsername: ${state.username}\nEpic: ${state.epic || "—"}\nAmount: ${amount} coins (${formatEur(amount * COIN_PRICE_EUR)})`;
+function showWithdrawTicket(amount, wid, payout){
+  const pay = typeof payout === "number" ? payout : withdrawPayoutEur(amount);
+  const msg = `Withdrawal request\nID: ${wid || "—"}\nUsername: ${state.username}\nEpic: ${state.epic || "—"}\nAmount: ${amount} coins\nTo receive: ${formatEur(pay)} (10% fees)`;
   const body = document.getElementById("depositModalBody");
   body.innerHTML = `
-    <p style="font-size:14px; color:#c9ced6; line-height:1.6; margin-bottom:12px;">Your ${amount} coins are now reserved for this withdrawal. Open a ticket on our Discord and paste this message. A staff member will send your <strong style="color:#fff;">${formatEur(amount * COIN_PRICE_EUR)}</strong>.</p>
+    <p style="font-size:14px; color:#c9ced6; line-height:1.6; margin-bottom:12px;">Your ${amount} coins are now reserved for this withdrawal. Open a ticket on our Discord and paste this message. A staff member will send you <strong style="color:#fff;">${formatEur(pay)}</strong> (10% fees).</p>
     <pre class="wd-msg" id="withdrawMsg">${escapeHTML(msg)}</pre>
     <div style="display:flex; gap:10px; margin-top:16px;">
       <button class="btn" style="flex:1;" onclick="copyWithdrawMsg()">${icon('copy')} Copy message</button>
@@ -10421,8 +10430,7 @@ function openDepositModal(coins){
     <div style="text-align:center;">
       ${chestSVG("#1fe38b")}
       <div style="font-size:22px; font-weight:700; color:#fff; margin-top:6px;">${coins} Coins</div>
-      <div style="font-size:14px; color:var(--gold); font-weight:800; margin-top:2px;">${formatEur(coins * COIN_PRICE_EUR)}</div>
-      <div style="font-size:9.5px; color:var(--muted2); margin-top:3px;">+ ${formatEur(depositFeeEur(coins))} service fee (5%)</div>
+      <div style="font-size:14px; color:var(--gold); font-weight:800; margin-top:2px;">${formatEur(coins * COIN_PRICE_EUR)}<span style="font-size:11px; color:var(--muted); font-weight:600;"> + ${formatEur(depositFeeEur(coins))} fees</span></div>
     </div>
     <div style="border:1px solid var(--line2); background:var(--panel2); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin:18px 0; display:flex; align-items:center; gap:8px;">
       ${icon('shield')} Secure card payment via Stripe. Coins are credited automatically once the payment is confirmed.

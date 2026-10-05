@@ -2077,6 +2077,8 @@ module.exports = function (admin, db) {
      marque la demande "payée" ; s'il la refuse, les coins sont rendus.
   ========================================================= */
   const WITHDRAW_MIN = 15;
+  const WITHDRAW_FEE_RATE = 0.10; // 10 % de frais sur les retraits (identique à index.html)
+  const withdrawPayout = (amount) => Math.round(amount * (1 - WITHDRAW_FEE_RATE) * 100) / 100;
   // Empêche de retirer des coins obtenus uniquement avec des comptes
   // jetables (roue quotidienne). Mettre false pour désactiver.
   const WITHDRAW_REQUIRES_DEPOSIT = true;
@@ -2105,10 +2107,12 @@ module.exports = function (admin, db) {
       tx.update(userRef, { coins: roundToCents(coins - amount), pendingWithdrawalId: wRef.id });
       tx.set(wRef, {
         id: wRef.id, uid, username: me.data.username, epic: me.data.epic || null,
-        discordUsername: me.data.discordUsername || null, amount, status: "pending", createdAt: Date.now(),
+        discordUsername: me.data.discordUsername || null, amount,
+        fee: roundToCents(amount - withdrawPayout(amount)), payout: withdrawPayout(amount),
+        status: "pending", createdAt: Date.now(),
       });
     });
-    return { ok: true, id: wRef.id };
+    return { ok: true, id: wRef.id, payout: withdrawPayout(amount) };
   });
 
   const adminListWithdrawals = onCall(async (request) => {
