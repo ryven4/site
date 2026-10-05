@@ -189,6 +189,27 @@ module.exports = function (admin, db) {
     try { await ref.create({ uid: best.id, username: best.data().username, at: Date.now() }); } catch (e) { /* créé en parallèle */ }
   }
 
+  /* Adresse mail vérifiée : obligatoire pour les comptes créés APRÈS cette
+     date (les comptes plus anciens n'ont jamais reçu de mail de
+     vérification, on ne les bloque pas). Un compte déjà vérifié est mémorisé. */
+  const EMAIL_VERIFY_START_MS = Date.parse("2026-10-05T07:30:00Z");
+  const emailOkCache = new Set();
+  async function emailStatusOf(uid) {
+    if (emailOkCache.has(uid)) return { required: true, verified: true };
+    let rec;
+    try { rec = await admin.auth().getUser(uid); }
+    catch (e) { logger.warn("email check: getUser failed", { uid, error: e.message }); return { required: false, verified: true }; }
+    const created = Date.parse(rec.metadata && rec.metadata.creationTime);
+    const required = Number.isFinite(created) && created >= EMAIL_VERIFY_START_MS;
+    const verified = !required || rec.emailVerified === true;
+    if (required && verified) emailOkCache.add(uid);
+    return { required, verified };
+  }
+  const emailVerificationStatus = onCall(async (request) => {
+    const uid = requireAuth(request);
+    return emailStatusOf(uid);
+  });
+
   /* Profil de l'appelant + vérifs : pas banni, et il est bien le vrai
      propriétaire de son pseudo. À utiliser partout où il y a de l'argent. */
   async function getVerifiedMe(uid, opts) {
@@ -205,6 +226,8 @@ module.exports = function (admin, db) {
     if ((await ownerUidOf(d.username)) !== uid) {
       throw new HttpsError("permission-denied", "This username belongs to another account. Contact support on Discord.");
     }
+    const es = await emailStatusOf(uid);
+    if (!es.verified) throw new HttpsError("failed-precondition", "Please verify your email address first (check your inbox and spam folder), then reload the page.");
     return me;
   }
 
@@ -1915,6 +1938,23 @@ module.exports = function (admin, db) {
     return { ok: true };
   });
 
+  /* Interrupteur des dépôts (propriétaire seulement). Sans argument "paused",
+     renvoie juste l'état actuel. Les coins déjà déposés et les retraits ne
+     sont pas touchés. */
+  const adminSetDepositsPaused = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const me = await requireOwner(uid);
+    const ref = db.collection("serverConfig").doc("depositsPaused");
+    const d = request.data || {};
+    if (typeof d.paused === "boolean") {
+      await ref.set({ paused: d.paused, by: me.data.username, at: Date.now() });
+      await adminLog(uid, me.data.username, d.paused ? "pauseDeposits" : "resumeDeposits", {});
+      return { paused: d.paused };
+    }
+    const s = await ref.get();
+    return { paused: !!(s.exists && s.data().paused === true) };
+  });
+
   /* Annulation d'un tournoi — par le serveur (l'état serveur passe à
      "cancelled", ce qui ne peut plus être défait ; les matchs restants sont
      clos par le balayage). Jamais après le paiement des prix. */
@@ -2120,7 +2160,7 @@ module.exports = function (admin, db) {
     initAccount, selfEcoReset,
     usernameAvailable, lookupUsername, matchCreate, matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
     matchFileCheaterReport, matchAdminReportDecision, matchAdminResolveDispute, matchAdminDelete,
-    spinWheel, shopPurchase, useSnipe, sendTip, adminCancelTournament,
+    spinWheel, shopPurchase, useSnipe, sendTip, adminCancelTournament, adminSetDepositsPaused, emailVerificationStatus,
     adminAdjustCoins, adminResetEconomy, adminSetVip, adminGiveSelfSnipes,
     tournamentTick, adminStartTournamentNow, adminCreateTournament, tournamentRegister, tournamentUnregister,
     adminSetModerator,

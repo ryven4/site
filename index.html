@@ -3033,7 +3033,16 @@ input[type="datetime-local"].input{ color-scheme:dark; }
     <div class="auth-logo-text">PRIME <span>TOKEN</span></div>
     <p class="auth-tagline">Competitive Fortnite matches. Bet coins, win, climb the ranking.</p>
 
-    <div class="auth-tabs">
+    <div id="authVerifyForm" style="display:none;">
+      <h3 style="margin:6px 0 10px; font-size:16px;">Check your inbox 📬</h3>
+      <p style="color:var(--muted); font-size:12px; line-height:1.5; margin-bottom:14px;">We sent a verification link to <strong id="verifyEmailText"></strong>. Click it (check your spam folder too), then come back here.</p>
+      <button class="btn green" style="width:100%;" id="verifyDoneBtn" onclick="verifyEmailDone()">I've verified my email</button>
+      <button class="btn" style="width:100%; margin-top:8px;" id="verifyResendBtn" onclick="verifyEmailResend()">Resend the email</button>
+      <button class="btn" style="width:100%; margin-top:8px;" onclick="logout()">Use another account</button>
+      <div class="auth-error" id="verifyMsg"></div>
+    </div>
+
+    <div class="auth-tabs" id="authTabs">
       <button class="auth-tab active" id="authTabLogin" onclick="setAuthTab('login')">Log In</button>
       <button class="auth-tab" id="authTabSignup" onclick="setAuthTab('signup')">Sign Up</button>
     </div>
@@ -4430,6 +4439,23 @@ function modGiveSelfSnipes(amount){
    solde se met à jour tout seul chez lui (voir initOwnCoinsSync). */
 /* Reset économie global (modérateur) : applique tout de suite le reset v4
    à TOUS les documents users (même hors ligne), par lots de 400. */
+let depositsPausedState = null;
+function paintDepositsStatus(){
+  const st = document.getElementById("depositsStatus"), bt = document.getElementById("depositsToggleBtn");
+  if(!st || !bt || depositsPausedState === null) return;
+  st.innerHTML = depositsPausedState ? '<span style="color:var(--red);">Deposits are OFF</span>' : '<span style="color:var(--green);">Deposits are ON</span>';
+  bt.textContent = depositsPausedState ? "Turn deposits back on" : "Turn deposits off";
+}
+function loadDepositsStatus(){
+  if(!isSuperAdmin()) return;
+  callFn("adminSetDepositsPaused", {}).then(r => { depositsPausedState = !!(r && r.paused); paintDepositsStatus(); }).catch(() => {});
+}
+async function toggleDepositsPaused(){
+  if(!isSuperAdmin() || depositsPausedState === null) return;
+  const next = !depositsPausedState;
+  if(!(await siteConfirm(next ? "Turn deposits OFF? Players won't be able to buy coins until you turn them back on." : "Turn deposits back ON?", { title:"Deposits", okLabel: next ? "Turn off" : "Turn on" }))) return;
+  callFn("adminSetDepositsPaused", { paused: next }).then(r => { depositsPausedState = !!(r && r.paused); paintDepositsStatus(); toast(depositsPausedState ? "Deposits are now OFF." : "Deposits are back ON."); }).catch(err => toast(fnErrorMessage(err)));
+}
 async function modResetEconomyAll(){
   if(!isSuperAdmin()){ toast("Only the owner can reset the economy."); return; }
   if(!(await siteConfirm("Reset ALL players to 0 coins, 0 snipes and remove every VIP?\n\nThis cannot be undone.", { title:"Reset the economy", okLabel:"Reset everyone", requireText:"RESET" }))){ toast("Reset cancelled."); return; }
@@ -7579,6 +7605,10 @@ function render(){
       content.insertAdjacentHTML("afterbegin", `<div style="margin:0 0 14px; padding:12px 16px; border:1px solid rgba(0,255,136,.35); border-radius:12px; background:rgba(0,255,136,.07); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;"><strong style="font-size:13px;">You have a match in progress</strong><button class="btn green small" onclick="setPage('lobby')">Back to my match</button></div>`);
     }
   }
+  if(content && currentPage === "moderation" && isSuperAdmin()){
+    if(depositsPausedState === null){ if(!window.__depLoading){ window.__depLoading = true; setTimeout(loadDepositsStatus, 0); } }
+    else paintDepositsStatus();
+  }
   if(content && currentPage === "moderation" && typeof modWithdrawalsCache !== "undefined" && modWithdrawalsCache === null && isAdmin() && !window.__wdAutoLoaded){
     window.__wdAutoLoaded = true; setTimeout(() => { try{ loadWithdrawals(); }catch(e){} }, 0);
   }
@@ -8922,7 +8952,15 @@ function renderInner(){
           </div>
         </div>
 
-        ${isSuperAdmin() ? `<div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.45);">
+        ${isSuperAdmin() ? `<div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,171,64,.45);">
+          <h3 style="margin-bottom:6px; font-size:14px;">${icon('lock')} Deposits</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:12px;">Turn new deposits off in one click (for example if Stripe warns you). Coins already in accounts and withdrawals are not affected.</p>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <strong id="depositsStatus" style="font-size:12px;">Checking…</strong>
+            <button class="btn" id="depositsToggleBtn" style="flex:none;" onclick="toggleDepositsPaused()">…</button>
+          </div>
+        </div>
+        <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.45);">
           <h3 style="margin-bottom:6px; font-size:14px;">${icon('alert')} Reset Economy (all players)</h3>
           <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Sets EVERY account to 0 coins, 0 snipes and removes all VIP right now — including offline players and yourself. Wheel cooldowns, stats and avatars are kept. Cannot be undone.</p>
           <button class="btn danger" style="flex:none;" onclick="modResetEconomyAll()">Reset everyone</button>
@@ -10558,6 +10596,9 @@ async function saveSettings(){
 ========================================================= */
 
 function setAuthTab(tab){
+  const vf = document.getElementById("authVerifyForm");
+  if(vf) vf.style.display = "none";
+  const tabs = document.getElementById("authTabs"); if(tabs) tabs.style.display = "";
   document.getElementById("authTabLogin").classList.toggle("active", tab === "login");
   document.getElementById("authTabSignup").classList.toggle("active", tab === "signup");
   document.getElementById("authLoginForm").style.display = tab === "login" ? "block" : "none";
@@ -10567,6 +10608,36 @@ function setAuthTab(tab){
 function showAuthScreen(){
   document.getElementById("authScreen").classList.add("open");
   document.getElementById("appRoot").style.display = "none";
+}
+
+/* Écran "vérifie ton mail" : affiché tant que l'adresse n'est pas confirmée
+   (comptes créés après la mise en place de la vérification). */
+function showVerifyScreen(email){
+  showAuthScreen();
+  ["authLoginForm", "authSignupForm", "authTabs"].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = "none"; });
+  const vf = document.getElementById("authVerifyForm"); if(vf) vf.style.display = "block";
+  const t = document.getElementById("verifyEmailText"); if(t) t.textContent = email || "your email address";
+}
+async function verifyEmailDone(){
+  const msg = document.getElementById("verifyMsg"); if(msg) msg.textContent = "";
+  const u = auth && auth.currentUser;
+  if(!u){ location.reload(); return; }
+  try{ await u.reload(); }catch(e){}
+  if(auth.currentUser && auth.currentUser.emailVerified){ location.reload(); return; }
+  if(msg) msg.textContent = "Not verified yet. Click the link in the email first (check your spam folder).";
+}
+async function verifyEmailResend(){
+  const msg = document.getElementById("verifyMsg"), btn = document.getElementById("verifyResendBtn");
+  const u = auth && auth.currentUser;
+  if(!u || typeof u.sendEmailVerification !== "function") return;
+  if(btn) btn.disabled = true;
+  try{
+    await u.sendEmailVerification();
+    if(msg) msg.textContent = "Email sent again. Check your inbox and spam folder.";
+  }catch(e){
+    if(msg) msg.textContent = (e && e.code === "auth/too-many-requests") ? "Too many requests. Wait a few minutes and try again." : "Couldn't send the email. Try again in a moment.";
+  }
+  setTimeout(() => { if(btn) btn.disabled = false; }, 30000);
 }
 
 function hideAuthScreen(){
@@ -10626,6 +10697,8 @@ async function doSignup(){
     state.username = username;
     const cred = await auth.createUserWithEmailAndPassword(email, password);
     const uid = cred.user.uid;
+    // Mail de vérification : sans lui, on ne peut pas utiliser le compte.
+    try{ if(typeof cred.user.sendEmailVerification === "function") await cred.user.sendEmailVerification(); }catch(e){ console.warn("sendEmailVerification", e); }
 
     // Le document de création ne doit contenir AUCUN champ "économique"
     // (voir economicFields() dans les règles Firestore) — sinon la règle
@@ -10691,6 +10764,18 @@ function logout(){
 
 async function loadProfileAndStart(uid){
   currentUid = uid;
+
+  // Adresse mail pas encore vérifiée (comptes récents) : écran d'attente.
+  try{
+    const cu = auth && auth.currentUser;
+    if(cu && cu.emailVerified === false){
+      try{ await cu.reload(); }catch(e){}
+      if(auth.currentUser && auth.currentUser.emailVerified === false){
+        const st = await callFnSilent("emailVerificationStatus").catch(() => null);
+        if(st && st.required && !st.verified){ showVerifyScreen(auth.currentUser.email); return; }
+      }
+    }
+  }catch(e){ console.warn("email gate", e); }
 
   try{
     const docSnap = await db.collection("users").doc(uid).get();

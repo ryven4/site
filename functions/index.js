@@ -65,6 +65,12 @@ exports.createCheckoutSession = onCall(
     }
     const uid = request.auth.uid;
 
+    // Interrupteur du propriétaire (page Moderation) : coupe les nouveaux dépôts.
+    const pauseDoc = await db.collection("serverConfig").doc("depositsPaused").get();
+    if (pauseDoc.exists && pauseDoc.data().paused === true) {
+      throw new HttpsError("failed-precondition", "Deposits are temporarily unavailable. Please try again later.");
+    }
+
     const coins = Math.floor(Number(request.data && request.data.coins));
     if (!Number.isFinite(coins) || coins < MIN_DEPOSIT_COINS || coins > MAX_DEPOSIT_COINS) {
       throw new HttpsError(
