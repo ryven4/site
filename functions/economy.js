@@ -1020,8 +1020,8 @@ module.exports = function (admin, db) {
             // un des deux passe (tirage au sort) pour que le tableau avance.
             const age = now - (match.createdAt || now);
             const ready = all.filter((p) => (match.readies || {})[p]);
-            if (age >= 15 * 60 * 1000 && ready.length === 1) await finalizeMatch(doc.id, { loser: all.find((p) => p !== ready[0]) });
-            else if (age >= 20 * 60 * 1000 && ready.length === 0) await finalizeMatch(doc.id, { winner: all[coin], noShow: true });
+            if (age >= 5 * 60 * 1000 && ready.length === 1) await finalizeMatch(doc.id, { loser: all.find((p) => p !== ready[0]) });
+            else if (age >= 8 * 60 * 1000 && ready.length === 0) await finalizeMatch(doc.id, { winner: all[coin], noShow: true });
           } else if (now - (match.serverLock.at || match.createdAt || now) >= TOURNAMENT_STALE_MS) {
             // Joué mais aucun résultat déclaré après 3 h : tirage au sort.
             await finalizeMatch(doc.id, { winner: all[coin], noResult: true });

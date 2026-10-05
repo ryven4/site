@@ -10387,7 +10387,7 @@ function chestSVG(c){
 function depositShopHTML(){
   return `
     <div class="deposit-bar">
-      <input type="number" class="input" id="depositCustom" min="1" step="1" placeholder="Custom amount (€)">
+      <input type="number" class="input" id="depositCustom" min="5" step="1" placeholder="Custom amount (€)">
       <button class="btn green" onclick="depositCustomAmount()">Deposit</button>
       <div class="deposit-rate">Rate: <strong>1 € = 1 coin</strong></div>
     </div>
@@ -10406,7 +10406,7 @@ function depositShopHTML(){
 function depositCustomAmount(){
   const el = document.getElementById("depositCustom");
   const n = el ? Math.floor(parseFloat(el.value)) : NaN;
-  if(isNaN(n) || n < 1){ toast("Enter an amount of at least 1 €."); return; }
+  if(isNaN(n) || n < 5){ toast("Enter an amount of at least 5 €."); return; }
   if(n > 500){ toast("Maximum 500 € per deposit."); return; }
   openDepositModal(n);
 }

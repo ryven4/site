@@ -45,7 +45,7 @@ const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 
 // URL publique du site (redirection après paiement) et limites de dépôt.
 const SITE_URL = "https://ryven4.github.io/site/";
-const MIN_DEPOSIT_COINS = 1;
+const MIN_DEPOSIT_COINS = 5;
 const MAX_DEPOSIT_COINS = 500; // = 500 € max par paiement (même limite que côté site)
 const COIN_PRICE_EUR = 1; // 1 coin = 1 €, doit rester identique à COIN_PRICE_EUR dans index.html
 
