@@ -1207,9 +1207,8 @@ module.exports = function (admin, db) {
     if (!winnerUsername || ![...hostPlayers, ...guestPlayers].includes(winnerUsername)) {
       throw new HttpsError("invalid-argument", "Unknown winner.");
     }
-    if ([...hostPlayers, ...guestPlayers].includes(me.data.username)) {
-      throw new HttpsError("permission-denied", "You can't settle a match you're playing in.");
-    }
+    // Les modos peuvent trancher leurs propres matchs (choix du propriétaire) :
+    // la décision reste notée dans le journal admin (adminLog).
     if (!md.serverLock && !md.tournamentId) {
       throw new HttpsError("failed-precondition", "This match hasn't started yet.");
     }
