@@ -7977,10 +7977,6 @@ function renderInner(){
                 </button>
               ` : ''}
 
-              ${(!guestFull && isHost && isSuperAdmin() && !lobby.tournamentId) ? `
-                <button class="btn" onclick="simulateOpponent(${jsArg(lobby.id)})">${icon('bot')} Simulate an Opponent</button>
-              ` : ''}
-
               ${lobby.cancelled ? `
                 <span style="font-size:9px; color:var(--red); font-weight:800; text-align:center;">MATCH CANCELLED</span>
               ` : !(isHost || isGuest) ? `
@@ -9866,27 +9862,6 @@ function executeJoin(match){
       ? `You joined the match! 🔒 ${formatCoins(res.stake)} coins locked in.`
       : (res && res.already) ? "You're already in this match!" : "You joined the match! Your host is covering your bet — you risk nothing.");
   }).catch(err => toast(fnErrorMessage(err)));
-}
-
-function simulateOpponent(matchId){
-  if(!isSuperAdmin()) return; // outil de test réservé au propriétaire (le bot ne paie aucune mise)
-  const match = state.matches.find(m => m.id === matchId);
-  if(!match) return;
-  match.hostPlayers = match.hostPlayers || [match.host];
-  match.guestPlayers = match.guestPlayers || [];
-
-  const maxPerSide = TEAM_SIZE_MAX[match.teamSize] || 1;
-  if(match.guestPlayers.length >= maxPerSide){ toast("Guest side is already full!"); return; }
-
-  const botName = "Bot_Opponent" + (match.guestPlayers.length + 1);
-  match.guestPlayers.push(botName);
-  match.players = [...match.hostPlayers, ...match.guestPlayers];
-  match.readies = match.readies || {};
-  match.readies[botName] = true;
-  save();
-  pushMatchToCloud(match);
-  toast("An opponent joined the match! Identity hidden for now.");
-  render();
 }
 
 function generateFakeStats(){
