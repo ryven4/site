@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Prime Token — Fortnite Competitive</title>
+<meta name="description" content="Prime Token: competitive Fortnite 1v1 and team matches, tournaments and rankings. Skill-based, 18+ only. Play responsibly.">
+<link rel="canonical" href="https://primetoken.fr/">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0a0e15">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Prime Token">
+<meta property="og:title" content="Prime Token — Fortnite Competitive">
+<meta property="og:description" content="Competitive Fortnite 1v1 and team matches, tournaments and rankings. Skill-based, 18+ only.">
+<meta property="og:url" content="https://primetoken.fr/">
+<meta property="og:image" content="https://primetoken.fr/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Prime Token — Fortnite Competitive">
+<meta name="twitter:description" content="Competitive Fortnite 1v1 and team matches, tournaments and rankings. Skill-based, 18+ only.">
+<meta name="twitter:image" content="https://primetoken.fr/og-image.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Prime Token","url":"https://primetoken.fr/"}</script>
 
 <style>
 :root{
@@ -5674,7 +5693,9 @@ const ECO_RESET_VERSION = 4; // v4 : reset forcé de TOUS les comptes : 0 coin, 
    compte Prime Token).
 ========================================================= */
 const DISCORD_CLIENT_ID = "1552708034113839124";
-const DISCORD_REDIRECT_URI = "https://ryven4.github.io/site/";
+// Adresse de retour de Discord = la page courante (primetoken.fr ou l'ancienne
+// adresse github.io/site). Les deux doivent figurer dans Discord > OAuth2 > Redirects.
+const DISCORD_REDIRECT_URI = window.location.origin + (window.location.pathname.indexOf("/site/") === 0 ? "/site/" : "/");
 
 function linkDiscord(){
   const url = "https://discord.com/api/oauth2/authorize"
