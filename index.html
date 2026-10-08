@@ -3050,7 +3050,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 <style id="theme-vivid">
 /* =========================================================
    THEME "VIVID" — reste vert (couleur de la marque), mais plus vivant :
-   fond émeraude nuit avec le motif hexagonal du logo, accents voisins
+   fond émeraude nuit avec lumières douces et fine grille, accents voisins
    (menthe, turquoise, cyan) et or réservé aux coins / gains.
    Pour revenir à l'ancien look : supprimer ce bloc <style id="theme-vivid">.
 ========================================================= */
@@ -3084,15 +3084,24 @@ input[type="datetime-local"].input{ color-scheme:dark; }
   --font-display:"Chakra Petch","Inter",system-ui,sans-serif;
 }
 
-/* ---------- Fond : dégradés émeraude + motif hexagonal (logo) ---------- */
+/* ---------- Fond : lumières émeraude + fine grille qui s'efface ---------- */
 body{
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 1 L55 16.5 L55 47.5 L28 63 L1 47.5 L1 16.5 Z M28 63 L28 97' fill='none' stroke='%2378ffc8' stroke-opacity='.045' stroke-width='1'/%3E%3C/svg%3E"),
-    radial-gradient(1100px 650px at 8% -12%, rgba(31,242,140,.16), transparent 62%),
-    radial-gradient(900px 620px at 100% 0%, rgba(20,214,180,.12), transparent 60%),
-    radial-gradient(900px 600px at 50% 115%, rgba(41,215,240,.07), transparent 60%),
-    var(--bg);
+    radial-gradient(1200px 700px at 12% -15%, rgba(31,242,140,.17), transparent 60%),
+    radial-gradient(1000px 650px at 95% -5%, rgba(20,214,180,.12), transparent 60%),
+    radial-gradient(900px 700px at 60% 110%, rgba(31,242,140,.07), transparent 60%),
+    linear-gradient(180deg, #071613 0%, #06110f 45%, #050e0c 100%);
   background-attachment:fixed;
+}
+body::before{
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(125,255,193,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125,255,193,.05) 1px, transparent 1px);
+  background-size:72px 72px;
+  background-position:center top;
+  -webkit-mask-image:radial-gradient(ellipse 75% 55% at 50% 0%, #000 0%, rgba(0,0,0,.5) 45%, transparent 80%);
+  mask-image:radial-gradient(ellipse 75% 55% at 50% 0%, #000 0%, rgba(0,0,0,.5) 45%, transparent 80%);
 }
 
 /* ---------- Sidebar ---------- */
@@ -3273,6 +3282,7 @@ body{
     linear-gradient(160deg, #112b26, #0a1b18);
   font-family:inherit;
 }
+.pt-modes.two{ grid-template-columns:repeat(2, minmax(0,1fr)); }
 .pt-mode.t-teal{ --c:#29d7f0; --c-rgb:41,215,240; }
 .pt-mode.t-gold{ --c:#ffc83d; --c-rgb:255,200,61; }
 .pt-mode:hover{ border-color:rgba(var(--c-rgb),.6); transform:translateY(-2px); }
@@ -3375,7 +3385,7 @@ body{
   .pt-hero{ grid-template-columns:1fr; }
   .pt-hero-art{ position:absolute; right:-40px; top:50%; transform:translateY(-50%); opacity:.22; z-index:0; }
   .pt-hero-title{ font-size:clamp(40px, 11cqi, 64px); }
-  .pt-modes{ grid-template-columns:1fr; }
+  .pt-modes, .pt-modes.two{ grid-template-columns:1fr; }
   .pt-mode{ min-height:0; }
   .pt-open-grid{ grid-template-columns:1fr; }
 }
@@ -4655,8 +4665,35 @@ function vipNameHTML(username){
   return name;
 }
 
+/* Roue ON/OFF (panneau modo, propriétaire) — drapeau public config/features. */
+let wheelOff = false;
+function applyWheelVisibility(){
+  document.querySelectorAll('.sidebar .nav button[data-page="roue"]').forEach(b => { b.style.display = wheelOff ? "none" : ""; });
+}
+function initFeaturesSync(){
+  if(!db || window.__featuresSync) return;
+  window.__featuresSync = true;
+  db.collection("config").doc("features").onSnapshot(function(snap){
+    const off = !!(snap.exists && snap.data().wheelOff === true);
+    const changed = off !== wheelOff;
+    wheelOff = off;
+    applyWheelVisibility();
+    if(changed && (currentPage === "roue" || currentPage === "home" || currentPage === "moderation")) renderSoon();
+  }, err => console.warn("features listener", err));
+}
+async function toggleWheelOff(){
+  if(!isSuperAdmin()) return;
+  const next = !wheelOff;
+  if(!(await siteConfirm(next ? "Turn the daily wheel OFF for everyone? It disappears from the site and nobody can spin. Matches and coins are not affected." : "Turn the daily wheel back ON for everyone?", { title: next ? "Turn the wheel off" : "Turn the wheel on", okLabel: next ? "Turn off" : "Turn on", danger:false }))) return;
+  callFn("adminSetWheelEnabled", { off: next }).then(r => {
+    wheelOff = !!(r && r.off); applyWheelVisibility(); render();
+    toast(wheelOff ? "The wheel is now OFF." : "The wheel is back ON.");
+  }).catch(err => toast(fnErrorMessage(err)));
+}
+
 function initModeratorsSync(){
   if(!db) return;
+  initFeaturesSync();
   db.collection("config").doc("moderators").onSnapshot(function(docSnap){
     const data = docSnap.exists ? docSnap.data() : null;
     moderatorUsernames = (data && Array.isArray(data.usernames)) ? data.usernames : [];
@@ -7196,7 +7233,7 @@ function homePageHTML(){
       <div class="pt-hero-art"><img src="${HERO_LOGO_SRC}" alt=""></div>
     </section>
 
-    <section class="pt-modes">
+    <section class="pt-modes${wheelOff ? ' two' : ''}">
       <button class="pt-mode" onclick="setPage('matches')">
         <span class="pt-mode-icon">${icon('swords')}</span>
         <strong>Matches</strong>
@@ -7211,13 +7248,13 @@ function homePageHTML(){
         <span class="pt-mode-meta">${nextT ? escapeHTML(nextT.name) + " · " + escapeHTML(tLabel) : "No tournament scheduled yet"}</span>
         <span class="pt-mode-big">${icon('trophy')}</span>
       </button>
-      <button class="pt-mode t-gold" onclick="setPage('roue')">
+      ${wheelOff ? '' : `<button class="pt-mode t-gold" onclick="setPage('roue')">
         <span class="pt-mode-icon">${icon('wheel')}</span>
         <strong>Daily wheel</strong>
         <span class="pt-mode-desc">One free spin a day for coins and snipes.</span>
         <span class="pt-mode-meta">Spin the wheel</span>
         <span class="pt-mode-big">${icon('wheel')}</span>
-      </button>
+      </button>`}
     </section>
 
     <section class="pt-cols">
@@ -8699,6 +8736,15 @@ function renderInner(){
     if(lobbyChatBox) lobbyChatBox.scrollTop = lobbyChatBox.scrollHeight;
   }
 
+  else if(currentPage === "roue" && wheelOff){
+    container.innerHTML = `
+      <div class="pt-empty" style="max-width:520px; margin:40px auto;">
+        <strong>The daily wheel is off for now</strong>
+        Keep an eye on our Discord to know when it comes back.<br>
+        <button class="btn green" onclick="setPage('matches')">Play a match</button>
+      </div>`;
+  }
+
   else if(currentPage === "roue"){
     const n = WHEEL_SEGMENTS.length;
     const segAngle = 360 / n;
@@ -9550,6 +9596,14 @@ function renderInner(){
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <strong id="depositsStatus" style="font-size:12px;">Checking…</strong>
             <button class="btn" id="depositsToggleBtn" style="flex:none;" onclick="toggleDepositsPaused()">…</button>
+          </div>
+        </div>
+        <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,200,61,.45);">
+          <h3 style="margin-bottom:6px; font-size:14px;">${icon('wheel')} Daily wheel</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:12px;">Turn the wheel on or off for everyone in one click. When it is off, it disappears from the site and the server refuses spins. Matches in progress and coins already won are not affected.</p>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <strong style="font-size:12px;">${wheelOff ? '<span style="color:var(--red);">The wheel is OFF</span>' : '<span style="color:var(--green);">The wheel is ON</span>'}</strong>
+            <button class="btn" style="flex:none;" onclick="toggleWheelOff()">${wheelOff ? 'Turn the wheel back on' : 'Turn the wheel off'}</button>
           </div>
         </div>
         <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.45);">

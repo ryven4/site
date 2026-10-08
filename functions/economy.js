@@ -1559,6 +1559,9 @@ module.exports = function (admin, db) {
   const spinWheel = onCall(async (request) => {
     const uid = requireAuth(request);
     await getVerifiedMe(uid);
+    // Interrupteur de la roue (panneau modo, propriétaire) : config/features.wheelOff
+    const feat = await db.collection("config").doc("features").get();
+    if (feat.exists && feat.data().wheelOff === true) throw new HttpsError("failed-precondition", "The wheel is turned off for now.");
     const userRef = db.collection("users").doc(uid);
     return db.runTransaction(async (tx) => {
       const snap = await tx.get(userRef);
@@ -2188,6 +2191,23 @@ module.exports = function (admin, db) {
     return { paused: !!(s.exists && s.data().paused === true) };
   });
 
+  /* Interrupteur de la roue (propriétaire seulement). Sans argument "off",
+     renvoie juste l'état. Le drapeau est public (config/features) pour que
+     le site cache la roue chez tout le monde ; seul ce serveur l'écrit. */
+  const adminSetWheelEnabled = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const me = await requireOwner(uid);
+    const ref = db.collection("config").doc("features");
+    const d = request.data || {};
+    if (typeof d.off === "boolean") {
+      await ref.set({ wheelOff: d.off, wheelBy: me.data.username, wheelAt: Date.now() }, { merge: true });
+      await adminLog(uid, me.data.username, d.off ? "wheelOff" : "wheelOn", {});
+      return { off: d.off };
+    }
+    const s = await ref.get();
+    return { off: !!(s.exists && s.data().wheelOff === true) };
+  });
+
   /* Annulation d'un tournoi — par le serveur (l'état serveur passe à
      "cancelled", ce qui ne peut plus être défait ; les matchs restants sont
      clos par le balayage). Jamais après le paiement des prix. */
@@ -2624,7 +2644,7 @@ module.exports = function (admin, db) {
     initAccount, selfEcoReset,
     usernameAvailable, lookupUsername, matchCreate, matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
     matchFileCheaterReport, matchAdminReportDecision, matchAdminResolveDispute, matchAdminDelete,
-    spinWheel, shopPurchase, useSnipe, sendTip, adminCancelTournament, adminSetDepositsPaused, emailVerificationStatus,
+    spinWheel, shopPurchase, useSnipe, sendTip, adminCancelTournament, adminSetDepositsPaused, adminSetWheelEnabled, emailVerificationStatus,
     adminAdjustCoins, adminResetEconomy, adminSetVip, adminGiveSelfSnipes,
     tournamentTick, adminStartTournamentNow, adminCreateTournament, tournamentRegister, tournamentUnregister,
     adminSetModerator,
