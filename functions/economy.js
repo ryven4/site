@@ -2552,7 +2552,16 @@ module.exports = function (admin, db) {
     const me = await getVerifiedMe(uid);
     const md0 = me.data || {};
     if (!discordVerifiedOf(md0)) throw new HttpsError("failed-precondition", "Link and verify your Discord account first (Settings > Link Discord).");
-    if (md0.epicLocked === true) return { ok: true, epicSet: false, alreadyLocked: true, epic: md0.epic || "" };
+    const refresh = (request.data || {}).refresh === true;
+    if (md0.epicLocked === true && !refresh) return { ok: true, epicSet: false, alreadyLocked: true, epic: md0.epic || "" };
+    if (refresh && md0.epicLocked === true) {
+      // Actualiser son pseudo (changement de pseudo Epic) : pas en plein match,
+      // et pas plus d'une fois toutes les 30 s (quota de l'API Yunite).
+      if (md0.epicRefreshAt && Date.now() - md0.epicRefreshAt < 30000) throw new HttpsError("resource-exhausted", "Please wait a few seconds before refreshing again.");
+      const act = await db.collection("matches").where("players", "array-contains", md0.username).get();
+      if (act.docs.some((d) => { const m = d.data(); return !m.completed && !m.cancelled; })) throw new HttpsError("failed-precondition", "Finish or leave your active matches before refreshing your Epic username.");
+    }
+    await db.collection("users").doc(uid).set({ epicRefreshAt: Date.now() }, { merge: true });
     const discordId = String(md0.discordId);
     const key = String(process.env.YUNITE_API_KEY || "").trim();
     if (!key) { logger.error("YUNITE_API_KEY missing"); throw new HttpsError("unavailable", "Epic lookup is not available right now. Open a ticket on our Discord."); }
@@ -2578,7 +2587,8 @@ module.exports = function (admin, db) {
     try { body = await res.json(); } catch (e) { body = null; }
     const u = body && Array.isArray(body.users) ? body.users.find((x) => x && x.discord && String(x.discord.id) === discordId) : null;
     const epicName = u && u.epic && typeof u.epic.epicName === "string" ? u.epic.epicName.trim().slice(0, 40) : "";
-    if (!epicName) return { ok: true, epicSet: false, notLinked: true, epic: "" };
+    if (!epicName) return { ok: true, epicSet: false, notLinked: true, epic: md0.epic || "" };
+    if (refresh && md0.epicLocked === true && epicName === md0.epic) return { ok: true, epicSet: false, unchanged: true, epic: md0.epic };
     const epicId = u.epic.epicID ? String(u.epic.epicID).slice(0, 64) : null;
 
     const bl = await db.collection("config").doc("bannedIdentities").get();
@@ -2595,12 +2605,16 @@ module.exports = function (admin, db) {
     return db.runTransaction(async (tx) => {
       const meSnap = await tx.get(userRef);
       const md = meSnap.data() || {};
-      if (md.epicLocked === true) return { ok: true, epicSet: false, alreadyLocked: true, epic: md.epic || "" };
+      if (md.epicLocked === true && !refresh) return { ok: true, epicSet: false, alreadyLocked: true, epic: md.epic || "" };
       if (!discordVerifiedOf(md) || md.discordId !== discordId) throw new HttpsError("failed-precondition", "Verify your Discord account first.");
       const dup = await tx.get(db.collection("users").where("epic", "in", caseVariants(epicName)).limit(3));
       if (dup.docs.some((d) => d.id !== uid)) return { ok: true, epicSet: false, epicConflict: true, epic: "" };
-      tx.set(userRef, { epic: epicName, epicLocked: true, epicFromDiscord: true, epicYuniteId: epicId }, { merge: true });
-      return { ok: true, epicSet: true, epic: epicName };
+      const upd = { epic: epicName, epicLocked: true, epicFromDiscord: true, epicYuniteId: epicId };
+      const changed = md.epicLocked === true && md.epic && md.epic !== epicName;
+      // Garde la trace des anciens pseudos (modération / anti-contournement).
+      if (changed) upd.epicHistory = [...(Array.isArray(md.epicHistory) ? md.epicHistory : []).slice(-9), { epic: md.epic, at: Date.now() }];
+      tx.set(userRef, upd, { merge: true });
+      return { ok: true, epicSet: true, changed: !!changed, epic: epicName };
     });
   });
 

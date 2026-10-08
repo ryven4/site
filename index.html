@@ -4637,7 +4637,7 @@ function modSearchUsers(){
         </div>
       </div>
       <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-        ${p.epicLocked ? `<button class="btn small" onclick="modResetEpicLock(${jsArg(p.uid)},${jsArg(p.username)})">Unlock Epic</button>` : ''}
+        ${p.epicLocked ? `<button class="btn small" onclick="modResetEpicLock(${jsArg(p.uid)},${jsArg(p.username)})">Unlink Epic</button>` : ''}
         ${!p.banned ? `<button class="btn small" style="background:rgba(255,176,32,.14); border-color:rgba(255,176,32,.45); color:#ffb020;" onclick="modWarnUser(${jsArg(p.uid)},${jsArg(p.username)})" ${isUsernameAdmin(p.username) ? 'disabled title="Cannot warn a moderator"' : ''}>${icon('alert')} Warn</button>` : ''}
         ${tempBanned ? `<button class="btn green small" onclick="modLiftTempBan(${jsArg(p.uid)},${jsArg(p.username)})">Lift Temp Ban</button>` : ''}
         ${p.banned
@@ -4675,7 +4675,7 @@ function modSearchEpicUsers(){
         </div>
       </div>
       <div style="display:flex; gap:6px;">
-        <button class="btn small" onclick="modResetEpicLock(${jsArg(p.uid)},${jsArg(p.username)})" ${p.epicLocked ? '' : 'disabled title="Not locked"'}>Unlock Epic</button>
+        <button class="btn small" onclick="modResetEpicLock(${jsArg(p.uid)},${jsArg(p.username)})" ${p.epicLocked ? '' : 'disabled title="Not linked"'}>Unlink Epic</button>
       </div>
     </div>
   `).join("");
@@ -4716,10 +4716,10 @@ async function modUnlinkPlayerDiscord(){
 
 async function modResetEpicLock(uid, username){
   if(!isAdmin() || !db || !uid) return;
-  if(!(await siteConfirm(`Unlock ${username}'s Epic username so they can set a new one?`, { title:"Reset Epic username", okLabel:"Unlock", danger:false }))) return;
-  db.collection("users").doc(uid).set({ epicLocked:false }, { merge:true })
-    .then(() => { toast(`${username}'s Epic username is now unlocked.`); modSearchUsers(); modSearchEpicUsers(); })
-    .catch(err => { console.warn(err); toast("Error while unlocking."); });
+  if(!(await siteConfirm(`Unlink ${username}'s Epic account from the site? They will be able to link it again from Settings (it is read again from Yunite). To force a different Epic, also unlink them in Yunite on Discord.`, { title:"Unlink Epic", okLabel:"Unlink", danger:false }))) return;
+  db.collection("users").doc(uid).set({ epic:"", epicLocked:false, epicFromDiscord:false, epicYuniteId:null }, { merge:true })
+    .then(() => { toast(`${username}'s Epic is unlinked. They can link it again from Settings.`); modSearchUsers(); modSearchEpicUsers(); })
+    .catch(err => { console.warn(err); toast("Error while unlinking."); });
 }
 
 let pendingBanUid = null;
@@ -5749,15 +5749,17 @@ async function handleDiscordOAuthRedirect(){
 
 /* Epic : lu côté serveur chez Yunite (lien fait dans le salon de vérification
    du Discord Prime Token). Rien n'est saisi à la main. */
-async function fetchEpicFromYunite(afterLink){
+async function fetchEpicFromYunite(afterLink, refresh){
   if(window.__yuniteBusy) return;
   window.__yuniteBusy = true;
   try{
-    const r = await callFn("linkEpicFromYunite", {});
+    const r = await callFn("linkEpicFromYunite", refresh ? { refresh:true } : {});
     if(r.epicSet){
       state.epic = r.epic; state.epicLocked = true;
       persistState();
-      toast("Epic linked: " + r.epic);
+      toast(r.changed ? "Epic updated: " + r.epic : "Epic linked: " + r.epic);
+    } else if(r.unchanged){
+      toast("Your Epic username is already up to date: " + r.epic);
     } else if(r.alreadyLocked){
       if(!afterLink) toast("Your Epic is already set: " + (r.epic || state.epic));
     } else if(r.epicConflict){
@@ -8976,10 +8978,13 @@ function renderInner(){
           </div>
           <div class="form-group" style="margin-bottom:15px;">
             <label>Epic Games Username</label>
-            <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Your Epic Username" ${epicEditable ? '' : 'disabled style="opacity:.5; cursor:not-allowed;"'}>
+            <div style="display:flex; gap:8px; align-items:stretch;">
+              ${discordLinked ? `<button class="btn" id="refreshEpicBtn" title="Refresh my Epic username from Yunite (use it after changing your Epic name)" style="padding:0 14px;" onclick="fetchEpicFromYunite(false, ${epicLocked ? 'true' : 'false'})">${icon('refresh') || '↻'}</button>` : ''}
+              <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Your Epic Username" style="flex:1; opacity:.6; cursor:not-allowed;" disabled>
+            </div>
             ${!discordLinked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Link your Discord above: your Epic is filled in automatically.</span>` : ''}
-            ${discordLinked && !epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Filled automatically from your Yunite link (verification channel on our Discord). It cannot be typed by hand.</span>` : ''}
-            ${discordLinked && epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Locked — open a ticket on our Discord to request a change.</span>` : ''}
+            ${discordLinked && !epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Filled automatically from your Yunite link (verification channel on our Discord). Changed your Epic name? Click the refresh button. You cannot refresh during an active match.</span>` : ''}
+            ${discordLinked && epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Linked through Yunite. Changed your Epic name? Click the refresh button. Wrong account? Open a ticket on our Discord.</span>` : ''}
           </div>
         </div>
         <div class="setting-card" style="padding:20px;">
