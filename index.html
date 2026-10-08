@@ -9810,16 +9810,7 @@ function renderInner(){
             <button class="btn" style="flex:none;" onclick="toggleWheelOff()">${wheelOff ? 'Turn the wheel back on' : 'Turn the wheel off'}</button>
           </div>
         </div>
-        <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.7);">
-          <h3 style="margin-bottom:6px; font-size:14px;">${icon('alert')} Launch reset (whole site)</h3>
-          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Makes the site brand new before the launch. Accounts are kept (username, email, Discord, Epic, Twitch, bans and warnings). Everything else is erased: coins, snipes, VIP, stats, ranking, shop items, history, notifications, every match and tournament, the global chat, deposit/withdrawal records and admin logs. Team stats go back to 0. Cannot be undone.</p>
-          <button class="btn danger" style="flex:none;" onclick="launchResetAll()">Reset the whole site</button>
-        </div>
-        <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.45);">
-          <h3 style="margin-bottom:6px; font-size:14px;">${icon('alert')} Reset Economy (all players)</h3>
-          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Sets EVERY account to 0 coins, 0 snipes and removes all VIP right now — including offline players and yourself. Wheel cooldowns, stats and avatars are kept. Cannot be undone.</p>
-          <button class="btn danger" style="flex:none;" onclick="modResetEconomyAll()">Reset everyone</button>
-        </div>` : ``}
+` : ``}
 
         <div class="setting-card" style="padding:20px; margin-bottom:18px;">
           <h3 style="margin-bottom:6px; font-size:14px;">${icon('gift')} Give or Remove Coins</h3>
