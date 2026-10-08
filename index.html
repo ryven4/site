@@ -3200,6 +3200,66 @@ body::before{
 
 @media(max-width:760px){ .mobile-tabbar{ background:rgba(6,20,17,.97) !important; border-top-color:var(--line2) !important; } }
 
+/* ---------- Menus déroulants du site (filtres) ---------- */
+.pt-filters{ display:flex; flex-wrap:wrap; gap:8px; overflow:visible !important; }
+.pt-dd{ position:relative; }
+.pt-dd-btn{
+  display:inline-flex; align-items:center; gap:10px; height:40px; padding:0 12px 0 14px; min-width:148px; justify-content:space-between;
+  border-radius:12px; border:1px solid var(--line2); color:#d7ece4; font:600 13px/1 Inter,sans-serif; cursor:pointer;
+  background:linear-gradient(180deg, rgba(17,39,35,.95), rgba(10,27,24,.95));
+}
+.pt-dd-btn .ic{ font-size:15px; color:var(--muted); transition:transform .15s ease; }
+.pt-dd-btn:hover{ border-color:rgba(31,242,140,.4); }
+.pt-dd-btn.set{ border-color:rgba(31,242,140,.55); color:#fff; background:linear-gradient(135deg, rgba(31,242,140,.18), rgba(10,27,24,.95)); }
+.pt-dd-btn.set .ic{ color:var(--green); }
+.pt-dd.open .pt-dd-btn{ border-color:var(--green); box-shadow:var(--ring); }
+.pt-dd.open .pt-dd-btn .ic{ transform:rotate(180deg); }
+.pt-dd-menu{
+  display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:60; min-width:100%; max-height:300px; overflow-y:auto;
+  padding:6px; border-radius:14px; border:1px solid rgba(31,242,140,.28);
+  background:linear-gradient(180deg, #10302a, #0a1f1b); box-shadow:0 18px 40px -12px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.2);
+}
+.pt-dd.open .pt-dd-menu{ display:block; animation:ptDdIn .12s ease-out; }
+@keyframes ptDdIn{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:none; } }
+.pt-dd-opt{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; padding:9px 11px; border:0; border-radius:9px;
+  background:transparent; color:#cfe6dd; font:500 13px/1.2 Inter,sans-serif; text-align:left; cursor:pointer; white-space:nowrap;
+}
+.pt-dd-opt:hover, .pt-dd-opt:focus-visible{ background:rgba(31,242,140,.12); color:#fff; outline:none; }
+.pt-dd-opt.on{ color:var(--green); font-weight:700; }
+.pt-dd-opt .ic{ font-size:14px; }
+@media(max-width:760px){ .pt-dd{ flex:1 1 calc(50% - 8px); } .pt-dd-btn{ width:100%; min-width:0; } }
+
+/* ---------- Twitch ---------- */
+.tw-btn{ background:linear-gradient(135deg, #a970ff, #7c3aed) !important; color:#fff !important; border:1px solid rgba(200,170,255,.4) !important; gap:8px; }
+.tw-btn:hover{ background:linear-gradient(135deg, #b98aff, #8b4cf6) !important; }
+.tw-linked{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; border:1px solid rgba(169,112,255,.4); background:rgba(169,112,255,.08); }
+.tw-linked-ic{ width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; background:#9146ff; color:#fff; font-size:18px; flex:none; }
+.tw-linked > div{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.tw-linked strong{ font-size:13px; color:#fff; overflow:hidden; text-overflow:ellipsis; }
+.tw-linked span{ font-size:11px; color:var(--muted); }
+.pt-sec-title .tw-title-ic, .pt-sec-title .tw-title-ic .ic{ color:#a970ff; display:inline-flex; }
+.tw-count{ font-family:Inter,sans-serif; font-size:11px; font-weight:700; color:#ff5d73; background:rgba(255,93,115,.12); border:1px solid rgba(255,93,115,.35); border-radius:999px; padding:2px 9px; }
+.tw-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; }
+.tw-card{ display:flex; flex-direction:column; border-radius:14px; overflow:hidden; border:1px solid rgba(169,112,255,.28); background:rgba(6,17,15,.7); color:inherit; text-decoration:none; }
+.tw-card:hover{ border-color:rgba(169,112,255,.6); }
+.tw-thumb{ position:relative; aspect-ratio:16/9; background:#1a1030 center/cover no-repeat; }
+.tw-live{ position:absolute; left:8px; top:8px; font-size:10.5px; font-weight:800; letter-spacing:.04em; color:#fff; background:#e91916; border-radius:5px; padding:2px 7px; }
+.tw-viewers{ position:absolute; left:8px; bottom:8px; font-size:11px; color:#fff; background:rgba(0,0,0,.65); border-radius:5px; padding:2px 7px; }
+.tw-body{ display:flex; flex-direction:column; gap:3px; padding:10px 12px 12px; min-width:0; }
+.tw-body strong{ font-size:14px; color:#fff; }
+.tw-body > span:not(.btn){ font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tw-body .btn{ margin-top:8px; width:100%; justify-content:center; display:inline-flex; align-items:center; }
+.player-row.has-tw{ padding-left:8px; gap:8px; }
+.tw-lobby{
+  flex:none; align-self:center; display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+  width:26px; min-height:26px; padding:4px 0; border-radius:8px; text-decoration:none;
+  color:#c9a8ff; background:rgba(145,70,255,.14); border:1px solid rgba(169,112,255,.35); font-size:14px;
+}
+.tw-lobby:hover{ background:rgba(145,70,255,.28); color:#fff; }
+.tw-lobby.live{ color:#fff; background:#9146ff; border-color:#b78cff; box-shadow:0 0 14px rgba(145,70,255,.6); }
+.tw-lobby span{ font-size:7.5px; font-weight:800; letter-spacing:.04em; line-height:1; }
+
 /* =========================================================
    ACCUEIL
 ========================================================= */
@@ -4198,6 +4258,7 @@ const ICONS = {
   discord:'<path fill="currentColor" stroke="none" d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.028C.533 9.046-.32 13.58.099 18.058a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>'
 };
 
+ICONS.twitch = '<path fill="currentColor" stroke="none" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>';
 function icon(name, extraClass){
   const body = ICONS[name];
   if(!body) return "";
@@ -4691,9 +4752,131 @@ async function toggleWheelOff(){
   }).catch(err => toast(fnErrorMessage(err)));
 }
 
+/* =========================================================
+   TWITCH — liaison (OAuth Twitch, vérifiée par le serveur) + lives.
+   config/liveStreams est mis à jour toutes les 2 min par le serveur.
+========================================================= */
+const TWITCH_CLIENT_ID = "6qqoqf6kit41rmxqdts83n9muxhvdq";
+let liveStreams = [];
+let liveStreamsByUser = {};
+function linkTwitch(){
+  const redirect = window.location.origin + (window.location.pathname.indexOf("/site/") === 0 ? "/site/" : "/");
+  window.location.href = "https://id.twitch.tv/oauth2/authorize"
+    + "?client_id=" + encodeURIComponent(TWITCH_CLIENT_ID)
+    + "&redirect_uri=" + encodeURIComponent(redirect)
+    + "&response_type=token&scope=&state=twitch&force_verify=true";
+}
+async function handleTwitchToken(accessToken){
+  try{
+    const r = await callFn("linkTwitchAccount", { accessToken });
+    state.twitchLogin = r.twitchLogin;
+    persistState();
+    toast("Twitch linked: " + r.twitchLogin);
+    render();
+  }catch(err){ toast(fnErrorMessage(err)); }
+}
+async function unlinkTwitch(){
+  if(!(await siteConfirm("Unlink your Twitch channel from Prime Token?", { title:"Unlink Twitch", okLabel:"Unlink", danger:false }))) return;
+  callFn("unlinkTwitchAccount", {}).then(() => { state.twitchLogin = null; persistState(); toast("Twitch unlinked."); render(); })
+    .catch(err => toast(fnErrorMessage(err)));
+}
+function initLiveStreamsSync(){
+  if(!db || window.__liveSync) return;
+  window.__liveSync = true;
+  db.collection("config").doc("liveStreams").onSnapshot(function(snap){
+    const d = snap.exists ? snap.data() : null;
+    // Liste trop vieille (serveur en panne) : on n'affiche rien plutôt que de faux lives.
+    const fresh = d && d.at && Date.now() - d.at < 15 * 60 * 1000;
+    liveStreams = fresh && Array.isArray(d.streams) ? d.streams.filter(x => x && x.username && x.login) : [];
+    liveStreamsByUser = {};
+    liveStreams.forEach(x => { liveStreamsByUser[x.username] = x; });
+    if(currentPage === "home" || currentPage === "lobby" || currentPage === "settings") renderSoon();
+  }, err => console.warn("live streams listener", err));
+}
+function twitchLoginOf(username){
+  if(liveStreamsByUser[username]) return liveStreamsByUser[username].login;
+  if(username === state.username) return state.twitchLogin || null;
+  const p = (allPlayersCache || []).find(pl => pl.username === username);
+  return (p && p.twitchLogin) || null;
+}
+function twitchLobbyBtnHTML(username){
+  const login = twitchLoginOf(username);
+  if(!login || !/^[a-z0-9_]{2,25}$/i.test(login)) return "";
+  const live = !!liveStreamsByUser[username];
+  return `<a class="tw-lobby ${live ? 'live' : ''}" href="https://www.twitch.tv/${encodeURIComponent(login)}" target="_blank" rel="noopener" title="${live ? 'Live on Twitch: ' : 'Twitch: '}${escapeHTML(login)}" onclick="event.stopPropagation()">${icon('twitch')}${live ? '<span>LIVE</span>' : ''}</a>`;
+}
+function liveStreamersHTML(){
+  if(!liveStreams.length) return "";
+  return `
+    <section class="pt-box">
+      <div class="pt-box-head"><h3 class="pt-sec-title"><span class="tw-title-ic">${icon('twitch')}</span> Live streamers <span class="tw-count">${liveStreams.length} live</span></h3></div>
+      <div class="tw-grid">${liveStreams.slice(0, 8).map(x => {
+        const thumb = /^https:\/\/static-cdn\.jtvnw\.net\//.test(x.thumb || "") ? x.thumb + "?t=" + Math.floor(Date.now() / 120000) : "";
+        return `
+        <a class="tw-card" href="https://www.twitch.tv/${encodeURIComponent(x.login)}" target="_blank" rel="noopener">
+          <div class="tw-thumb" ${thumb ? `style="background-image:url('${escapeHTML(thumb)}')"` : ''}>
+            <span class="tw-live">LIVE</span>
+            ${x.viewers ? `<span class="tw-viewers">${x.viewers} watching</span>` : ''}
+          </div>
+          <div class="tw-body">
+            <strong>${escapeHTML(x.username)}</strong>
+            <span>${escapeHTML(x.title || x.game || "")}</span>
+            <span class="btn tw-btn small">${icon('twitch')} Watch</span>
+          </div>
+        </a>`; }).join("")}</div>
+    </section>`;
+}
+
+/* =========================================================
+   MENUS DÉROULANTS du site (remplacent les <select> natifs, carrés et
+   impossibles à styliser sous Windows).
+========================================================= */
+function ptDropdownHTML(key, placeholder, options, current, defaultValue){
+  const cur = options.find(o => o.v === current);
+  const isSet = !!(cur && cur.v && cur.v !== (defaultValue || ""));
+  return `
+    <div class="pt-dd" data-key="${escapeHTML(key)}">
+      <button type="button" class="pt-dd-btn ${isSet ? 'set' : ''}" aria-haspopup="listbox" aria-expanded="false" onclick="togglePtDropdown(this, event)">
+        <span>${escapeHTML(cur && cur.v ? cur.l : placeholder)}</span>${icon('chevronDown')}
+      </button>
+      <div class="pt-dd-menu" role="listbox">
+        ${options.map(o => `<button type="button" role="option" class="pt-dd-opt ${o.v === current ? 'on' : ''}" aria-selected="${o.v === current}" onclick="pickPtDropdown(${jsArg(key)}, ${jsArg(o.v)})">${escapeHTML(o.l)}${o.v === current ? icon('check') : ''}</button>`).join("")}
+      </div>
+    </div>`;
+}
+function closePtDropdowns(except){
+  document.querySelectorAll(".pt-dd.open").forEach(d => { if(d !== except){ d.classList.remove("open"); const b = d.querySelector(".pt-dd-btn"); if(b) b.setAttribute("aria-expanded", "false"); } });
+}
+function togglePtDropdown(btn, e){
+  if(e) e.stopPropagation();
+  const dd = btn.closest(".pt-dd");
+  const open = !dd.classList.contains("open");
+  closePtDropdowns(dd);
+  dd.classList.toggle("open", open);
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  if(open){ const on = dd.querySelector(".pt-dd-opt.on") || dd.querySelector(".pt-dd-opt"); if(on) on.focus(); }
+}
+function pickPtDropdown(key, value){
+  closePtDropdowns();
+  setMatchFilter(key, value);
+}
+document.addEventListener("click", e => { if(!e.target.closest || !e.target.closest(".pt-dd")) closePtDropdowns(); });
+document.addEventListener("keydown", e => {
+  const dd = document.querySelector(".pt-dd.open");
+  if(!dd) return;
+  if(e.key === "Escape"){ closePtDropdowns(); const b = dd.querySelector(".pt-dd-btn"); if(b) b.focus(); return; }
+  if(e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    const opts = [...dd.querySelectorAll(".pt-dd-opt")]; const i = opts.indexOf(document.activeElement);
+    const n = e.key === "ArrowDown" ? Math.min(opts.length - 1, i + 1) : Math.max(0, i - 1);
+    if(opts[n]) opts[n].focus();
+  }
+});
+
 function initModeratorsSync(){
   if(!db) return;
   initFeaturesSync();
+  initLiveStreamsSync();
   db.collection("config").doc("moderators").onSnapshot(function(docSnap){
     const data = docSnap.exists ? docSnap.data() : null;
     moderatorUsernames = (data && Array.isArray(data.usernames)) ? data.usernames : [];
@@ -5986,6 +6169,7 @@ let state = (function(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY
   discordUsername: null,
   discordAvatar: null,
   discordVerifiedId: null,
+  twitchLogin: null,
   epicLocked: false
 };
 
@@ -5993,6 +6177,7 @@ if(state.discordId === undefined) state.discordId = null;
 if(state.discordUsername === undefined) state.discordUsername = null;
 if(state.discordAvatar === undefined) state.discordAvatar = null;
 if(state.discordVerifiedId === undefined) state.discordVerifiedId = null;
+if(state.twitchLogin === undefined) state.twitchLogin = null;
 if(state.epicLocked === undefined) state.epicLocked = false;
 if(!state.history) state.history = [];
 if(!state.joinedAt) state.joinedAt = Date.now();
@@ -6113,6 +6298,7 @@ async function handleDiscordOAuthRedirect(){
   // personne rafraîchit la page.
   history.replaceState(null, "", window.location.pathname + window.location.search);
   if(!accessToken || !db || !currentUid) return;
+  if(params.get("state") === "twitch"){ handleTwitchToken(accessToken); return; }
 
   // C'est le SERVEUR qui interroge Discord avec ce jeton, vérifie qu'un
   // Discord n'est lié qu'à un seul compte, applique la liste noire et
@@ -7233,6 +7419,8 @@ function homePageHTML(){
       <div class="pt-hero-art"><img src="${HERO_LOGO_SRC}" alt=""></div>
     </section>
 
+    ${liveStreamersHTML()}
+
     <section class="pt-modes${wheelOff ? ' two' : ''}">
       <button class="pt-mode" onclick="setPage('matches')">
         <span class="pt-mode-icon">${icon('swords')}</span>
@@ -7998,7 +8186,7 @@ function applyUserDoc(data, opts = {}){
     }
     // Identité modifiée par un modérateur (Discord délié, Epic déverrouillé) :
     // on suit la vraie valeur, sinon la prochaine sauvegarde la remettrait.
-    if(!(window.__identityEditAt && Date.now() - window.__identityEditAt < 8000)) ["discordId", "discordUsername", "discordAvatar", "discordVerifiedId", "epic", "epicLocked"].forEach(k => {
+    if(!(window.__identityEditAt && Date.now() - window.__identityEditAt < 8000)) ["discordId", "discordUsername", "discordAvatar", "discordVerifiedId", "epic", "epicLocked", "twitchLogin"].forEach(k => {
       if(k in data){
         const v = k === "epicLocked" ? !!data[k] : (data[k] === undefined ? null : data[k]);
         if(state[k] !== v && !(k === "epic" && !v && !state[k])){ state[k] = (k === "epic" ? (v || "") : v); changed = true; }
@@ -8343,27 +8531,12 @@ function renderInner(){
         </button>
       </div>
 
-      <div class="matches-filters">
-        <select onchange="setMatchFilter('mode', this.value)">
-          <option value="">Game Mode</option>
-          ${uniqueModes.map(v => `<option value="${escapeHTML(v)}" ${matchFilters.mode === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join("")}
-        </select>
-        <select onchange="setMatchFilter('region', this.value)">
-          <option value="">Region</option>
-          ${uniqueRegions.map(v => `<option value="${escapeHTML(v)}" ${matchFilters.region === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join("")}
-        </select>
-        <select onchange="setMatchFilter('platform', this.value)">
-          <option value="">Platform</option>
-          ${uniquePlatforms.map(v => `<option value="${escapeHTML(v)}" ${matchFilters.platform === v ? 'selected' : ''}>${escapeHTML(v)}</option>`).join("")}
-        </select>
-        <select onchange="setMatchFilter('teamSize', this.value)">
-          <option value="">Team Size</option>
-          ${["1v1","2v2","3v3","4v4"].map(v => `<option value="${v}" ${matchFilters.teamSize === v ? 'selected' : ''}>${v}</option>`).join("")}
-        </select>
-        <select onchange="setMatchFilter('sort', this.value)">
-          <option value="date_desc" ${matchFilters.sort === 'date_desc' ? 'selected' : ''}>Most Recent</option>
-          <option value="date_asc" ${matchFilters.sort === 'date_asc' ? 'selected' : ''}>Oldest</option>
-        </select>
+      <div class="matches-filters pt-filters">
+        ${ptDropdownHTML('mode', 'Game mode', [{ v:'', l:'All modes' }, ...uniqueModes.filter(Boolean).map(v => ({ v, l:v }))], matchFilters.mode || '')}
+        ${ptDropdownHTML('region', 'Region', [{ v:'', l:'All regions' }, ...uniqueRegions.filter(Boolean).map(v => ({ v, l:v }))], matchFilters.region || '')}
+        ${ptDropdownHTML('platform', 'Platform', [{ v:'', l:'All platforms' }, ...uniquePlatforms.filter(Boolean).map(v => ({ v, l:v }))], matchFilters.platform || '')}
+        ${ptDropdownHTML('teamSize', 'Team size', [{ v:'', l:'All sizes' }, ...["1v1","2v2","3v3","4v4"].map(v => ({ v, l:v }))], matchFilters.teamSize || '')}
+        ${ptDropdownHTML('sort', 'Most recent', [{ v:'date_desc', l:'Most recent' }, { v:'date_asc', l:'Oldest' }], matchFilters.sort || 'date_desc', 'date_desc')}
       </div>
 
       <div class="matches-list">
@@ -8505,7 +8678,8 @@ function renderInner(){
       const info = playerLiveInfo(username);
       const readyBool = lobby.readies && lobby.readies[username];
       return `
-        <div class="player-row">
+        <div class="player-row${revealed && twitchLoginOf(username) ? ' has-tw' : ''}">
+          ${revealed ? twitchLobbyBtnHTML(username) : ''}
           <div class="avatar ${revealed ? 'clickable' : ''}" ${revealed ? `onclick="showPlayerStats(${jsArg(username)})"` : ''} ${revealed ? `style="${avatarStyleAttr(isMe ? state.equippedAvatar : info.equippedAvatar)}"` : ''}>${revealed ? avatarInnerHTML(isMe ? state.equippedAvatar : info.equippedAvatar, username, isMe ? state.customAvatar : info.customAvatar) : "?"}</div>
           <div class="player-row-info">
             <div class="slot-name-row">
@@ -9490,6 +9664,18 @@ function renderInner(){
             ${discordLegacy ? `<p style="color:#ffb454; font-size:11px; margin-bottom:10px;">Your Discord was linked before our server verification. Click below once to verify it (needed to play, join tournaments and withdraw).</p>` : ''}
             <button class="btn" style="background:#5865F2; color:#fff;" onclick="linkDiscord()">${discordLegacy ? 'Verify Discord' : 'Link Discord'}</button>
           `}
+        </div>
+        <div class="setting-card" style="padding:20px;">
+          <h3 style="margin-bottom:15px; font-size:14px;"><span style="color:#a970ff;">${icon('twitch')}</span> Link Twitch</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Link your Twitch channel: when you stream, you appear in "Live streamers" on the home page and a Twitch button shows next to your name in matches.</p>
+          ${state.twitchLogin ? `
+            <div class="tw-linked">
+              <span class="tw-linked-ic">${icon('twitch')}</span>
+              <div><strong>${escapeHTML(state.twitchLogin)}</strong><span>${liveStreamsByUser[state.username] ? 'Live now' : 'Linked'}</span></div>
+              <a class="btn small" href="https://www.twitch.tv/${encodeURIComponent(state.twitchLogin)}" target="_blank" rel="noopener">Open</a>
+              <button class="btn danger small" onclick="unlinkTwitch()">Unlink</button>
+            </div>` : `
+            <button class="btn tw-btn" onclick="linkTwitch()">${icon('twitch')} Link Twitch</button>`}
         </div>
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">Profile Settings</h3>
@@ -11548,6 +11734,7 @@ async function loadProfileAndStart(uid){
       state.discordUsername = profile.discordUsername || null;
       state.discordAvatar = profile.discordAvatar || null;
       state.discordVerifiedId = profile.discordVerifiedId || null;
+      state.twitchLogin = profile.twitchLogin || null;
       state.epicLocked = !!profile.epicLocked;
       state.notifications = profile.notifications || [];
       state.settledMatchIds = profile.settledMatchIds || [];

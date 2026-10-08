@@ -2638,8 +2638,121 @@ module.exports = function (admin, db) {
     });
   });
 
+
+  /* =========================================================
+     TWITCH — liaison du compte (jeton OAuth vérifié par Twitch lui-même,
+     comme pour Discord) + détection des lives toutes les 2 minutes.
+     La liste des lives est écrite dans config/liveStreams (lisible par
+     tous) : le site l'affiche sur l'accueil et dans les lobbys.
+     ========================================================= */
+  const TWITCH_CLIENT_ID = "6qqoqf6kit41rmxqdts83n9muxhvdq";
+
+  async function httpJson(url, opts, label) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 9000);
+    try {
+      const res = await fetch(url, { ...(opts || {}), signal: ctl.signal });
+      let body = null; try { body = await res.json(); } catch (e) { body = null; }
+      return { status: res.status, ok: res.ok, body };
+    } catch (e) {
+      throw new HttpsError("unavailable", (label || "Twitch") + " is not responding, please try again in a minute.");
+    } finally { clearTimeout(timer); }
+  }
+
+  const linkTwitchAccount = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const me = await getVerifiedMe(uid);
+    const token = String((request.data || {}).accessToken || "");
+    if (!/^[A-Za-z0-9]{10,100}$/.test(token)) throw new HttpsError("invalid-argument", "Invalid Twitch token.");
+    const v = await httpJson("https://id.twitch.tv/oauth2/validate", { headers: { Authorization: "OAuth " + token } });
+    if (v.status === 401) throw new HttpsError("failed-precondition", "Your Twitch session expired. Click Link Twitch again.");
+    if (!v.ok || !v.body) throw new HttpsError("unavailable", "Twitch is not responding, please try again in a minute.");
+    if (String(v.body.client_id) !== TWITCH_CLIENT_ID) throw new HttpsError("permission-denied", "Invalid Twitch authorization.");
+    const twitchId = String(v.body.user_id || "");
+    const twitchLogin = String(v.body.login || "").toLowerCase();
+    if (!/^[0-9]{1,20}$/.test(twitchId) || !/^[a-z0-9_]{2,25}$/.test(twitchLogin)) throw new HttpsError("permission-denied", "Twitch did not share your account. Click Link Twitch again.");
+
+    const userRef = db.collection("users").doc(uid);
+    const claimRef = db.collection("twitchLinks").doc(twitchId);
+    return db.runTransaction(async (tx) => {
+      const claim = await tx.get(claimRef);
+      if (claim.exists && claim.data().uid !== uid) {
+        const other = await tx.get(db.collection("users").doc(claim.data().uid));
+        if (other.exists && other.data().twitchId === twitchId) throw new HttpsError("already-exists", "This Twitch account is already linked to another Prime Token account.");
+      }
+      const mine = await tx.get(userRef);
+      const old = mine.exists ? mine.data().twitchId : null;
+      if (old && old !== twitchId) tx.delete(db.collection("twitchLinks").doc(String(old)));
+      tx.set(claimRef, { uid, at: Date.now() });
+      tx.set(userRef, { twitchId, twitchLogin, twitchLinkedAt: Date.now() }, { merge: true });
+      return { ok: true, twitchLogin, username: me.data.username };
+    });
+  });
+
+  const unlinkTwitchAccount = onCall(async (request) => {
+    const uid = requireAuth(request);
+    await getVerifiedMe(uid);
+    const userRef = db.collection("users").doc(uid);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(userRef);
+      const tid = snap.exists ? snap.data().twitchId : null;
+      if (tid) {
+        const c = await tx.get(db.collection("twitchLinks").doc(String(tid)));
+        if (c.exists && c.data().uid === uid) tx.delete(c.ref);
+      }
+      tx.set(userRef, { twitchId: null, twitchLogin: null, twitchLinkedAt: null }, { merge: true });
+    });
+    return { ok: true };
+  });
+
+  let twitchAppToken = null; // { token, exp } — gardé en mémoire tant que l'instance vit
+  async function twitchAppAccessToken() {
+    if (twitchAppToken && twitchAppToken.exp > Date.now() + 60000) return twitchAppToken.token;
+    const secret = String(process.env.TWITCH_CLIENT_SECRET || "").trim();
+    if (!secret) return null;
+    const r = await httpJson("https://id.twitch.tv/oauth2/token?client_id=" + encodeURIComponent(TWITCH_CLIENT_ID) +
+      "&client_secret=" + encodeURIComponent(secret) + "&grant_type=client_credentials", { method: "POST" });
+    if (!r.ok || !r.body || !r.body.access_token) { logger.error("twitch app token failed", { status: r.status }); return null; }
+    twitchAppToken = { token: r.body.access_token, exp: Date.now() + (Number(r.body.expires_in) || 3600) * 1000 };
+    return twitchAppToken.token;
+  }
+
+  async function refreshTwitchLives() {
+    const token = await twitchAppAccessToken();
+    if (!token) return { skipped: true };
+    const snap = await db.collection("users").where("twitchId", ">", "").get();
+    const byId = {};
+    snap.forEach((d) => { const u = d.data(); if (u && u.twitchId && u.username && !isSuspended(u)) byId[String(u.twitchId)] = { username: u.username, login: u.twitchLogin }; });
+    const ids = Object.keys(byId);
+    const streams = [];
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      const r = await httpJson("https://api.twitch.tv/helix/streams?first=100&" + chunk.map((x) => "user_id=" + x).join("&"),
+        { headers: { "Client-Id": TWITCH_CLIENT_ID, Authorization: "Bearer " + token } });
+      if (r.status === 401) { twitchAppToken = null; return { error: "token" }; }
+      if (!r.ok || !r.body || !Array.isArray(r.body.data)) continue;
+      r.body.data.forEach((st) => {
+        const who = byId[String(st.user_id)];
+        if (!who || st.type !== "live") return;
+        streams.push({
+          username: who.username, login: String(st.user_login || who.login || "").toLowerCase().slice(0, 25),
+          title: String(st.title || "").slice(0, 140), game: String(st.game_name || "").slice(0, 60),
+          viewers: Number(st.viewer_count) || 0, startedAt: Date.parse(st.started_at) || null,
+          thumb: String(st.thumbnail_url || "").replace("{width}", "440").replace("{height}", "248").slice(0, 300),
+        });
+      });
+    }
+    streams.sort((a, b) => b.viewers - a.viewers);
+    await db.collection("config").doc("liveStreams").set({ streams: streams.slice(0, 50), at: Date.now() });
+    return { live: streams.length };
+  }
+
+  const twitchLiveSweep = onSchedule({ schedule: "every 2 minutes", timeoutSeconds: 60, secrets: ["TWITCH_CLIENT_SECRET"] }, async () => {
+    try { await refreshTwitchLives(); } catch (e) { logger.error("twitch live sweep failed", { error: e.message }); }
+  });
+
   return {
-    linkDiscordAccount, linkEpicFromYunite,
+    linkDiscordAccount, linkEpicFromYunite, linkTwitchAccount, unlinkTwitchAccount, twitchLiveSweep,
     requestWithdrawal, adminListWithdrawals, adminResolveWithdrawal,
     initAccount, selfEcoReset,
     usernameAvailable, lookupUsername, matchCreate, matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
