@@ -4727,7 +4727,17 @@ function vipNameHTML(username){
 }
 
 /* Roue ON/OFF (panneau modo, propriétaire) — drapeau public config/features. */
+const PAGE_LOADED_AT = Date.now();
 let wheelOff = false;
+async function launchResetAll(){
+  if(!isSuperAdmin()) return;
+  const ok = await siteConfirm("This cannot be undone.\n\nEvery account keeps its username, email, Discord, Epic and Twitch, plus bans and warnings. Everything else is erased: coins, snipes, VIP, stats, ranking, shop items, match history, notifications, every match and tournament, the global chat, deposit/withdrawal records and admin logs. Team stats go back to 0.", { title:"Reset the whole site", okLabel:"Reset everything", requireText:"RESET" });
+  if(!ok) return;
+  toast("Resetting… this can take a minute.");
+  callFn("adminLaunchReset", { confirm:"RESET" }).then(r => {
+    toast(`Done: ${r.users} accounts reset. The site reloads.`);
+  }).catch(err => toast(fnErrorMessage(err)));
+}
 function applyWheelVisibility(){
   document.querySelectorAll('.sidebar .nav button[data-page="roue"]').forEach(b => { b.style.display = wheelOff ? "none" : ""; });
 }
@@ -4735,6 +4745,14 @@ function initFeaturesSync(){
   if(!db || window.__featuresSync) return;
   window.__featuresSync = true;
   db.collection("config").doc("features").onSnapshot(function(snap){
+    // Reset de lancement fait pendant que la page était ouverte : on vide le
+    // cache local et on recharge (sinon on afficherait les vieilles données).
+    const resetAt = snap.exists ? Number(snap.data().resetAt) || 0 : 0;
+    if(resetAt && resetAt > PAGE_LOADED_AT){
+      try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+      setTimeout(() => location.reload(), 300);
+      return;
+    }
     const off = !!(snap.exists && snap.data().wheelOff === true);
     const changed = off !== wheelOff;
     wheelOff = off;
@@ -9791,6 +9809,11 @@ function renderInner(){
             <strong style="font-size:12px;">${wheelOff ? '<span style="color:var(--red);">The wheel is OFF</span>' : '<span style="color:var(--green);">The wheel is ON</span>'}</strong>
             <button class="btn" style="flex:none;" onclick="toggleWheelOff()">${wheelOff ? 'Turn the wheel back on' : 'Turn the wheel off'}</button>
           </div>
+        </div>
+        <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.7);">
+          <h3 style="margin-bottom:6px; font-size:14px;">${icon('alert')} Launch reset (whole site)</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Makes the site brand new before the launch. Accounts are kept (username, email, Discord, Epic, Twitch, bans and warnings). Everything else is erased: coins, snipes, VIP, stats, ranking, shop items, history, notifications, every match and tournament, the global chat, deposit/withdrawal records and admin logs. Team stats go back to 0. Cannot be undone.</p>
+          <button class="btn danger" style="flex:none;" onclick="launchResetAll()">Reset the whole site</button>
         </div>
         <div class="setting-card" style="padding:20px; margin-bottom:18px; border-color:rgba(255,77,94,.45);">
           <h3 style="margin-bottom:6px; font-size:14px;">${icon('alert')} Reset Economy (all players)</h3>

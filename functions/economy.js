@@ -2208,6 +2208,59 @@ module.exports = function (admin, db) {
     return { off: !!(s.exists && s.data().wheelOff === true) };
   });
 
+
+  /* =========================================================
+     RESET DE LANCEMENT (propriétaire) — remet le site "comme neuf" en
+     gardant les comptes : pseudo, e-mail, Discord, Epic, Twitch, bans et
+     avertissements sont conservés. Tout le reste repart de zéro.
+     Exige data.confirm === "RESET". Irréversible.
+     ========================================================= */
+  async function wipeCollection(name) {
+    let n = 0;
+    for (;;) {
+      const snap = await db.collection(name).limit(400).get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      n += snap.size;
+      if (snap.size < 400) break;
+    }
+    return n;
+  }
+  const adminLaunchReset = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
+    const uid = requireAuth(request);
+    const me = await requireOwner(uid);
+    if ((request.data || {}).confirm !== "RESET") throw new HttpsError("invalid-argument", 'Type RESET to confirm.');
+    const deleted = {};
+    for (const c of ["matches", "matchMeta", "tournaments", "serverTournaments", "tournamentPrizes", "deposits", "withdrawals",
+      "tipLog", "flaggedDeposits", "flaggedMatches", "pendingClawbacks", "clawbackBySession", "adminLogs"]) {
+      deleted[c] = await wipeCollection(c);
+    }
+    await db.collection("global_chat").doc("main").set({ messages: [] });
+    const users = await db.collection("users").get();
+    for (let i = 0; i < users.docs.length; i += 400) {
+      const batch = db.batch();
+      users.docs.slice(i, i + 400).forEach((d) => batch.update(d.ref, {
+        coins: 0, lockedCoins: 0, snipes: 0, vipUntil: null, rp: 0,
+        stats: { ...EMPTY_STATS }, history: [], notifications: [],
+        ownedAvatars: ["default"], equippedAvatar: "default", customAvatar: null, customAvatarUnlocked: false,
+        lastWheelSpin: null, tournamentPrizeTotal: 0, settledMatchIds: [],
+      }));
+      await batch.commit();
+    }
+    const teams = await db.collection("teams").get();
+    for (let i = 0; i < teams.docs.length; i += 400) {
+      const batch = db.batch();
+      teams.docs.slice(i, i + 400).forEach((d) => batch.update(d.ref, { stats: { wins: 0, losses: 0, earnings: 0 } }));
+      await batch.commit();
+    }
+    // Les sites ouverts se rechargent tout seuls (plus de vieilles données en cache).
+    await db.collection("config").doc("features").set({ resetAt: Date.now() }, { merge: true });
+    await adminLog(uid, me.data.username, "launchReset", { users: users.size, teams: teams.size, deleted });
+    return { ok: true, users: users.size, teams: teams.size, deleted };
+  });
+
   /* Annulation d'un tournoi — par le serveur (l'état serveur passe à
      "cancelled", ce qui ne peut plus être défait ; les matchs restants sont
      clos par le balayage). Jamais après le paiement des prix. */
@@ -2757,7 +2810,7 @@ module.exports = function (admin, db) {
     initAccount, selfEcoReset,
     usernameAvailable, lookupUsername, matchCreate, matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
     matchFileCheaterReport, matchAdminReportDecision, matchAdminResolveDispute, matchAdminDelete,
-    spinWheel, shopPurchase, useSnipe, sendTip, adminCancelTournament, adminSetDepositsPaused, adminSetWheelEnabled, emailVerificationStatus,
+    spinWheel, shopPurchase, useSnipe, sendTip, adminCancelTournament, adminSetDepositsPaused, adminSetWheelEnabled, adminLaunchReset, emailVerificationStatus,
     adminAdjustCoins, adminResetEconomy, adminSetVip, adminGiveSelfSnipes,
     tournamentTick, adminStartTournamentNow, adminCreateTournament, tournamentRegister, tournamentUnregister,
     adminSetModerator,
