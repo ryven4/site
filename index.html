@@ -1661,8 +1661,9 @@ button.btn.green.is-loading::after, button.btn-primary.is-loading::after{ border
 .avatar-upload-btn{ cursor:pointer; }
 .avatar-upload-hint{ color:var(--muted); font-size:10.5px; opacity:0.8; }
 
-.profile-head-info strong{ display:block; font-size:19px; color:#fff; }
-.profile-head-info span{ display:block; margin-top:4px; color:var(--muted); font-size:11px; }
+.profile-head-info{ min-width:0; max-width:100%; }
+.profile-head-info strong{ display:block; font-size:19px; color:#fff; overflow-wrap:anywhere; }
+.profile-head-info span{ display:block; margin-top:4px; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
 
 .profile-stats-grid{
   display:grid;
@@ -1861,7 +1862,7 @@ button.btn.green.is-loading::after, button.btn-primary.is-loading::after{ border
 .tier-epique .avatar-card-tier{ color:var(--purple); }
 
 .avatar-card-body{ padding:7px 8px 8px; }
-.avatar-card-body strong{ display:block; font-size:10px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.avatar-card-body strong{ display:block; font-size:10px; color:#fff; white-space:normal; overflow-wrap:anywhere; line-height:1.25; min-height:2.5em; }
 
 .avatar-card-price{ display:flex; align-items:center; gap:4px; margin:4px 0 6px; color:var(--gold); font-size:10px; font-weight:800; }
 .avatar-card-price .coin-dot{ width:9px; height:9px; }
@@ -2001,6 +2002,17 @@ button.btn.green.is-loading::after, button.btn-primary.is-loading::after{ border
 .deposit-card .dc-buy{ width:100%; border:0; border-radius:10px; padding:11px; font-weight:900; font-size:12px; letter-spacing:.5px; cursor:pointer; color:#07110b; background:var(--c); box-shadow:0 0 18px color-mix(in srgb,var(--c) 35%,transparent); }
 .deposit-card .dc-buy:hover{ filter:brightness(1.1); }
 .deposit-note{ margin-top:18px; font-size:10.5px; color:var(--muted2); text-align:center; }
+
+#depositOverlay.open{ z-index:600; }
+.legal-check{ display:flex; gap:9px; align-items:flex-start; font-size:11px; line-height:1.45; color:var(--muted); margin:10px 0 4px; cursor:pointer; text-align:left; }
+.legal-check input{ margin-top:2px; flex:0 0 auto; accent-color:var(--green); }
+.legal-check a, .legal-links a{ color:var(--muted); text-decoration:underline; }
+.legal-links{ display:block; margin-top:6px; font-size:11px; }
+.legal-body{ max-height:62vh; overflow:auto; padding-right:6px; font-size:12.5px; line-height:1.6; color:#c9ced6; }
+.legal-body h4{ color:#fff; font-size:13px; margin:14px 0 4px; }
+.legal-body ul{ margin:4px 0 4px 18px; padding:0; }
+.legal-body li{ margin:3px 0; }
+.legal-body .legal-todo{ color:#ffab40; font-weight:700; }
 </style>
 <!-- =========================================================
      REFONTE VISUELLE 2026 — noir/vert sobre, sans néons.
@@ -2541,8 +2553,8 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 .rd-step span{ font-size:11px; color:var(--muted2); }
 .rd-step.current{ border-color:color-mix(in srgb, var(--rc) 55%, transparent); background:linear-gradient(180deg, color-mix(in srgb, var(--rc) 12%, transparent), transparent 70%), var(--panel); }
 .rd-step em{ position:absolute; top:8px; right:8px; font-style:normal; font-size:10px; font-weight:700; color:#111; background:var(--rc); padding:1px 7px; border-radius:20px; }
-.rd-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-.rd-card{ padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.rd-grid{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
+.rd-card{ min-width:0; padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
 .rd-card-title{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:#fff; margin-bottom:12px; }
 .rd-rules{ list-style:none; display:flex; flex-direction:column; gap:9px; font-size:13px; color:#c9ced6; }
 .rd-rules li{ padding-left:14px; position:relative; }
@@ -2558,7 +2570,7 @@ input[type="datetime-local"].input{ color-scheme:dark; }
 .rd-empty{ padding:14px; text-align:center; font-size:13px; color:var(--muted); }
 @media(max-width:1200px){ .rd-ladder{ grid-template-columns:repeat(3,1fr); } .rd-hero{ grid-template-columns:auto 1fr; } .rd-hero-stats{ grid-column:1/-1; flex-direction:row; } }
 @media(max-width:760px){ .rd-hero{ grid-template-columns:1fr; text-align:center; justify-items:center; } .rd-bar, .rd-bar-legend{ margin-left:auto; margin-right:auto; }
-  .rd-grid{ grid-template-columns:1fr; } .rd-ladder{ grid-template-columns:repeat(2,1fr); } }
+  .rd-grid{ grid-template-columns:minmax(0,1fr); } .rd-ladder{ grid-template-columns:repeat(2,1fr); } }
 
 /* ===== Roue v2 ===== */
 .wheel-layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:center; }
@@ -3073,6 +3085,8 @@ input[type="datetime-local"].input{ color-scheme:dark; }
         <label>Password</label>
         <input class="input" type="password" id="signupPassword" placeholder="6 characters minimum">
       </div>
+      <label class="legal-check"><input type="checkbox" id="signupAge"> <span>I am <strong>18 or older</strong>. / J'ai <strong>18 ans ou plus</strong>.</span></label>
+      <label class="legal-check"><input type="checkbox" id="signupTerms"> <span>I accept the <a href="#" onclick="openLegal('terms'); return false;">Terms</a>, the <a href="#" onclick="openLegal('rules'); return false;">Rules</a> and the <a href="#" onclick="openLegal('privacy'); return false;">Privacy policy</a>. / J'accepte les CGU, le règlement et la politique de confidentialité.</span></label>
       <button class="btn green" style="width:100%; margin-top:6px;" onclick="doSignup()">Create Account</button>
       <div class="auth-error" id="signupError"></div>
     </div>
@@ -3216,7 +3230,8 @@ input[type="datetime-local"].input{ color-scheme:dark; }
   </div>
 
   <div class="footer-bottom">
-    <span>© 2026 Prime Token — Coins can be bought and withdrawn (1 coin = 1 €). Play responsibly. 18+.</span>
+    <span>© 2026 Prime Token — Coins can be bought and withdrawn (1 coin = 1 €). <strong>18+ only.</strong> Gains are never guaranteed and you can lose what you stake — only play what you can afford to lose. Besoin d'aide ? Joueurs Info Service : 09 74 75 13 13 (appel non surtaxé).</span>
+    <span class="legal-links"><a href="#" onclick="openLegal('terms'); return false;">Terms / CGU</a> · <a href="#" onclick="openLegal('rules'); return false;">Rules / Règlement</a> · <a href="#" onclick="openLegal('privacy'); return false;">Privacy / Confidentialité</a> · <a href="#" onclick="openLegal('legal'); return false;">Legal / Mentions légales</a> · <a href="#" onclick="openLegal('responsible'); return false;">Responsible play / Jeu responsable</a> · <a href="https://discord.gg/KXMpErxuSP" target="_blank" rel="noopener noreferrer">Contact</a></span>
   </div>
 </footer>
 
@@ -3650,6 +3665,10 @@ input[type="datetime-local"].input{ color-scheme:dark; }
     <div class="rules-section">
       <h3><span class="rules-num">6</span>Reporting an opponent</h3>
       <ul><li>If you are sure your opponent broke the rules, you must stop playing immediately and report your opponent.</li><li>If you are unsure, finish the match and report it once the game is over.</li></ul>
+    </div>
+    <div class="rules-section">
+      <h3><span class="rules-num">7</span>Results, disputes & sanctions</h3>
+      <ul><li>If you claim a win, your opponent has <strong>15 minutes</strong> (5 for VIP) to answer — the timer never starts before <strong>3 minutes</strong> after the match is locked. No answer = the win is validated. If both sides claim the win, send proof: a moderator decides. A dispute or report nobody handles within <strong>24 hours</strong> is cancelled and everyone is refunded.</li><li><strong>Teams:</strong> a defeat only counts when every player of the team who staked coins confirms it.</li><li><strong>Tournaments:</strong> if only one player is ready <strong>5 minutes</strong> after the match opens, the absent player loses by forfeit. If nobody is ready after 8 minutes, a draw decides. One account per person (same Discord or Epic = refused).</li><li><strong>Cancellations:</strong> an open match nobody joins within 30 minutes is cancelled and refunded.</li><li><strong>Sanctions:</strong> 3 warnings = 7-day ban. Cheating, fraud, multi-accounts, chargebacks or ban evasion = permanent ban and the balance can be withheld. Appeals: open a ticket on Discord within 14 days.</li></ul>
     </div>
   </div>
 </div>
@@ -4398,7 +4417,7 @@ function withdrawalsHTML(){
   if(!modWithdrawalsCache.length) return `<div style="color:var(--muted2); font-size:10px;">No pending withdrawal.</div>`;
   return modWithdrawalsCache.map(w => `
     <div class="stats-history-row" style="gap:8px; flex-wrap:wrap;">
-      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins · send <strong style="color:var(--green);">${formatEur(typeof w.payout === "number" ? w.payout : withdrawPayoutEur(Number(w.amount) || 0))}</strong>${w.banned ? ' · <strong style="color:var(--red);">BANNED</strong>' : ''}${typeof w.balance === "number" ? ` · balance <strong style="color:${w.balance < 0 ? 'var(--red)' : 'inherit'};">${formatCoins(w.balance)}</strong>` : ''}</span>
+      <span class="stats-history-mode">${escapeHTML(w.username)} · <strong>${formatCoins(Number(w.amount) || 0)}</strong> coins · send <strong style="color:var(--green);">${formatEur(typeof w.payout === "number" ? w.payout : (Number(w.amount) || 0))}</strong>${typeof w.payout === "number" ? '' : ' <em style="color:var(--muted2);">(before fees)</em>'}${w.tipsIn > 0 ? ` · tips received (30d) <strong>${formatCoins(w.tipsIn)}</strong>` : ''}${(w.badTipSenders || []).length ? ` · <strong style="color:var(--red);">⚠ tips from banned/negative: ${escapeHTML(w.badTipSenders.join(", "))}</strong>` : ''}${w.banned ? ' · <strong style="color:var(--red);">BANNED/SUSPENDED</strong>' : ''}${w.prizeOnly ? ' · <strong style="color:var(--red);">⚠ no deposit (tournament prize only) — check the player</strong>' : ''}${w.locked > 0 ? ` · still-locked coins <strong>${formatCoins(w.locked)}</strong>` : ''}${typeof w.ageDays === "number" ? ` · account ${w.ageDays}d old` : ''}${typeof w.depositsTotal === "number" ? ` · deposited <strong>${formatCoins(w.depositsTotal)}</strong>` : ''}${typeof w.matchProfit === "number" ? ` · match profit <strong style="color:${w.matchProfit > (w.depositsTotal || 0) * 2 + 20 ? 'var(--red)' : 'inherit'};">${formatCoins(w.matchProfit)}</strong>` : ''}${w.holdUntil && Date.now() < w.holdUntil ? ` · <strong style="color:#ffab40;">⏳ payable after ${new Date(w.holdUntil).toLocaleString()}</strong>` : ''}${typeof w.balance === "number" ? ` · balance <strong style="color:${w.balance < 0 ? 'var(--red)' : 'inherit'};">${formatCoins(w.balance)}</strong>` : ''}</span>
       <span class="stats-history-meta">${escapeHTML(w.epic || "—")} · ${escapeHTML(w.discordUsername || "—")} · ID ${escapeHTML(w.id)} · ${new Date(Number(w.createdAt) || 0).toLocaleString()}</span>
       <span style="display:flex; gap:6px;">
         <button class="btn green small" onclick="resolveWithdrawal(${jsArg(w.id)}, 'paid')">Paid</button>
@@ -5145,6 +5164,9 @@ function declareResult(matchId, type){
     } else if(status === "disputed"){
       toast("You both declared victory — send proof to resolve the dispute.");
       render();
+    } else if(status === "concede_vote"){
+      toast(`Defeat vote recorded (${res.votes}/${res.needed}). Every player on your team must confirm it.`);
+      render();
     } else if(status === "already_claimed"){
       toast("You already declared your victory, waiting for your opponent.");
     } else if(status === "teammate_claimed"){
@@ -5281,8 +5303,8 @@ function renderRematchBlock(lobby, hostPlayers, guestPlayers){
   return `
     ${blocked ? `<div style="margin-top:10px; color:#ffab40; font-size:11px;">Rematch impossible: not enough coins for ${escapeHTML(blocked.join(", "))}.</div>` : ''}
     <div style="margin-top:14px;">
-      <button class="btn ${iVoted && votedCount < all.length ? '' : 'btn-primary'}" ${iVoted && votedCount < all.length ? 'disabled' : ''} onclick="requestRematch(${jsArg(lobby.id)})">
-        ${iVoted ? `${icon('check') || '✓'} Waiting for others (${votedCount}/${all.length})` : `🔁 Rematch (${votedCount}/${all.length})`}
+      <button class="btn ${iVoted && votedCount < all.length ? '' : 'btn-primary'}" onclick="${iVoted && votedCount < all.length ? 'cancelRematch' : 'requestRematch'}(${jsArg(lobby.id)})" ${iVoted && votedCount < all.length ? 'title="Click to cancel your rematch request"' : ''}>
+        ${iVoted ? `${icon('check') || '✓'} Waiting for others (${votedCount}/${all.length}) · Cancel` : `🔁 Rematch (${votedCount}/${all.length})`}
       </button>
     </div>
   `;
@@ -5297,6 +5319,16 @@ function requestRematch(matchId){
     } else if(res.status === "created" || res.status === "already_created"){
       toast("🔁 Rematch! New match created.");
     }
+    render();
+  }).catch(err => toast(fnErrorMessage(err)));
+}
+
+function cancelRematch(matchId){
+  callFn("matchRematch", { matchId, cancel: true }).then(res => {
+    if(res.status === "cancelled") toast("Rematch request cancelled.");
+    else if(res.status === "already_created") toast("The rematch was already created.");
+    const local = state.matches.find(m => m.id === matchId);
+    if(local && res.status === "cancelled"){ const v = Object.assign({}, local.rematchVotes); delete v[state.username]; local.rematchVotes = v; }
     render();
   }).catch(err => toast(fnErrorMessage(err)));
 }
@@ -5327,9 +5359,12 @@ function renderResultSection(lobby){
   const { hostPlayers: rsHostPlayers, guestPlayers: rsGuestPlayers } = matchTeamsOf(lobby);
   const myTeam = rsHostPlayers.includes(state.username) ? rsHostPlayers : rsGuestPlayers;
   const isParticipant = rsHostPlayers.includes(state.username) || rsGuestPlayers.includes(state.username);
-  // Seul le capitaine (le host / le 1er invité) peut déclarer la défaite de son équipe.
-  const isCaptainMe = rsHostPlayers.includes(state.username) ? lobby.host === state.username : rsGuestPlayers[0] === state.username;
-  const captainNote = `<div style="color:var(--muted2); font-size:10px;">Only your team captain (${escapeHTML(rsHostPlayers.includes(state.username) ? lobby.host : (rsGuestPlayers[0] || ''))}) can declare a defeat for your team.</div>`;
+  // Équipe de plusieurs joueurs : la défaite n'est validée que quand TOUS
+  // les joueurs du camp l'ont confirmée (vote).
+  const isCaptainMe = true;
+  const mySide = rsHostPlayers.includes(state.username) ? "host" : "guest";
+  const myConcede = ((lobby.concedeVotes || {})[mySide] || []).filter(u => myTeam.includes(u));
+  const captainNote = myTeam.length > 1 ? `<div style="color:var(--muted2); font-size:10px;">A defeat counts only when every player on your team confirms it (${myConcede.length}/${myTeam.length}${myConcede.includes(state.username) ? ' — you already confirmed' : ''}).</div>` : '';
 
   if(lobby.cheaterReport && lobby.cheaterReport.status === "pending"){
     return `
@@ -5392,16 +5427,17 @@ function renderResultSection(lobby){
           </div>
         </div>
         <div style="margin-top:16px;">
-          ${isCaptainMe ? `<button class="btn danger" onclick="concedeMatch(${jsArg(lobby.id)})">${icon('xCircle')} Actually, we lost (concede)</button>` : captainNote}
+          <button class="btn danger" onclick="concedeMatch(${jsArg(lobby.id)})">${icon('xCircle')} Actually, we lost (concede)</button>${captainNote}
         </div>
       </div>
     `;
   }
 
   if(lobby.victoryClaim){
-    const remainingMs = Math.max(0, (lobby.victoryClaim.timerMs || VICTORY_TIMER_MS) - (Date.now() - lobby.victoryClaim.at));
+    const claimStartAt = Math.max(lobby.victoryClaim.at || 0, ((lobby.serverLock && lobby.serverLock.at) || 0) + 3 * 60 * 1000);
+    const remainingMs = Math.max(0, (lobby.victoryClaim.timerMs || VICTORY_TIMER_MS) - (Date.now() - claimStartAt));
     const isClaimant = lobby.victoryClaim.by === state.username || myTeam.includes(lobby.victoryClaim.by);
-    const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${lobby.victoryClaim.at}" data-timer-ms="${lobby.victoryClaim.timerMs || VICTORY_TIMER_MS}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
+    const countdownHtml = `<strong id="victoryCountdown" data-claimed-at="${claimStartAt}" data-timer-ms="${lobby.victoryClaim.timerMs || VICTORY_TIMER_MS}" style="color:var(--green); font-variant-numeric:tabular-nums;">${formatCountdown(remainingMs)}</strong>`;
 
     if(!isParticipant){
       return `
@@ -5450,7 +5486,7 @@ function renderResultSection(lobby){
         <button class="btn green" onclick="declareResult(${jsArg(lobby.id)}, 'WIN')">${icon('trophy')} Victory</button>
         ${isCaptainMe ? `<button class="btn danger" onclick="declareResult(${jsArg(lobby.id)}, 'LOSS')">${icon('xCircle')} Defeat</button>` : ''}
       </div>
-      ${isCaptainMe ? '' : `<div style="margin-top:10px;">${captainNote}</div>`}
+      ${captainNote ? `<div style="margin-top:10px;">${captainNote}</div>` : ''}
     </div>
   `;
 }
@@ -5482,12 +5518,14 @@ let state = (function(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY
   discordId: null,
   discordUsername: null,
   discordAvatar: null,
+  discordVerifiedId: null,
   epicLocked: false
 };
 
 if(state.discordId === undefined) state.discordId = null;
 if(state.discordUsername === undefined) state.discordUsername = null;
 if(state.discordAvatar === undefined) state.discordAvatar = null;
+if(state.discordVerifiedId === undefined) state.discordVerifiedId = null;
 if(state.epicLocked === undefined) state.epicLocked = false;
 if(!state.history) state.history = [];
 if(!state.joinedAt) state.joinedAt = Date.now();
@@ -5550,9 +5588,6 @@ function save(){
       epic: state.epic,
       equippedAvatar: state.equippedAvatar,
       customAvatar: state.customAvatar || null,
-      discordId: state.discordId || null,
-      discordUsername: state.discordUsername || null,
-      discordAvatar: state.discordAvatar || null,
       epicLocked: !!state.epicLocked
     }, { merge:true }).catch(err => console.warn("Erreur sauvegarde profil :", err));
   }
@@ -5594,7 +5629,7 @@ function linkDiscord(){
     + "?client_id=" + encodeURIComponent(DISCORD_CLIENT_ID)
     + "&redirect_uri=" + encodeURIComponent(DISCORD_REDIRECT_URI)
     + "&response_type=token"
-    + "&scope=identify";
+    + "&scope=" + encodeURIComponent("identify connections");
   window.location.href = url;
 }
 
@@ -5612,62 +5647,30 @@ async function handleDiscordOAuthRedirect(){
   history.replaceState(null, "", window.location.pathname + window.location.search);
   if(!accessToken || !db || !currentUid) return;
 
+  // C'est le SERVEUR qui interroge Discord avec ce jeton, vérifie qu'un
+  // Discord n'est lié qu'à un seul compte, applique la liste noire et
+  // récupère le compte Epic lié au Discord. Le navigateur n'écrit plus rien.
   try{
-    const res = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: "Bearer " + accessToken }
-    });
-    if(!res.ok) throw new Error("Discord API error " + res.status);
-    const discordUser = await res.json();
-    const discordId = discordUser.id;
-    const discordUsername = discordUser.username
-      + (discordUser.discriminator && discordUser.discriminator !== "0" ? "#" + discordUser.discriminator : "");
-
-    // Anti multi-comptes : ce Discord ne doit être lié à AUCUN AUTRE compte.
-    const existing = await db.collection("users").where("discordId", "==", discordId).limit(5).get();
-    const usedByOther = existing.docs.some(d => d.id !== currentUid);
-    if(usedByOther){
-      toast("This Discord account is already linked to another Prime Token account.");
-      return;
-    }
-
-    // Anti contournement de ban : ce Discord ID est-il dans la liste noire
-    // (attaché à un compte précédemment banni) ? On lit la liste fraîche
-    // depuis Firestore (pas le cache local) pour être sûr de ne pas rater
-    // un ban tout juste posé par un modérateur.
-    try{
-      const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
-      const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
-      const blacklistedDiscordIds = (blacklist && Array.isArray(blacklist.discordIds)) ? blacklist.discordIds : [];
-      if(blacklistedDiscordIds.includes(discordId)){
-        // On banne direct ce nouveau compte aussi — même Discord qu'un
-        // compte déjà banni, donc très probablement la même personne.
-        if(currentUid){
-          db.collection("users").doc(currentUid).set({
-            banned: true,
-            banReason: "Ban evasion: linked Discord account already banned on another Prime Token account.",
-            bannedBy: "system",
-            bannedAt: Date.now()
-          }, { merge:true }).catch(()=>{});
-        }
-        toast("This Discord account is linked to a banned Prime Token account. You have been banned.");
-        try{ await auth.signOut(); }catch(e){}
-        showAuthScreen();
-        return;
-      }
-    } catch(e){ console.warn("Erreur de vérification de la liste noire :", e); }
-
-    state.discordId = discordId;
-    window.__identityEditAt = Date.now();
-    state.discordUsername = discordUsername;
-    state.discordAvatar = discordUser.avatar
-      ? ("https://cdn.discordapp.com/avatars/" + discordId + "/" + discordUser.avatar + ".png")
-      : null;
-    save();
-    toast("Discord linked: " + discordUsername);
+    const r = await callFn("linkDiscordAccount", { accessToken });
+    state.discordId = r.discordId;
+    state.discordUsername = r.discordUsername;
+    state.discordAvatar = r.discordAvatar || null;
+    state.discordVerifiedId = r.discordId;
+    if(r.epicSet){ state.epic = r.epic; state.epicLocked = true; }
+    persistState();
+    if(r.epicSet) toast("Discord linked: " + r.discordUsername + " — Epic: " + r.epic);
+    else if(r.epicConflict) toast("Discord linked, but your Epic account is already used by another player. Open a ticket on our Discord.");
+    else if(!state.epicLocked && !r.epicFound) toast("Discord linked. No Epic Games account found on your Discord — link it in Discord (Settings > Connections) and click again, or type it below.");
+    else toast("Discord linked: " + r.discordUsername);
     render();
   } catch(err){
     console.warn("Erreur de liaison Discord :", err);
-    toast("Error while linking Discord. Please try again.");
+    const msg = fnErrorMessage(err);
+    toast(msg);
+    if(/banned/i.test(msg)){
+      try{ await auth.signOut(); }catch(e){}
+      showAuthScreen();
+    }
   }
 }
 
@@ -7134,7 +7137,7 @@ function createMatch(){
 
   const betInput = document.getElementById("createBet");
   let bet = betInput ? parseFloat(betInput.value) : 0.5;
-  if(isNaN(bet) || bet < 0.5) bet = 0.5;
+  if(isNaN(bet) || bet < 0.5){ toast("The minimum bet is 0.5 coin."); return; }
   bet = roundToCents(bet);
 
   // Ce que JE (le host) vais devoir payer tout de suite à la création :
@@ -7355,7 +7358,7 @@ function applyUserDoc(data, opts = {}){
     }
     // Identité modifiée par un modérateur (Discord délié, Epic déverrouillé) :
     // on suit la vraie valeur, sinon la prochaine sauvegarde la remettrait.
-    if(!(window.__identityEditAt && Date.now() - window.__identityEditAt < 8000)) ["discordId", "discordUsername", "discordAvatar", "epic", "epicLocked"].forEach(k => {
+    if(!(window.__identityEditAt && Date.now() - window.__identityEditAt < 8000)) ["discordId", "discordUsername", "discordAvatar", "discordVerifiedId", "epic", "epicLocked"].forEach(k => {
       if(k in data){
         const v = k === "epicLocked" ? !!data[k] : (data[k] === undefined ? null : data[k]);
         if(state[k] !== v && !(k === "epic" && !v && !state[k])){ state[k] = (k === "epic" ? (v || "") : v); changed = true; }
@@ -7439,6 +7442,10 @@ function applyUserDoc(data, opts = {}){
     }
     if((data.pendingWithdrawalId || null) !== (state.pendingWithdrawalId || null)){
       state.pendingWithdrawalId = data.pendingWithdrawalId || null;
+      changed = true;
+    }
+    if((Number(data.lockedCoins) || 0) !== (state.lockedCoins || 0)){
+      state.lockedCoins = Number(data.lockedCoins) || 0;
       changed = true;
     }
     if(Array.isArray(data.warningHistory)){
@@ -8588,7 +8595,7 @@ function renderInner(){
       <div class="section-head">
         <div>
           <h2>Ranking</h2>
-          <p>${you ? `You're currently <strong style="color:#fff;">#${you.place}</strong> among the top ${board.length} players.` : "Prime Token community ranking."}</p>
+          <p>${you && board.length > 1 ? `You're currently <strong style="color:#fff;">#${you.place}</strong> among the top ${board.length} players.` : "Prime Token community ranking."}</p>
         </div>
         <div class="rank-tabs">
           ${periods.map(p => `<button class="rank-tab ${p.key === period ? 'active' : ''}" onclick="switchRankPeriod(${jsArg(p.key)})">${p.label}</button>`).join("")}
@@ -8833,27 +8840,30 @@ function renderInner(){
   }
 
   else if(currentPage === "settings"){
-    const discordLinked = !!state.discordId;
+    const discordLinked = discordIsVerified();
+    const discordLegacy = !!state.discordId && !discordLinked;
     const epicLocked = !!state.epicLocked;
     const epicEditable = discordLinked && !epicLocked;
     container.innerHTML = `
       <div class="settings-grid">
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">${icon('discord')} Link Discord</h3>
-          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">You must link your Discord account before you can set your Epic Games username. One Discord account can only be linked to one Prime Token account.</p>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Connect your Discord account: it is checked by our server, and your Epic Games username is filled in automatically if it is linked to your Discord (Discord > Settings > Connections > Epic Games). One Discord account can only be linked to one Prime Token account.</p>
           ${discordLinked ? `
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--brand); background:rgba(0,255,136,0.06); border-radius:10px;">
               <div style="display:flex; align-items:center; gap:10px;">
                 ${state.discordAvatar ? `<img src="${escapeHTML(state.discordAvatar)}" style="width:28px;height:28px;border-radius:50%;">` : ''}
                 <div>
-                  <strong style="display:block; font-size:12px; color:var(--brand);">✓ Connected</strong>
+                  <strong style="display:block; font-size:12px; color:var(--brand);">✓ Verified</strong>
                   <span style="font-size:11px; color:var(--muted);">${escapeHTML(state.discordUsername || '')}</span>
                 </div>
               </div>
               <span style="font-size:9px; color:var(--muted2); text-align:right; max-width:130px;">Locked — open a ticket on our Discord to request a change.</span>
             </div>
+            ${!epicLocked ? `<button class="btn" style="background:#5865F2; color:#fff; margin-top:10px;" onclick="linkDiscord()">Get my Epic from Discord</button>` : ''}
           ` : `
-            <button class="btn" style="background:#5865F2; color:#fff;" onclick="linkDiscord()">Link Discord</button>
+            ${discordLegacy ? `<p style="color:#ffb454; font-size:11px; margin-bottom:10px;">Your Discord was linked before our server verification. Click below once to verify it (needed to play, join tournaments and withdraw).</p>` : ''}
+            <button class="btn" style="background:#5865F2; color:#fff;" onclick="linkDiscord()">${discordLegacy ? 'Verify Discord' : 'Link Discord'}</button>
           `}
         </div>
         <div class="setting-card" style="padding:20px;">
@@ -8866,7 +8876,8 @@ function renderInner(){
             <label>Epic Games Username</label>
             <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Your Epic Username" ${epicEditable ? '' : 'disabled style="opacity:.5; cursor:not-allowed;"'}>
             ${!discordLinked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Link your Discord above to unlock this field.</span>` : ''}
-            ${discordLinked && epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Locked — you can only set this once. Open a ticket on our Discord to request a change.</span>` : ''}
+            ${discordLinked && !epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Not found on your Discord? Type it here (you can only set it once).</span>` : ''}
+            ${discordLinked && epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Locked — open a ticket on our Discord to request a change.</span>` : ''}
           </div>
           <button class="btn green" onclick="saveSettings()" ${epicEditable ? '' : 'disabled title="Locked"'}>Save</button>
         </div>
@@ -9816,14 +9827,19 @@ function isOnHostTeam(match, username){
 
 // Un joueur ne peut créer ou rejoindre un match que si son compte Discord
 // est lié ET son pseudo Epic est défini/verrouillé (donc validé).
+function discordIsVerified(){
+  return !!(state.discordId && state.discordVerifiedId === state.discordId);
+}
 function hasVerifiedIdentity(){
-  return !!(state.discordId && state.epicLocked);
+  return !!(discordIsVerified() && state.epicLocked);
 }
 
 function requireVerifiedIdentity(){
   if(hasVerifiedIdentity()) return true;
-  if(!state.discordId){
-    toast("Link your Discord account in Settings before creating or joining a match.");
+  if(!discordIsVerified()){
+    toast(state.discordId
+      ? "Verify your Discord account in Settings (click Link Discord again) before creating or joining a match."
+      : "Link your Discord account in Settings before creating or joining a match.");
   } else {
     toast("Set your Epic Games username in Settings before creating or joining a match.");
   }
@@ -9974,6 +9990,10 @@ function leaveMatchById(matchId, { silent } = {}){
     }
     if(status === "result_in_progress"){
       if(!silent) toast("A result is already being processed for this match — you can't leave now.");
+      return false;
+    }
+    if(status === "concede_vote"){
+      if(!silent) toast(`The match has started: leaving counts as a forfeit vote (${res.votes}/${res.needed}). Every player on your team must agree.`);
       return false;
     }
     // "gone" / "not_in_match" : plus rien à quitter de toute façon.
@@ -10273,13 +10293,18 @@ function setWalletTab(tab){ walletTab = tab; render(); }
 const WITHDRAW_MIN = 15;
 const WITHDRAW_FEE_RATE = 0.10; // 10 % de frais (identique à functions/economy.js)
 function withdrawPayoutEur(amount){ return Math.round(amount * (1 - WITHDRAW_FEE_RATE) * 100) / 100; }
+// Coins retirables = solde - coins "verrouillés" (dépôts, tips, roue : à jouer d'abord dans un match).
+function withdrawableCoins(){ return Math.max(0, roundToCents((state.coins || 0) - (state.lockedCoins || 0))); }
 function updateWithdrawReceive(){
   const el = document.getElementById("withdrawAmount"), out = document.getElementById("withdrawReceive");
   if(!el || !out) return; const a = Math.floor(parseFloat(el.value));
-  out.textContent = isNaN(a) || a <= 0 ? "" : `You receive ${formatEur(withdrawPayoutEur(a))} (10% fees)`;
+  const bal = Math.floor(withdrawableCoins());
+  out.textContent = isNaN(a) || a <= 0 ? "" : a < WITHDRAW_MIN ? `Minimum ${WITHDRAW_MIN} coins` : a > bal ? "Not enough coins" : `You receive ${formatEur(withdrawPayoutEur(a))} (10% fees)`;
 }
 function withdrawHTML(){
-  const bal = state.coins || 0;
+  const total = state.coins || 0;
+  const bal = withdrawableCoins();
+  const lockedNow = Math.max(0, roundToCents(total - bal));
   const can = bal >= WITHDRAW_MIN;
   const pct = Math.min(100, Math.round(bal / WITHDRAW_MIN * 100));
   return `
@@ -10287,7 +10312,9 @@ function withdrawHTML(){
       <div class="setting-card wd-card">
         <div class="wd-title">${icon('wallet')} Withdraw your coins</div>
         <div class="wd-rows">
-          <div class="wd-row"><span>Available</span><strong>${coinIcon(14)}${formatCoins(bal)} <em>= ${formatEur(bal * COIN_PRICE_EUR)}</em></strong></div>
+          <div class="wd-row"><span>Balance</span><strong>${coinIcon(14)}${formatCoins(total)} <em>= ${formatEur(total * COIN_PRICE_EUR)}</em></strong></div>
+          <div class="wd-row"><span>Withdrawable now</span><strong style="color:var(--green);">${coinIcon(14)}${formatCoins(bal)}</strong></div>
+          ${lockedNow > 0 ? `<div class="wd-row"><span>To play first</span><strong style="color:#ffab40;">${coinIcon(14)}${formatCoins(lockedNow)} <em style="font-weight:500;">· play them in a match to unlock</em></strong></div>` : ''}
           <div class="wd-row"><span>Minimum withdrawal</span><strong>${formatEur(WITHDRAW_MIN)}</strong></div>
           <div class="wd-row"><span>Rate</span><strong>1 coin = 1 € <em style="font-weight:500;">· 10% fees</em></strong></div>
           <div class="wd-row"><span>Requirement</span><strong>At least one deposit (or a tournament prize)</strong></div>
@@ -10295,7 +10322,7 @@ function withdrawHTML(){
         </div>
         ${can ? `
           <div class="form-group" style="margin-top:14px;">
-            <label>Amount to withdraw (€)</label>
+            <label>Coins to withdraw</label>
             <div class="wd-input-row">
               <input type="number" class="input" id="withdrawAmount" min="${WITHDRAW_MIN}" max="${Math.floor(bal)}" step="1" value="${Math.floor(bal)}" oninput="updateWithdrawReceive()">
               <button class="btn" onclick="document.getElementById('withdrawAmount').value=${jsArg(Math.floor(bal))}; updateWithdrawReceive()">Max</button>
@@ -10306,7 +10333,7 @@ function withdrawHTML(){
         ` : `
           <div class="wd-locked">
             <div class="wd-bar"><div style="width:${pct}%;"></div></div>
-            <p>You need at least <strong>${formatEur(WITHDRAW_MIN)}</strong> (${WITHDRAW_MIN} coins) to withdraw — <strong>${formatCoins(Math.max(0, WITHDRAW_MIN - bal))}</strong> coins to go.</p>
+            <p>You need at least <strong>${formatEur(WITHDRAW_MIN)}</strong> (${WITHDRAW_MIN} coins) <em>withdrawable</em> — <strong>${formatCoins(Math.max(0, WITHDRAW_MIN - bal))}</strong> to go.${lockedNow > 0 ? ` ${formatCoins(lockedNow)} of your coins still have to be played in a match.` : ''}</p>
           </div>
         `}
       </div>
@@ -10315,20 +10342,80 @@ function withdrawHTML(){
         <ol class="wd-steps">
           <li><b>Request</b> your withdrawal here (minimum ${formatEur(WITHDRAW_MIN)}, 10% fees).</li>
           <li><b>Open a ticket</b> on our Discord and paste the message we prepare for you.</li>
+          <li>Coins from deposits, tips and the wheel must be <b>played once in a match</b> before they can be withdrawn.</li>
           <li>The coins are <b>reserved</b> right away (removed from your balance).</li>
-          <li>A staff member sends your payment — if the request is declined, the coins come back.</li>
+          <li>A staff member sends your payment after a 24h security check — if the request is declined, the coins come back.</li>
         </ol>
         <a class="btn wd-discord" href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer">${icon('discord')} Open our Discord</a>
       </div>
     </div>`;
 }
 
+
+/* =========================================================
+   PAGES LÉGALES — CGU, règlement, confidentialité, mentions légales,
+   jeu responsable. À COMPLÉTER par l'éditeur : voir LEGAL ci-dessous
+   (nom/raison sociale, adresse, SIREN). Texte de base, à faire relire
+   par un juriste avant l'ouverture.
+========================================================= */
+const LEGAL = {
+  publisher: "",          // ex. "Jean Dupont (entrepreneur individuel), SIREN 123 456 789"
+  address: "",            // adresse postale de l'éditeur
+  director: "",           // directeur de la publication
+  contactEmail: "",       // e-mail de contact (en plus du ticket Discord)
+  retentionYears: 3       // durée de conservation des données après clôture du compte
+};
+function legalHTML(kind){
+  const todo = v => v ? escapeHTML(v) : `<span class="legal-todo">[à compléter par l'éditeur]</span>`;
+  if(kind === "terms") return `
+    <h4>1. Objet</h4><p>Prime Token est une plateforme où des joueurs de Fortnite s'affrontent en 1v1 ou en équipe et placent des mises en « coins » (1 coin = 1 €). Le service est réservé aux personnes de <strong>18 ans révolus</strong>, une personne = un compte.</p>
+    <h4>2. Coins et dépôts</h4><ul><li>Les coins s'achètent par carte bancaire (paiement sécurisé par Stripe). Dépôt : minimum 5 €, maximum 500 € par paiement.</li><li>Des <strong>frais de service de 5 %</strong> s'ajoutent au prix. Les coins sont crédités après confirmation du paiement.</li><li>Les coins sont un contenu numérique fourni immédiatement : en validant l'achat, tu renonces à ton droit de rétractation de 14 jours (art. L221-28 du Code de la consommation) et les coins ne sont pas remboursables, sauf erreur de notre part.</li></ul>
+    <h4>3. Frais</h4><ul><li>Dépôt : +5 %.</li><li>Gain de match : −5 % (taxe de plateforme).</li><li>Tip entre joueurs : −5 % (gratuit pour les VIP).</li><li>Retrait : −10 %.</li></ul>
+    <h4>4. Retraits</h4><ul><li>Minimum 15 coins. Il faut avoir effectué au moins un dépôt (ou gagné un prix de tournoi).</li><li><strong>Coins à jouer d'abord :</strong> les coins issus d'un dépôt, d'un tip reçu ou de la roue ne sont retirables qu'après avoir été misés dans un match terminé. Le site affiche « Withdrawable now ».</li><li>Les retraits sont traités manuellement par l'équipe via un ticket Discord, après un contrôle de sécurité d'au moins 24 h (âge, identité, fraude). Aucun délai maximum n'est garanti. Le paiement est fait par le moyen que nous jugeons adapté.</li><li>Un retrait peut être refusé en cas de fraude, de litige de paiement, de multi-comptes ou de non-respect des règles ; les coins sont alors rendus ou retenus.</li></ul>
+    <h4>5. Matchs, tournois, résultats</h4><p>Les résultats, délais, litiges et sanctions sont décrits dans le Règlement. La décision d'un modérateur est définitive sauf erreur manifeste.</p>
+    <h4>6. Fraude et contestations de paiement</h4><p>Toute fraude (carte volée, multi-comptes, collusion, contournement de ban) entraîne un bannissement définitif et la retenue du solde. Une contestation bancaire (chargeback) ou un remboursement entraîne la reprise des coins correspondants et la suspension du compte.</p>
+    <h4>7. Risques</h4><p>Miser comporte un risque de perte. Les gains ne sont jamais garantis. Ne mise que ce que tu peux te permettre de perdre.</p>
+    <h4>8. Compte et sanctions</h4><p>Nous pouvons suspendre ou supprimer un compte qui enfreint ces règles. Recours : ticket Discord sous 14 jours.</p>
+    <h4>9. Droit applicable</h4><p>Droit français. En cas de litige, contacte-nous d'abord (Discord ou e-mail) ; le médiateur de la consommation et les tribunaux compétents restent ouverts.</p>`;
+  if(kind === "rules") return `
+    <h4>Résultats</h4><ul><li>Après le verrouillage du match, déclare « Victoire » ou « Défaite ». Si tu réclames la victoire, ton adversaire a <strong>15 minutes</strong> (5 pour un VIP) pour répondre ; le délai ne démarre jamais avant 3 minutes après le verrouillage. Sans réponse, la victoire est validée.</li><li>Si les deux camps réclament la victoire : litige. Envoie une preuve (capture) ; un modérateur tranche. Un litige ou un signalement non traité après <strong>24 h</strong> est annulé et tout le monde est remboursé (en tournoi : tirage au sort).</li><li>Équipes : une défaite ne compte que si tous les joueurs de l'équipe ayant misé la confirment.</li></ul>
+    <h4>Tournois</h4><ul><li>Si un seul joueur est prêt <strong>5 minutes</strong> après l'ouverture du match, l'absent perd par forfait. Si personne n'est prêt au bout de 8 minutes, un tirage au sort désigne le qualifié.</li><li>Un compte par personne (même Discord ou même pseudo Epic = inscription refusée). Pas d'inscription après l'heure de départ.</li></ul>
+    <h4>Annulations</h4><p>Un match ouvert que personne ne rejoint en 30 minutes est annulé et remboursé.</p>
+    <h4>Sanctions</h4><p>3 avertissements = bannissement de 7 jours. Triche, fraude, multi-comptes, collusion, chargeback ou contournement de ban = bannissement définitif ; le solde peut être retenu. Recours : ticket Discord sous 14 jours.</p>
+    <h4>Règles de jeu</h4><p>Voir « Match Rules » dans chaque lobby (disponibilité, déconnexions, bugs, map, signalement).</p>`;
+  if(kind === "privacy") return `
+    <h4>Données traitées</h4><p>E-mail, pseudo, pseudo Epic, identifiant et pseudo Discord, historique de matchs, de dépôts et de retraits, adresse IP et <strong>empreinte technique de l'appareil</strong> (utilisée uniquement pour détecter la triche, les multi-comptes et le contournement de bannissements).</p>
+    <h4>Finalités et bases légales</h4><ul><li>Fournir le service et gérer ton compte (exécution du contrat).</li><li>Prévenir la fraude, la triche et les multi-comptes (intérêt légitime).</li><li>Respecter nos obligations légales (comptabilité, lutte contre la fraude).</li></ul>
+    <h4>Destinataires</h4><p>Google Firebase (hébergement, authentification, base de données), Stripe (paiement), Discord (liaison de compte et support). Certains de ces prestataires peuvent traiter des données hors de l'UE avec des garanties appropriées.</p>
+    <h4>Durée</h4><p>Données conservées pendant ${LEGAL.retentionYears} ans après la clôture du compte (preuves de paiement : durée légale).</p>
+    <h4>Tes droits</h4><p>Accès, rectification, suppression, opposition, limitation, portabilité : ticket Discord${LEGAL.contactEmail ? " ou " + escapeHTML(LEGAL.contactEmail) : ""}. Réclamation possible auprès de la CNIL (cnil.fr).</p>
+    <h4>Cookies et stockage local</h4><p>Le site utilise uniquement le stockage local nécessaire au fonctionnement (connexion, préférences). Aucun traceur publicitaire.</p>`;
+  if(kind === "legal") return `
+    <h4>Éditeur</h4><p>${todo(LEGAL.publisher)}</p>
+    <h4>Adresse</h4><p>${todo(LEGAL.address)}</p>
+    <h4>Directeur de la publication</h4><p>${todo(LEGAL.director)}</p>
+    <h4>Contact</h4><p>Ticket sur notre Discord${LEGAL.contactEmail ? " — " + escapeHTML(LEGAL.contactEmail) : ""}</p>
+    <h4>Hébergement et services</h4><p>Google Firebase / Google Cloud (hébergement et données) ; Stripe Payments Europe, Ltd. (paiements) ; GitHub Pages (site statique).</p>`;
+  return `
+    <h4>Joue de manière responsable</h4><ul><li>Ne mise que ce que tu peux te permettre de perdre. Les gains ne sont jamais garantis.</li><li>Fixe-toi une limite de dépôt et de temps avant de jouer.</li><li>Pour une pause ou une <strong>auto-exclusion</strong> (7 jours, 30 jours ou définitive) : ouvre un ticket sur notre Discord, ton compte sera bloqué rapidement.</li><li>Réservé aux personnes de 18 ans et plus.</li></ul>
+    <h4>Besoin d'aide ?</h4><p>Joueurs Info Service : <strong>09 74 75 13 13</strong> (appel non surtaxé, 8 h–2 h, 7 j/7) — <em>joueurs-info-service.fr</em>.</p>`;
+}
+function openLegal(kind){
+  const titles = { terms: "Conditions d'utilisation (CGU)", rules: "Règlement", privacy: "Confidentialité", legal: "Mentions légales", responsible: "Jeu responsable" };
+  const head = document.querySelector("#depositOverlay .modal-head h2");
+  if(head) head.textContent = titles[kind] || "Informations";
+  const body = document.getElementById("depositModalBody");
+  if(!body) return;
+  body.innerHTML = `<div class="legal-body">${legalHTML(kind)}</div><div style="margin-top:14px;"><button class="btn ghost" style="width:100%;" onclick="closeDepositModal()">Fermer / Close</button></div>`;
+  document.getElementById("depositOverlay").classList.add("open");
+}
+
 function requestWithdraw(){
   const el = document.getElementById("withdrawAmount");
   const amount = el ? Math.floor(parseFloat(el.value)) : NaN;
-  const bal = state.coins || 0;
+  const bal = withdrawableCoins();
   if(isNaN(amount) || amount < WITHDRAW_MIN){ toast(`The minimum withdrawal is ${formatEur(WITHDRAW_MIN)}.`); return; }
-  if(amount > bal){ toast("You don't have that many coins."); return; }
+  if(amount > bal){ toast((state.coins || 0) >= amount ? "Some of those coins still have to be played in a match first." : "You don't have that many coins."); return; }
   if(state.pendingWithdrawalId){ toast("You already have a pending withdrawal request."); return; }
   if(window.__wdInFlight) return;
   window.__wdInFlight = true;
@@ -10399,7 +10486,7 @@ function chestSVG(c){
 function depositShopHTML(){
   return `
     <div class="deposit-bar">
-      <input type="number" class="input" id="depositCustom" min="5" step="1" placeholder="Custom amount (€)">
+      <input type="number" class="input" id="depositCustom" min="5" step="1" placeholder="Amount (5 to 500 €)">
       <button class="btn green" onclick="depositCustomAmount()">Deposit</button>
       <div class="deposit-rate">Rate: <strong>1 € = 1 coin</strong></div>
     </div>
@@ -10412,7 +10499,7 @@ function depositShopHTML(){
           <button class="dc-buy" onclick="openDepositModal(${p.coins})">${formatEur(p.coins * COIN_PRICE_EUR)} — PURCHASE</button>
         </div>`).join("")}
     </div>
-    <div class="deposit-note">Coins are added to your balance once the payment is confirmed. A 5% service fee is added at checkout.</div>
+    <div class="deposit-note">Deposit: minimum 5 €, maximum 500 € per payment. Coins are added once the payment is confirmed and are not refundable. A 5% service fee is added at checkout. Deposited coins must be played in a match before they can be withdrawn.</div>
   `;
 }
 function depositCustomAmount(){
@@ -10435,10 +10522,11 @@ function openDepositModal(coins){
     <div style="border:1px solid var(--line2); background:var(--panel2); border-radius:10px; padding:12px 14px; font-size:11px; color:var(--muted); margin:18px 0; display:flex; align-items:center; gap:8px;">
       ${icon('shield')} Secure card payment via Stripe. Coins are credited automatically once the payment is confirmed.
     </div>
+    <label class="legal-check" style="margin:0 0 14px;"><input type="checkbox" id="depositConsent" onchange="const b=document.getElementById('depositPayBtn'); if(b) b.disabled=!this.checked;"> <span>J'ai 18 ans ou plus et j'accepte les <a href="#" onclick="openLegal('terms'); return false;">CGU</a>. Les coins sont un contenu numérique crédité immédiatement : je renonce à mon droit de rétractation et je comprends qu'ils ne sont pas remboursables (sauf erreur de notre part). / I am 18+, I accept the Terms and I waive the 14-day withdrawal right for this instantly delivered digital content.</span></label>
     <div id="depositErrorBox" style="display:none; border:1px solid rgba(255,71,87,.4); background:rgba(255,71,87,.08); color:var(--red); border-radius:10px; padding:10px 14px; font-size:11px; margin-bottom:14px;"></div>
     <div style="display:flex; gap:10px;">
       <button class="btn ghost" style="flex:1;" onclick="closeDepositModal()">Cancel</button>
-      <button class="btn green" style="flex:1;" id="depositPayBtn" onclick="startCoinPurchase(${coins})">${icon('lock')} Pay ${formatEur(depositTotalEur(coins))}</button>
+      <button class="btn green" style="flex:1;" id="depositPayBtn" disabled onclick="startCoinPurchase(${coins})">${icon('lock')} Pay ${formatEur(depositTotalEur(coins))}</button>
     </div>
     <div style="text-align:center; margin-top:14px;">
       <a href="${DEPOSIT_DISCORD_URL}" target="_blank" rel="noopener noreferrer" style="font-size:10px; color:var(--muted); text-decoration:underline;">Trouble paying by card? Ask on our Discord instead.</a>
@@ -10456,6 +10544,8 @@ function startCoinPurchase(coins){
   const btn = document.getElementById("depositPayBtn");
   const errBox = document.getElementById("depositErrorBox");
   if(errBox) errBox.style.display = "none";
+  const consent = document.getElementById("depositConsent");
+  if(consent && !consent.checked){ if(errBox){ errBox.textContent = "Please tick the box to accept the Terms first."; errBox.style.display = "block"; } return; }
   if(!fns || !currentUid){
     if(errBox){ errBox.textContent = "You must be logged in to make a deposit."; errBox.style.display = "block"; }
     return;
@@ -10543,8 +10633,8 @@ function sendTip(){
 }
 
 async function saveSettings(){
-  if(!state.discordId){
-    toast("Link your Discord account first.");
+  if(!discordIsVerified()){
+    toast("Link and verify your Discord account first.");
     return;
   }
   if(state.epicLocked){
@@ -10674,8 +10764,10 @@ async function doSignup(){
   errEl.textContent = "";
 
   if(!username || username.length < 3){ errEl.textContent = "Username too short (3 characters min)."; return; }
-  if(!/^[A-Za-z0-9_.\- ]{3,20}$/.test(username)){ errEl.textContent = "Username: 3–20 characters — letters, numbers, spaces, _ . - only."; return; }
+  if(!/^[A-Za-z0-9_.\-]( ?[A-Za-z0-9_.\-]){2,19}$/.test(username)){ errEl.textContent = "Username: 3–20 characters — letters, numbers, single spaces between words, _ . - only."; return; }
   if(!email || !password || password.length < 6){ errEl.textContent = "Email and password (6 characters min) required."; return; }
+  if(!document.getElementById("signupAge").checked){ errEl.textContent = "You must be 18 or older to create an account. / Tu dois avoir 18 ans ou plus."; return; }
+  if(!document.getElementById("signupTerms").checked){ errEl.textContent = "Please accept the Terms & Rules to continue. / Accepte les CGU et le règlement."; return; }
   if(!db || !auth){ errEl.textContent = "Service unavailable right now — try again in a moment."; return; }
 
   try{
@@ -10763,6 +10855,7 @@ function logout(){
   state.discordId = null;
   state.discordUsername = null;
   state.discordAvatar = null;
+  state.discordVerifiedId = null;
   state.epicLocked = false;
   state.epic = "";
   currentUid = null;
@@ -10855,6 +10948,7 @@ async function loadProfileAndStart(uid){
       if(state.stats.totalEarned === undefined) state.stats.totalEarned = 0;
       if(state.stats.highestMatchEarning === undefined) state.stats.highestMatchEarning = 0;
       state.coins = (profile.coins !== undefined) ? profile.coins : state.coins;
+      state.lockedCoins = Number(profile.lockedCoins) || 0;
       state.ownedAvatars = profile.ownedAvatars || state.ownedAvatars;
       state.equippedAvatar = profile.equippedAvatar || state.equippedAvatar;
       state.customAvatar = (profile.customAvatar !== undefined) ? profile.customAvatar : state.customAvatar;
@@ -10873,6 +10967,7 @@ async function loadProfileAndStart(uid){
       state.discordId = profile.discordId || null;
       state.discordUsername = profile.discordUsername || null;
       state.discordAvatar = profile.discordAvatar || null;
+      state.discordVerifiedId = profile.discordVerifiedId || null;
       state.epicLocked = !!profile.epicLocked;
       state.notifications = profile.notifications || [];
       state.settledMatchIds = profile.settledMatchIds || [];
@@ -10903,6 +10998,7 @@ async function loadProfileAndStart(uid){
       state.discordId = null;
       state.discordUsername = null;
       state.discordAvatar = null;
+      state.discordVerifiedId = null;
       state.epicLocked = false;
       state.epic = "";
       state.notifications = [];

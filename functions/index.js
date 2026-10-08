@@ -51,6 +51,13 @@ const COIN_PRICE_EUR = 1; // 1 coin = 1 €, doit rester identique à COIN_PRICE
 const DEPOSIT_FEE_RATE = 0.05; // 5 % de frais de service ajoutés au paiement (identique à index.html)
 const depositCoinsCents = (coins) => Math.round(coins * COIN_PRICE_EUR * 100);
 const depositFeeCents = (coins) => Math.round(depositCoinsCents(coins) * DEPOSIT_FEE_RATE);
+// Montant attendu : celui fixé par le serveur à la création de la session.
+// Sessions créées AVANT l'ajout des frais (pas de totalCents) : ancien prix.
+const expectedDepositCents = (session, coins) => {
+  const t = session && session.metadata && Number(session.metadata.totalCents);
+  const allowed = [depositCoinsCents(coins), depositCoinsCents(coins) + depositFeeCents(coins)];
+  return allowed.includes(t) ? t : depositCoinsCents(coins);
+};
 
 /* =========================================================
    1) createCheckoutSession — crée une session de paiement Stripe.
@@ -73,6 +80,19 @@ exports.createCheckoutSession = onCall(
     if (pauseDoc.exists && pauseDoc.data().paused === true) {
       throw new HttpsError("failed-precondition", "Deposits are temporarily unavailable. Please try again later.");
     }
+
+    // Compte valide : profil existant, pas banni (même temporairement), e-mail vérifié
+    // (pour les comptes récents) — sinon les coins resteraient bloqués / à rembourser à la main.
+    const uSnap = await db.collection("users").doc(uid).get();
+    const uDoc = uSnap.exists ? uSnap.data() : null;
+    if (!uDoc || !uDoc.username) throw new HttpsError("failed-precondition", "Profile not found. Reload the page and try again.");
+    if (uDoc.banned || (uDoc.banUntil && uDoc.banUntil > Date.now())) throw new HttpsError("permission-denied", "Your account is suspended.");
+    try {
+      const rec = await admin.auth().getUser(uid);
+      if (!rec.emailVerified && Date.parse(rec.metadata.creationTime) > Date.parse("2026-10-05T07:30:00Z")) {
+        throw new HttpsError("failed-precondition", "Please verify your email address first, then reload the page.");
+      }
+    } catch (e) { if (e instanceof HttpsError) throw e; throw new HttpsError("unavailable", "Could not verify your account. Try again."); }
 
     const coins = Math.floor(Number(request.data && request.data.coins));
     if (!Number.isFinite(coins) || coins < MIN_DEPOSIT_COINS || coins > MAX_DEPOSIT_COINS) {
@@ -109,7 +129,8 @@ exports.createCheckoutSession = onCall(
       // pour que le webhook (qui ne reçoit que l'ID Stripe) sache quoi
       // créditer sans jamais faire confiance à une valeur venant du site.
       client_reference_id: uid,
-      metadata: { uid, coins: String(coins) },
+      expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
+      metadata: { uid, coins: String(coins), totalCents: String(depositCoinsCents(coins) + depositFeeCents(coins)) },
       success_url: `${SITE_URL}?deposit=success`,
       cancel_url: `${SITE_URL}?deposit=cancelled`,
     });
@@ -148,9 +169,10 @@ exports.stripeWebhook = onRequest(
     // on reprend les coins correspondants (le solde peut passer en négatif).
     // À activer dans Stripe → Développeurs → Webhooks : charge.dispute.created
     // et charge.refunded.
-    if (event.type === "charge.dispute.created" || event.type === "charge.refunded") {
+    if (event.type === "charge.dispute.created" || event.type === "charge.refunded" || event.type === "charge.dispute.closed") {
       try {
-        await handleClawback(stripe, event);
+        if (event.type === "charge.dispute.closed") await handleDisputeClosed(stripe, event);
+        else await handleClawback(stripe, event);
         res.status(200).send("ok");
       } catch (err) {
         logger.error("Clawback failed", { error: err.message, type: event.type });
@@ -186,7 +208,7 @@ exports.stripeWebhook = onRequest(
     const cc = session.currency_conversion;
     const payCurrency = cc && cc.source_currency ? cc.source_currency : session.currency;
     const payAmount = cc && typeof cc.amount_total === "number" ? cc.amount_total : session.amount_total;
-    if (payCurrency !== "eur" || payAmount !== depositCoinsCents(coins) + depositFeeCents(coins)) {
+    if (payCurrency !== "eur" || payAmount !== expectedDepositCents(session, coins)) {
       logger.error("Amount mismatch on deposit", { sessionId: session.id, amount: payAmount, currency: payCurrency, coins });
       // Gardé pour vérification manuelle (jamais perdu en silence).
       await db.collection("flaggedDeposits").doc(session.id).set({ uid, coins, amount: payAmount, currency: payCurrency, at: Date.now() }, { merge: true });
@@ -235,6 +257,8 @@ exports.stripeWebhook = onRequest(
           userRef,
           {
             coins: admin.firestore.FieldValue.increment(credit),
+            // Coins déposés = verrouillés jusqu'à ce qu'ils soient joués (anti-fraude carte volée).
+            lockedCoins: admin.firestore.FieldValue.increment(credit),
             notifications: admin.firestore.FieldValue.arrayUnion({
               id: `dep_${session.id}`,
               type: "tip", // réutilise le style visuel "gain d'argent" déjà existant côté site
@@ -270,6 +294,9 @@ async function handleClawback(stripe, event) {
   let retryLater = false;
   await db.runTransaction(async (tx) => {
     const dep = await tx.get(depositRef);
+    const cbRef = db.collection("clawbackBySession").doc(session.id);
+    const cbPrev = dep.exists ? null : await tx.get(cbRef);
+    const userSnapCb = dep.exists ? await tx.get(db.collection("users").doc(dep.data().uid)) : null;
     retryLater = !dep.exists && session.payment_status === "paid";
     if (!dep.exists) {
       // Dépôt pas (encore) crédité : on laisse une marque que le crédit lira
@@ -278,7 +305,10 @@ async function handleClawback(stripe, event) {
       const amount = Number(obj.amount) || 0;
       const fraction = isDispute ? 1 : (amount > 0 ? Math.min(1, (Number(obj.amount_refunded) || 0) / amount) : 1);
       tx.set(db.collection("pendingClawbacks").doc(event.id), { type: event.type, pi, sessionId: session.id, at: Date.now() });
-      tx.set(db.collection("clawbackBySession").doc(session.id), { isDispute, fraction, eventId: event.id, at: Date.now() }, { merge: true });
+      // Plusieurs événements peuvent arriver avant le crédit (et dans le désordre) : on garde le PIRE cas.
+      const prev = (cbPrev && cbPrev.exists && cbPrev.data()) || {};
+      const dispute = isDispute || prev.isDispute === true;
+      tx.set(cbRef, { isDispute: dispute, fraction: dispute ? 1 : Math.max(fraction, Number(prev.fraction) || 0), eventId: event.id, at: Date.now() }, { merge: true });
       return;
     }
     const d = dep.data();
@@ -294,8 +324,10 @@ async function handleClawback(stripe, event) {
     const delta = Math.round((Math.min(total, target) - already) * 100) / 100;
     if (delta <= 0) return;
     const userRef = db.collection("users").doc(d.uid);
+    const lockedNow = Math.max(0, Number(userSnapCb && userSnapCb.exists && userSnapCb.data().lockedCoins) || 0);
     const update = {
       coins: admin.firestore.FieldValue.increment(-delta),
+      lockedCoins: Math.max(0, Math.round((lockedNow - delta) * 100) / 100),
       notifications: admin.firestore.FieldValue.arrayUnion({
         id: `cb_${event.id}`, type: "warning",
         text: isDispute ? `Your payment of ${total} coins was disputed with your bank: ${delta} coins were removed and your account is suspended. Contact us on Discord.`
@@ -309,4 +341,40 @@ async function handleClawback(stripe, event) {
   });
   if (retryLater) throw new Error("deposit not credited yet, retry later");
   logger.warn("Coins clawed back", { type: event.type, pi });
+}
+
+/* Contestation bancaire GAGNÉE par nous (le joueur avait bien payé) : on rend les coins
+   repris et on lève le ban automatique "système". Idempotent (clawedBack repasse à 0). */
+async function handleDisputeClosed(stripe, event) {
+  const obj = event.data.object;
+  if (!obj || obj.status !== "won") return;
+  const pi = obj.payment_intent;
+  if (!pi) return;
+  const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+  const session = sessions.data[0];
+  if (!session) return;
+  const depositRef = db.collection("deposits").doc(session.id);
+  await db.runTransaction(async (tx) => {
+    const dep = await tx.get(depositRef);
+    if (!dep.exists) return;
+    const d = dep.data();
+    const back = Number(d.clawedBack) || 0;
+    if (!d.disputedAt || back <= 0) return;
+    const userRef = db.collection("users").doc(d.uid);
+    const us = await tx.get(userRef);
+    const ud = us.data() || {};
+    const update = {
+      coins: admin.firestore.FieldValue.increment(back),
+      lockedCoins: Math.round(((Number(ud.lockedCoins) || 0) + back) * 100) / 100,
+      notifications: admin.firestore.FieldValue.arrayUnion({
+        id: `cbw_${event.id}`, type: "tip",
+        text: `Your bank confirmed the payment: ${back} coins were given back to you.`, at: Date.now(), read: false,
+      }),
+    };
+    if (ud.bannedBy === "system" && String(ud.banReason || "").startsWith("Payment dispute")) {
+      Object.assign(update, { banned: false, banReason: null, bannedBy: null, bannedAt: null });
+    }
+    tx.set(userRef, update, { merge: true });
+    tx.update(depositRef, { clawedBack: 0, disputeWonAt: Date.now() });
+  });
 }

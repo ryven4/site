@@ -75,6 +75,36 @@ module.exports = function (admin, db) {
   }
   function roundToCents(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 
+  /* ---- Coins "verrouillés" (rollover) ------------------------------
+     Les coins obtenus par un dépôt, un tip, la roue ou un match gagné
+     contre des coins verrouillés ne sont RETIRABLES qu'après avoir été
+     joués (misés dans un match terminé). Ça empêche : dépôt par carte volée
+     -> retrait immédiat, et le blanchiment par tips / matchs truqués (les
+     coins verrouillés "perdus" contre quelqu'un le contaminent à son tour).
+     Retirable = coins - lockedCoins. */
+  const lockedOf = (d) => Math.max(0, roundToCents(Number(d && d.lockedCoins) || 0));
+  const withdrawableOf = (d) => Math.max(0, roundToCents((Number(d && d.coins) || 0) - lockedOf(d)));
+  // Dépenser `cost` coins (boutique...) consomme d'abord les coins verrouillés.
+  const spendLock = (d, cost) => ({ lockedCoins: Math.max(0, roundToCents(lockedOf(d) - cost)) });
+  // Compte suspendu (ban définitif OU temporaire en cours).
+  const isSuspended = (d) => !!(d && (d.banned || (d.banUntil && d.banUntil > Date.now())));
+  // Durée max d'un litige / signalement sans décision avant résolution auto.
+  const DISPUTE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+  // Délai avant qu'un retrait puisse être marqué "payé" (laisse le temps de voir un litige bancaire).
+  const WITHDRAW_HOLD_MS = 24 * 60 * 60 * 1000;
+  // Temps minimum après le verrouillage avant de pouvoir réclamer une victoire.
+  const MIN_CLAIM_DELAY_MS = 3 * 60 * 1000;
+  // Départ réel du timer d'une réclamation : pas avant `lock + 3 min` (réclamer "WIN" à t=0 n'accélère rien).
+  // Depuis quand un match est bloqué par un litige / un signalement en attente (0 = pas bloqué).
+  const stuckSinceOf = (m) => {
+    const rp = m.cheaterReport;
+    const pend = !!(rp && rp.status === "pending");
+    if (!m.disputed && !pend) return 0;
+    const t = Math.max(m.disputedAt || 0, pend ? (rp.at || 0) : 0);
+    return t || (m.victoryClaim && m.victoryClaim.at) || (m.serverLock && m.serverLock.at) || m.createdAt || 1;
+  };
+  const claimStart = (m) => Math.max((m.victoryClaim && m.victoryClaim.at) || 0, ((m.serverLock && m.serverLock.at) || 0) + MIN_CLAIM_DELAY_MS);
+
   function requireAuth(request) {
     if (!request.auth || !request.auth.uid) throw new HttpsError("unauthenticated", "You must be logged in.");
     return request.auth.uid;
@@ -122,6 +152,12 @@ module.exports = function (admin, db) {
         if (t < bestT || (t === bestT && (a < bestA || (a === bestA && (best === null || d.id < best))))) { bestT = t; bestA = a; best = d.id; }
       }
       if (!best) return null;
+      // Pseudo identique à un autre aux majuscules près ("alice" pour "Alice") :
+      // l'index insensible à la casse appartient à quelqu'un d'autre → refusé.
+      const lowRef = db.collection("usernameLower").doc(usernameKey(username.toLowerCase()));
+      let low = await lowRef.get();
+      if (!low.exists) { await claimLower(username); low = await lowRef.get(); }
+      if (low.exists && low.data().uid !== best) return null;
       try { await claimRef.create({ uid: best, username, at: Date.now() }); } catch (e) { /* créé en parallèle : on relit */ }
       await claimLower(username);
       claim = await claimRef.get();
@@ -164,11 +200,13 @@ module.exports = function (admin, db) {
   // Pseudo écrit avec d'autres majuscules ("hal" pour "Hal") → vrai pseudo.
   async function resolveUsernameLoose(name) {
     if (typeof name !== "string" || !name || name.length > 40) return null;
-    const exact = await ownerUidOf(name);
-    if (exact) return { uid: exact, username: name };
+    // L'index insensible à la casse passe en premier (le plus ancien compte
+    // garde le pseudo, même si un autre a créé "alice" pour "Alice").
     await claimLower(name);
     const lower = await db.collection("usernameLower").doc(usernameKey(name.toLowerCase())).get();
     if (lower.exists && (await ownerUidOf(lower.data().username)) === lower.data().uid) return { uid: lower.data().uid, username: lower.data().username };
+    const exact = await ownerUidOf(name);
+    if (exact) return { uid: exact, username: name };
     return null;
   }
 
@@ -193,16 +231,16 @@ module.exports = function (admin, db) {
      date (les comptes plus anciens n'ont jamais reçu de mail de
      vérification, on ne les bloque pas). Un compte déjà vérifié est mémorisé. */
   const EMAIL_VERIFY_START_MS = Date.parse("2026-10-05T07:30:00Z");
-  const emailOkCache = new Set();
+  const emailOkCache = new Map();
   async function emailStatusOf(uid) {
-    if (emailOkCache.has(uid)) return { required: true, verified: true };
+    if (emailOkCache.has(uid)) return emailOkCache.get(uid);
     let rec;
     try { rec = await admin.auth().getUser(uid); }
-    catch (e) { logger.warn("email check: getUser failed", { uid, error: e.message }); return { required: false, verified: true }; }
+    catch (e) { logger.warn("email check: getUser failed", { uid, error: e.message }); return { required: true, verified: false }; }
     const created = Date.parse(rec.metadata && rec.metadata.creationTime);
     const required = Number.isFinite(created) && created >= EMAIL_VERIFY_START_MS;
     const verified = !required || rec.emailVerified === true;
-    if (required && verified) emailOkCache.add(uid);
+    if (verified) emailOkCache.set(uid, { required, verified: true });
     return { required, verified };
   }
   const emailVerificationStatus = onCall(async (request) => {
@@ -424,6 +462,20 @@ module.exports = function (admin, db) {
   function isCaptain(match, roster, username) {
     if (roster.hostPlayers.includes(username)) return username === match.host;
     return roster.guestPlayers[0] === username;
+  }
+
+  // Vote d'abandon d'un camp : renvoie done=true quand tout le camp a voté.
+  // Seuls les joueurs qui ont une mise en jeu votent (cover bet : le host
+  // paie pour son coéquipier, lui seul décide).
+  function concedeVoteUpdate(match, side, team, username) {
+    const holders = team.filter((u) => computePlayerStake(match, u) > 0);
+    const voters = holders.length ? holders : team;
+    if (!voters.includes(username)) throw new HttpsError("permission-denied", "Only the players who paid a stake on your team can concede for it.");
+    if (voters.length <= 1) return { done: true };
+    const prev = ((match.concedeVotes || {})[side] || []).filter((u) => voters.includes(u));
+    const votes = [...new Set([...prev, username])];
+    return { done: votes.length >= voters.length, votes: votes.length, needed: voters.length,
+      concedeVotes: { ...(match.concedeVotes || {}), [side]: votes } };
   }
 
   function escrowFields(match, username, uid, amount) {
@@ -691,6 +743,17 @@ module.exports = function (admin, db) {
      Si le match n'est pas "payable" (camp incomplet, mise manquante...),
      tout le monde est remboursé et le match est annulé. Idempotente.
   ========================================================= */
+  // Profil anormalement gros (notifications gonflées par le joueur) : on
+  // les vide dans la même écriture, sinon le doc dépasserait 1 Mo et TOUTE
+  // la transaction de paiement échouerait (le perdant ne perdrait jamais).
+  function shrinkFields(data) {
+    try {
+      // Taille en OCTETS (les emojis / accents pèsent plus que leur longueur JS).
+      if (Buffer.byteLength(JSON.stringify(data || {}), "utf8") < 800000) return {};
+      return { notifications: (data.notifications || []).filter((n) => Buffer.byteLength(JSON.stringify(n), "utf8") < 600).slice(0, 10) };
+    } catch (e) { return { notifications: [] }; }
+  }
+
   async function finalizeMatch(matchId, spec) {
     const matchRef = db.collection("matches").doc(matchId);
     return db.runTransaction(async (tx) => {
@@ -700,11 +763,28 @@ module.exports = function (admin, db) {
       if (raw.completed || raw.cancelled) return { status: "over" };
       const trust = await matchTrust(tx, matchId, matchSnap);
       const match = !trust.trusted ? untrustedView(raw) : trust.legacy ? legacyView(raw) : raw;
+      if (spec && spec.tourSweep === "dispute") {
+        const ss = stuckSinceOf(match);
+        if (!ss || Date.now() - ss < DISPUTE_TIMEOUT_MS) return { status: "skipped" };
+      } else if (spec && spec.tourSweep) {
+        // Décision du sweep prise sur une lecture ancienne : on revérifie ici.
+        const rep = match.cheaterReport;
+        if (match.disputed || match.victoryClaim || (rep && (rep.status === "pending" || rep.status === "confirmed"))) return { status: "skipped" };
+        const ro = matchRoster(match);
+        const allP = [...ro.hostPlayers, ...ro.guestPlayers];
+        const readyNow = allP.filter((p) => (match.readies || {})[p]);
+        if (spec.tourSweep === "forfeit" && (match.serverLock || readyNow.length !== 1 || readyNow[0] === spec.loser)) return { status: "skipped" };
+        if (spec.tourSweep === "flip" && (match.serverLock || readyNow.length !== 0)) return { status: "skipped" };
+        if (spec.tourSweep === "stale") {
+          const since = Math.max((match.serverLock && match.serverLock.at) || match.createdAt || 0, (rep && rep.resolvedAt) || 0);
+          if (!match.serverLock || Date.now() - since < TOURNAMENT_STALE_MS) return { status: "skipped" };
+        }
+      }
       if (spec && spec.fromSweep) {
         const rep = match.cheaterReport;
         if (!match.victoryClaim || match.victoryClaim.by !== spec.winner || match.disputed ||
             (rep && (rep.status === "pending" || rep.status === "confirmed")) ||
-            Date.now() - match.victoryClaim.at < (match.victoryClaim.timerMs || VICTORY_TIMER_MS)) {
+            Date.now() - claimStart(match) < (match.victoryClaim.timerMs || VICTORY_TIMER_MS)) {
           return { status: "skipped" };
         }
         // Le joueur qui réclame la victoire a été banni entre-temps : pas de
@@ -712,8 +792,8 @@ module.exports = function (admin, db) {
         const cm = await resolveUidMap([spec.winner], match.escrowUids || {});
         const cUid = cm[spec.winner];
         const cSnap = cUid ? await tx.get(db.collection("users").doc(cUid)) : null;
-        if (cSnap && cSnap.exists && cSnap.data().banned) {
-          tx.update(matchRef, { disputed: true, disputeReason: "claimant_banned" });
+        if (cSnap && cSnap.exists && isSuspended(cSnap.data())) {
+          tx.update(matchRef, { disputed: true, disputedAt: Date.now(), disputeReason: "claimant_banned" });
           return { status: "frozen" };
         }
       }
@@ -777,6 +857,23 @@ module.exports = function (admin, db) {
         return { status: "refunded", reason: "payout_exceeds_pot" };
       }
 
+      // Coins verrouillés : la mise jouée "libère" les coins verrouillés du joueur ;
+      // ce que les PERDANTS perdent sur leurs coins verrouillés contamine les gagnants
+      // (au prorata de leurs gains) — impossible de blanchir en perdant exprès.
+      const lockUsed = {};
+      let taint = 0;
+      for (const uname of all) {
+        const d = userData[uname];
+        if (!d) continue;
+        lockUsed[uname] = Math.min(lockedOf(d), computePlayerBetInfo(match, uname).stake);
+      }
+      for (const uname of losers) taint += lockUsed[uname] || 0;
+      const taintNet = roundToCents(taint * (1 - MATCH_TAX_RATE));
+      const lockAfter = (uname) => {
+        const share = totalRewards > 0 && winners.includes(uname) ? roundToCents(taintNet * (rewards[uname] || 0) / totalRewards) : 0;
+        return { lockedCoins: Math.max(0, roundToCents(lockedOf(userData[uname]) - (lockUsed[uname] || 0) + share)) };
+      };
+
       const results = {};
       winners.forEach((u) => { results[u] = "WIN"; });
       losers.forEach((u) => { results[u] = "LOSS"; });
@@ -805,6 +902,8 @@ module.exports = function (admin, db) {
           },
           rp: FieldValue.increment(RP_PER_WIN),
           history,
+          ...lockAfter(uname),
+          ...shrinkFields(data),
         });
       }
       for (const uname of losers) {
@@ -824,6 +923,8 @@ module.exports = function (admin, db) {
             totalEarned: roundToCents((stats.totalEarned || 0) - info.stake),
           },
           history,
+          ...lockAfter(uname),
+          ...shrinkFields(data),
         });
       }
 
@@ -870,6 +971,8 @@ module.exports = function (admin, db) {
       if (reason === "expired" && (m.serverLock || m.victoryClaim || m.disputed)) return;
       // Match abandonné (6 h) : pas si un résultat ou un signalement est en cours.
       if (reason === "stale_no_result" && (m.victoryClaim || m.disputed || (m.cheaterReport && m.cheaterReport.status === "pending"))) return;
+      // Litige / signalement resté sans décision du staff pendant 24 h : on rembourse tout le monde.
+      if (reason === "dispute_timeout") { const ss = stuckSinceOf(m); if (!ss || Date.now() - ss < DISPUTE_TIMEOUT_MS) return; }
       const uidMap = await resolveUidMap(m.escrowedBy || [], m.escrowUids || {});
       writeRefunds(tx, matchRef, m, uidMap, reason ? { cancelReason: reason } : {});
     });
@@ -925,10 +1028,15 @@ module.exports = function (admin, db) {
       const myTeam = onHost ? roster.hostPlayers : roster.guestPlayers;
       const otherTeam = onHost ? roster.guestPlayers : roster.hostPlayers;
 
-      if (result === "LOSS" && !isCaptain(locked, roster, username)) {
-        throw new HttpsError("permission-denied", "Only your team captain (the host, or the first guest) can declare the defeat for your team.");
-      }
       if (result === "LOSS") {
+        // Équipe de plusieurs joueurs : TOUS les joueurs du camp doivent
+        // confirmer la défaite (avant, le "capitaine" — souvent un inconnu
+        // arrivé en premier — pouvait faire perdre la mise de tout le monde).
+        const cv = concedeVoteUpdate(locked, onHost ? "host" : "guest", myTeam, username);
+        if (!cv.done) {
+          tx.update(matchRef, { ...(lockUpdate || {}), concedeVotes: cv.concedeVotes });
+          return { status: "concede_vote", votes: cv.votes, needed: cv.needed };
+        }
         if (lockUpdate) tx.update(matchRef, lockUpdate);
         return { status: "finalize" };
       }
@@ -936,7 +1044,7 @@ module.exports = function (admin, db) {
       if (match.victoryClaim && match.victoryClaim.by === username) { if (lockUpdate) tx.update(matchRef, lockUpdate); return { status: "already_claimed" }; }
       if (match.victoryClaim && myTeam.includes(match.victoryClaim.by)) { if (lockUpdate) tx.update(matchRef, lockUpdate); return { status: "teammate_claimed" }; }
       if (match.victoryClaim && otherTeam.includes(match.victoryClaim.by)) {
-        tx.update(matchRef, { ...(lockUpdate || {}), disputed: true });
+        tx.update(matchRef, { ...(lockUpdate || {}), disputed: true, disputedAt: Date.now() });
         return { status: "disputed" };
       }
       const timerMs = isVip ? VIP_VICTORY_TIMER_MS : VICTORY_TIMER_MS;
@@ -956,21 +1064,43 @@ module.exports = function (admin, db) {
      min, et les matchs verrouillés où personne n'a rien déclaré après 6 h. */
   const STALE_LOCKED_MS = 6 * 60 * 60 * 1000;
   const TOURNAMENT_STALE_MS = 3 * 60 * 60 * 1000;
-  const sweepMatchTimers = onSchedule("every 2 minutes", async () => {
+  // Match bloqué (litige ou signalement sans décision) depuis plus de 24 h :
+  // match normal = remboursement ; tournoi = tirage au sort (le tableau avance).
+  async function handleStuck(doc, match, now) {
+    const ss = stuckSinceOf(match);
+    if (!ss || now - ss < DISPUTE_TIMEOUT_MS) return;
+    if (match.tournamentId) {
+      const ro = matchRoster(match);
+      const all = [...ro.hostPlayers, ...ro.guestPlayers];
+      if (all.length !== 2) return;
+      const coin = [...String(doc.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 2;
+      await finalizeMatch(doc.id, { winner: all[coin], noResult: true, tourSweep: "dispute" });
+    } else {
+      await refundMatch(doc.id, "dispute_timeout");
+    }
+  }
+  const sweepMatchTimers = onSchedule({ schedule: "every 2 minutes", timeoutSeconds: 300, memory: "512MiB" }, async () => {
     // Matchs en cours = champ serveur "active". + filet de sécurité pour les
     // matchs créés avant ce champ (7 derniers jours seulement).
     const now = Date.now();
     const legacyPass = new Date(now).getUTCMinutes() % 30 < 2;
-    const [act, recent] = await Promise.all([
-      db.collection("matches").where("active", "==", true).limit(1000).get(),
-      legacyPass ? db.collection("matches").where("createdAt", ">", now - 7 * 24 * 3600 * 1000).limit(3000).get() : Promise.resolve({ docs: [] }),
-    ]);
+    // Matchs actifs lus par pages de 500 (jamais de "famine" au-delà de 1000 matchs).
+    const act = { docs: [] };
+    for (let page = 0, last = null; page < 20; page++) {
+      let q = db.collection("matches").where("active", "==", true).orderBy(admin.firestore.FieldPath.documentId()).limit(500);
+      if (last) q = q.startAfter(last);
+      const part = await q.get();
+      act.docs.push(...part.docs);
+      if (part.docs.length < 500) break;
+      last = part.docs[part.docs.length - 1].id;
+    }
+    const recent = legacyPass ? await db.collection("matches").where("createdAt", ">", now - 7 * 24 * 3600 * 1000).limit(3000).get() : { docs: [] };
     // Une seule fois : réserve les pseudos de tous les comptes existants
     // (index insensible aux majuscules complet dès le lancement).
     try {
       const flagRef = db.collection("serverConfig").doc("usernameBackfill");
       const flag = await flagRef.get();
-      if (!flag.exists) {
+      if (!flag.exists || (!flag.data().doneAt && now - (flag.data().startedAt || 0) > 60 * 60 * 1000)) {
         await flagRef.set({ startedAt: now });
         const us = await db.collection("users").get();
         for (const u of us.docs) { const n = u.data().username; if (typeof n === "string") await ownerUidOf(n); }
@@ -989,7 +1119,8 @@ module.exports = function (admin, db) {
           continue;
         }
         const rep = match.cheaterReport;
-        if (rep && (rep.status === "pending" || rep.status === "confirmed")) continue;
+        if (rep && rep.status === "pending") { await handleStuck(doc, match, now); continue; }
+        if (rep && rep.status === "confirmed") continue;
         if (match.tournamentId) {
           // Tournoi annulé (ou introuvable) : le match restant est clos, sans argent en jeu.
           if (!(match.tournamentId in tStatus)) {
@@ -1003,15 +1134,17 @@ module.exports = function (admin, db) {
           }
         }
         if (match.victoryClaim) {
-          if (match.disputed) continue;
+          if (match.disputed) { await handleStuck(doc, match, now, tStatus); continue; }
           const timerMs = match.victoryClaim.timerMs || VICTORY_TIMER_MS;
-          if (now - match.victoryClaim.at >= timerMs) await finalizeMatch(doc.id, { winner: match.victoryClaim.by, fromSweep: true });
+          if (now - claimStart(match) >= timerMs) await finalizeMatch(doc.id, { winner: match.victoryClaim.by, fromSweep: true });
           continue;
         }
         if (match.tournamentId) {
           const ro = matchRoster(match);
           const all = [...ro.hostPlayers, ...ro.guestPlayers];
-          if (all.length !== 2 || match.disputed) continue;
+          if (match.disputed) { await handleStuck(doc, match, now); continue; }
+          if (all.length !== 2) continue;
+          if (rep && (rep.status === "pending" || rep.status === "confirmed")) continue;
           // Tirage au sort stable (même résultat à chaque passage).
           const coin = [...String(doc.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 2;
           if (!match.serverLock) {
@@ -1020,15 +1153,28 @@ module.exports = function (admin, db) {
             // un des deux passe (tirage au sort) pour que le tableau avance.
             const age = now - (match.createdAt || now);
             const ready = all.filter((p) => (match.readies || {})[p]);
-            if (age >= 5 * 60 * 1000 && ready.length === 1) await finalizeMatch(doc.id, { loser: all.find((p) => p !== ready[0]) });
-            else if (age >= 8 * 60 * 1000 && ready.length === 0) await finalizeMatch(doc.id, { winner: all[coin], noShow: true });
-          } else if (now - (match.serverLock.at || match.createdAt || now) >= TOURNAMENT_STALE_MS) {
+            if (age >= 5 * 60 * 1000 && ready.length === 1) await finalizeMatch(doc.id, { loser: all.find((p) => p !== ready[0]), tourSweep: "forfeit" });
+            else if (age >= 8 * 60 * 1000 && ready.length === 0) await finalizeMatch(doc.id, { winner: all[coin], noShow: true, tourSweep: "flip" });
+            else if (ready.length === 2) {
+              // Les deux sont prêts mais aucun navigateur n'a verrouillé : le
+              // serveur verrouille lui-même (sinon le tableau restait bloqué).
+              await db.runTransaction(async (tx) => {
+                const s2 = await tx.get(doc.ref);
+                const m2 = s2.data() || {};
+                if (m2.completed || m2.cancelled || m2.serverLock) return;
+                const res = serverLockUpdate(m2, { requireReady: true });
+                if (res.update) tx.update(doc.ref, res.update);
+              });
+            }
+          } else {
             // Joué mais aucun résultat déclaré après 3 h : tirage au sort.
-            await finalizeMatch(doc.id, { winner: all[coin], noResult: true });
+            // Le délai repart après la décision sur un signalement.
+            const since = Math.max(match.serverLock.at || match.createdAt || now, (rep && rep.resolvedAt) || 0);
+            if (now - since >= TOURNAMENT_STALE_MS) await finalizeMatch(doc.id, { winner: all[coin], noResult: true, tourSweep: "stale" });
           }
           continue;
         }
-        if (match.disputed) continue;
+        if (match.disputed) { await handleStuck(doc, match, now); continue; }
         if (match.serverLock) {
           // Le délai repart après la décision sur un signalement.
           const since = Math.max(match.serverLock.at || match.createdAt || now, (rep && rep.resolvedAt) || 0);
@@ -1106,8 +1252,10 @@ module.exports = function (admin, db) {
         const myTeam = isHost ? hostPlayers : guestPlayers;
         const otherTeam = isHost ? guestPlayers : hostPlayers;
         if (myTeam.length === 0 || otherTeam.length === 0) return { status: "cancel" };
-        if (!isCaptain(match, { hostPlayers, guestPlayers }, username)) {
-          throw new HttpsError("permission-denied", "The match has started: only your team captain can forfeit. Play it out or ask staff.");
+        const cv = concedeVoteUpdate(match, isHost ? "host" : "guest", myTeam, username);
+        if (!cv.done) {
+          tx.update(matchRef, { concedeVotes: cv.concedeVotes });
+          return { status: "concede_vote", votes: cv.votes, needed: cv.needed };
         }
         return { status: "forfeit" };
       }
@@ -1263,13 +1411,30 @@ module.exports = function (admin, db) {
       if (!match.completed) throw new HttpsError("failed-precondition", "This match isn't finished yet.");
       if (match.tournamentId) throw new HttpsError("failed-precondition", "Tournament matches can't be rematched.");
 
-      if (match.rematchMatchId) return { status: "already_created", newMatchId: match.rematchMatchId };
+      // Le rematch précédent est mort (annulé / terminé) : on repart de zéro au lieu de rester bloqué.
+      let deadReset = false;
+      if (match.rematchMatchId) {
+        const tgt = await tx.get(db.collection("matches").doc(String(match.rematchMatchId)));
+        const td = tgt.exists ? tgt.data() : null;
+        if (td && !td.cancelled && !td.completed) return { status: "already_created", newMatchId: match.rematchMatchId };
+        deadReset = true;
+      }
+      const baseVotes = deadReset ? {} : (match.rematchVotes || {});
+      const clr = deadReset ? { rematchMatchId: null } : {};
 
       const { hostPlayers, guestPlayers } = matchRoster(match);
       const all = [...hostPlayers, ...guestPlayers];
       if (!all.includes(username)) throw new HttpsError("permission-denied", "You weren't part of this match.");
 
-      const votes = { ...(match.rematchVotes || {}), [username]: true };
+      // Retirer son vote (re-cliquer sur Rematch pour annuler).
+      if ((request.data || {}).cancel === true) {
+        const left = { ...baseVotes };
+        delete left[username];
+        tx.update(matchRef, { rematchVotes: left, rematchBlocked: null, ...clr });
+        return { status: "cancelled", votes: all.filter((p) => left[p]).length, total: all.length };
+      }
+
+      const votes = { ...baseVotes, [username]: true };
       const everyoneIn = all.length > 0 && all.every((p) => votes[p]);
 
       if (everyoneIn) {
@@ -1284,15 +1449,20 @@ module.exports = function (admin, db) {
           if (!us || !us.exists || (us.data().coins || 0) < need) poor.push(p);
         }
         if (poor.length) {
-          tx.update(matchRef, { rematchVotes: votes, rematchBlocked: { players: poor, at: Date.now() } });
+          tx.update(matchRef, { rematchVotes: votes, rematchBlocked: { players: poor, at: Date.now() }, ...clr });
           return { status: "insufficient", players: poor };
         }
       }
       if (!everyoneIn) {
-        tx.update(matchRef, { rematchVotes: votes });
+        tx.update(matchRef, { rematchVotes: votes, rematchBlocked: null, ...clr });
         return { status: "waiting", votes: all.filter((p) => votes[p]).length, total: all.length };
       }
 
+      // Même plafond que matchCreate : 3 matchs actifs maximum par hôte (rematchs compris).
+      const activeQ = await tx.get(db.collection("matches").where("host", "==", match.host).where("completed", "==", false));
+      if (activeQ.docs.filter((x) => !x.data().cancelled).length >= 3) {
+        throw new HttpsError("failed-precondition", "The host already has 3 active matches. Finish or cancel one first.");
+      }
       const newId = "M-" + Math.random().toString(36).slice(2, 8).toUpperCase() +
         Math.random().toString(36).slice(2, 4).toUpperCase();
       const newMatch = {
@@ -1336,7 +1506,7 @@ module.exports = function (admin, db) {
       tx.set(db.collection("matches").doc(newId), { ...newMatch, active: true });
       const origCode = origMeta.exists && origMeta.data().passcode !== undefined ? origMeta.data().passcode : (match.passcode || null);
       tx.set(db.collection("matchMeta").doc(newId), { rematchOf: matchId, at: Date.now(), passcode: origCode || null });
-      tx.update(matchRef, { rematchVotes: votes, rematchMatchId: newId });
+      tx.update(matchRef, { rematchVotes: votes, rematchMatchId: newId, rematchBlocked: null });
       return { status: "created", newMatchId: newId };
     });
   });
@@ -1348,8 +1518,11 @@ module.exports = function (admin, db) {
     const id = cleanId(matchId);
     if (!id) throw new HttpsError("invalid-argument", "matchId is required.");
     const matchSnap = await db.collection("matches").doc(id).get();
-    if (matchSnap.exists && matchSnap.data().tournamentId && !matchSnap.data().completed) {
-      throw new HttpsError("failed-precondition", "Tournament match in progress: use Force Win instead of deleting it (or the bracket gets stuck).");
+    if (matchSnap.exists && matchSnap.data().tournamentId) {
+      const st = await db.collection("serverTournaments").doc(String(matchSnap.data().tournamentId)).get();
+      if (!matchSnap.data().completed || (st.exists && st.data().status === "running")) {
+        throw new HttpsError("failed-precondition", "Tournament match of a running tournament: use Force Win instead of deleting it (or the bracket gets stuck).");
+      }
     }
     if (matchSnap.exists) {
       const match = matchSnap.data();
@@ -1385,6 +1558,7 @@ module.exports = function (admin, db) {
       let resultText = "";
       if (seg.type === "coins") {
         update.coins = roundToCents((me.coins || 0) + seg.amount);
+        update.lockedCoins = roundToCents(lockedOf(me) + seg.amount); // à jouer avant de pouvoir retirer
         resultText = `+${seg.amount} coins`;
       } else if (seg.type === "snipes") {
         update.snipes = (me.snipes || 0) + seg.amount;
@@ -1398,6 +1572,7 @@ module.exports = function (admin, db) {
           resultText = `avatar:${picked}`;
         } else {
           update.coins = roundToCents((me.coins || 0) + 3);
+          update.lockedCoins = roundToCents(lockedOf(me) + 3);
           resultText = "+3 coins";
         }
       }
@@ -1426,30 +1601,30 @@ module.exports = function (admin, db) {
         if (price === undefined) throw new HttpsError("invalid-argument", "Unknown avatar.");
         if ((me.ownedAvatars || []).includes(avatarId)) throw new HttpsError("failed-precondition", "Already owned.");
         if (coins < price) throw new HttpsError("failed-precondition", "Not enough coins.");
-        tx.update(userRef, { coins: roundToCents(coins - price), ownedAvatars: FieldValue.arrayUnion(avatarId) });
+        tx.update(userRef, { coins: roundToCents(coins - price), ...spendLock(me, price), ownedAvatars: FieldValue.arrayUnion(avatarId) });
         return { ok: true };
       }
       if (item === "snipeBundle") {
         if (coins < SNIPE_COST_COINS) throw new HttpsError("failed-precondition", "Not enough coins.");
-        tx.update(userRef, { coins: roundToCents(coins - SNIPE_COST_COINS), snipes: (me.snipes || 0) + SNIPE_BUNDLE_QTY });
+        tx.update(userRef, { coins: roundToCents(coins - SNIPE_COST_COINS), ...spendLock(me, SNIPE_COST_COINS), snipes: (me.snipes || 0) + SNIPE_BUNDLE_QTY });
         return { ok: true };
       }
       if (item === "customAvatarSlot") {
         if (me.customAvatarUnlocked) throw new HttpsError("failed-precondition", "Already unlocked.");
         if (coins < CUSTOM_AVATAR_COST_COINS) throw new HttpsError("failed-precondition", "Not enough coins.");
-        tx.update(userRef, { coins: roundToCents(coins - CUSTOM_AVATAR_COST_COINS), customAvatarUnlocked: true });
+        tx.update(userRef, { coins: roundToCents(coins - CUSTOM_AVATAR_COST_COINS), ...spendLock(me, CUSTOM_AVATAR_COST_COINS), customAvatarUnlocked: true });
         return { ok: true };
       }
       if (item === "resetStats") {
         if (coins < RESET_STATS_COST_COINS) throw new HttpsError("failed-precondition", "Not enough coins.");
-        tx.update(userRef, { coins: roundToCents(coins - RESET_STATS_COST_COINS), stats: { ...EMPTY_STATS }, history: [] });
+        tx.update(userRef, { coins: roundToCents(coins - RESET_STATS_COST_COINS), ...spendLock(me, RESET_STATS_COST_COINS), stats: { ...EMPTY_STATS }, history: [] });
         return { ok: true };
       }
       if (item === "vip") {
         const now = Date.now();
         if (me.vipUntil && me.vipUntil > now) throw new HttpsError("failed-precondition", "Already VIP.");
         if (coins < VIP_COST_COINS) throw new HttpsError("failed-precondition", "Not enough coins.");
-        const update = { coins: roundToCents(coins - VIP_COST_COINS), vipUntil: now + VIP_DURATION_MS, snipes: (me.snipes || 0) + VIP_SNIPE_BONUS };
+        const update = { coins: roundToCents(coins - VIP_COST_COINS), ...spendLock(me, VIP_COST_COINS), vipUntil: now + VIP_DURATION_MS, snipes: (me.snipes || 0) + VIP_SNIPE_BONUS };
         const owned = me.ownedAvatars || [];
         const unowned = Object.keys(AVATAR_PRICES).filter((id) => !owned.includes(id));
         let bonus = "";
@@ -1531,8 +1706,8 @@ module.exports = function (admin, db) {
       if (c.ecoResetVersion !== undefined) return { ok: true, alreadyInitialized: true };
       const upd = { ecoResetVersion: ECO_RESET_VERSION };
       // Ancien profil (stats déjà là) jamais passé en v4 : on applique le reset.
-      if (c.stats !== undefined) Object.assign(upd, { coins: Math.min(0, Number(c.coins) || 0), snipes: 0, vipUntil: null });
-      const def = { stats: { ...EMPTY_STATS }, coins: 0, ownedAvatars: avatars, customAvatarUnlocked: false, snipes: 0,
+      if (c.stats !== undefined) Object.assign(upd, { coins: Math.min(0, Number(c.coins) || 0), lockedCoins: 0, snipes: 0, vipUntil: null });
+      const def = { stats: { ...EMPTY_STATS }, coins: 0, lockedCoins: 0, ownedAvatars: avatars, customAvatarUnlocked: false, snipes: 0,
         vipUntil: null, rp: 0, history: [], settledMatchIds: [], lastWheelSpin: null };
       Object.entries(def).forEach(([k, v]) => { if (c[k] === undefined) upd[k] = v; });
       tx.update(userRef, upd);
@@ -1572,18 +1747,23 @@ module.exports = function (admin, db) {
       const targetSnap = await tx.get(targetRef);
       if (!targetSnap.exists) throw new HttpsError("not-found", "This player doesn't exist.");
       const targetData = targetSnap.data() || {};
-      if (targetData.banned) throw new HttpsError("failed-precondition", "This player is banned.");
-      tx.update(meRef, { coins: roundToCents((me.coins || 0) - amount) });
+      if (isSuspended(targetData)) throw new HttpsError("failed-precondition", "This player is banned.");
+      // Les coins verrouillés envoyés contaminent le destinataire (au prorata, frais déduits).
+      const taintedOut = Math.min(lockedOf(me), amount);
+      const taintedNet = amount > 0 ? roundToCents(taintedOut * net / amount) : 0;
+      tx.update(meRef, { coins: roundToCents((me.coins || 0) - amount), lockedCoins: roundToCents(lockedOf(me) - taintedOut) });
       const legacyT = targetData.stats && (targetData.ecoResetVersion || 0) < ECO_RESET_VERSION;
       const baseCoins = legacyT ? Math.min(0, Number(targetData.coins) || 0) : (targetData.coins || 0);
       tx.update(targetRef, {
-        ...(legacyT ? { snipes: 0, vipUntil: null, ecoResetVersion: ECO_RESET_VERSION } : {}),
+        ...(legacyT ? { snipes: 0, vipUntil: null, lockedCoins: 0, ecoResetVersion: ECO_RESET_VERSION } : {}),
         coins: roundToCents(baseCoins + net),
+        lockedCoins: roundToCents((legacyT ? 0 : lockedOf(targetData)) + taintedNet),
         notifications: [
           { id: "n" + Date.now() + Math.random().toString(36).slice(2, 7), type: "tip", text: `${me.username} tipped you ${net} coins!`, at: Date.now(), read: false },
           ...((targetData.notifications || []).slice(0, 29)),
         ],
       });
+      tx.set(db.collection("tipLog").doc(), { fromUid: uid, from: me.username || null, toUid: targetUid, amount, net, at: Date.now() });
       return { ok: true, net, fee };
     });
   });
@@ -1614,7 +1794,9 @@ module.exports = function (admin, db) {
       const legacyT = td.stats && (td.ecoResetVersion || 0) < ECO_RESET_VERSION;
       const coins = legacyT ? Math.min(0, Number(td.coins) || 0) : (td.coins || 0);
       if (amount < 0 && roundToCents(coins + amount) < 0) throw new HttpsError("failed-precondition", "Not enough coins on that account.");
-      tx.update(ref, { coins: roundToCents(coins + amount), ...(legacyT ? { snipes: 0, vipUntil: null, ecoResetVersion: ECO_RESET_VERSION } : {}) });
+      const newCoins = roundToCents(coins + amount);
+      // Retirer des coins consomme aussi les coins verrouillés (jamais plus de verrou que de coins).
+      tx.update(ref, { coins: newCoins, lockedCoins: legacyT ? 0 : Math.min(lockedOf(td), Math.max(0, newCoins)), ...(legacyT ? { snipes: 0, vipUntil: null, ecoResetVersion: ECO_RESET_VERSION } : {}) });
     });
     await adminLog(uid, me.data.username, "adjustCoins", { targetUsername, targetUid, amount });
     return { ok: true };
@@ -1641,7 +1823,7 @@ module.exports = function (admin, db) {
       const cur = await tx.get(userRef);
       const c = cur.data() || {};
       if ((c.ecoResetVersion || 0) >= ECO_RESET_VERSION) return;
-      tx.update(userRef, { coins: Math.min(0, Number(c.coins) || 0), snipes: 0, vipUntil: null, ecoResetVersion: ECO_RESET_VERSION });
+      tx.update(userRef, { coins: Math.min(0, Number(c.coins) || 0), lockedCoins: 0, snipes: 0, vipUntil: null, ecoResetVersion: ECO_RESET_VERSION });
     });
     return { ok: true };
   });
@@ -1654,7 +1836,7 @@ module.exports = function (admin, db) {
     const docs = snap.docs;
     for (let i = 0; i < docs.length; i += 400) {
       const batch = db.batch();
-      docs.slice(i, i + 400).forEach((d) => batch.update(d.ref, { coins: 0, snipes: 0, vipUntil: null }));
+      docs.slice(i, i + 400).forEach((d) => batch.update(d.ref, { coins: 0, lockedCoins: 0, snipes: 0, vipUntil: null }));
       await batch.commit();
     }
     return { ok: true, count: docs.length };
@@ -1836,14 +2018,30 @@ module.exports = function (admin, db) {
     if (pre.paidOut) return;
     const prizes = await trustedPrizes(tid, preSnap);
     let uidMap = {};
+    const lockPrize = new Set(); // gagnants dont le prix est verrouillé (à jouer une fois avant retrait)
     let realPlayers = null;
     if (pre.status === "running") {
       const sim = resolveBracket(pre, pre.bracket, matchesById);
-      if (sim.finalWinner) uidMap = await resolveUidMap(tournamentPayoutList(pre, sim.bracket, prizes).map((p) => p.name));
+      if (sim.finalWinner) {
+        uidMap = await resolveUidMap(tournamentPayoutList(pre, sim.bracket, prizes).map((p) => p.name));
+        // Pas de prix pour un compte banni.
+        for (const nm of Object.keys(uidMap)) {
+          const ud = ((await db.collection("users").doc(uidMap[nm]).get()).data()) || {};
+          if (isSuspended(ud)) { delete uidMap[nm]; continue; }
+          lockPrize.add(nm); // TOUS les prix sont verrouillés : à jouer une fois avant retrait
+        }
+      }
     } else if (pre.status === "upcoming") {
       // Au tirage : on retire les pseudos qui ne correspondent à aucun vrai compte.
       realPlayers = [];
-      for (const p of [...new Set(pre.players || [])]) { if (typeof p === "string" && await ownerUidOf(p)) realPlayers.push(p); }
+      for (const p of [...new Set(pre.players || [])]) {
+        if (typeof p !== "string") continue;
+        const puid = await ownerUidOf(p);
+        if (!puid) continue;
+        const pd = ((await db.collection("users").doc(puid).get()).data()) || {};
+        if (isSuspended(pd)) continue; // banni depuis l'inscription : pas dans le tirage
+        realPlayers.push(p);
+      }
     }
     await db.runTransaction(async (tx) => {
       const [snap, srvSnap] = await Promise.all([tx.get(ref), tx.get(srvRef)]);
@@ -1889,7 +2087,13 @@ module.exports = function (admin, db) {
         const paid = [];
         payouts.forEach((pay) => {
           const payUid = uidMap[pay.name];
-          if (payUid) { tx.set(db.collection("users").doc(payUid), { coins: FieldValue.increment(pay.amount), tournamentPrizeTotal: FieldValue.increment(pay.amount) }, { merge: true }); paid.push(pay); }
+          if (payUid) {
+            tx.set(db.collection("users").doc(payUid), {
+              coins: FieldValue.increment(pay.amount), tournamentPrizeTotal: FieldValue.increment(pay.amount),
+              ...(lockPrize.has(pay.name) ? { lockedCoins: FieldValue.increment(pay.amount) } : {}),
+            }, { merge: true });
+            paid.push(pay);
+          }
         });
         srvUpd.paidAt = Date.now(); srvUpd.payouts = paid;
         mirror.paidOut = true; mirror.payouts = paid;
@@ -1899,7 +2103,16 @@ module.exports = function (admin, db) {
     });
   }
 
-  const tournamentTick = onSchedule("every 1 minutes", async () => {
+  const tournamentTick = onSchedule({ schedule: "every 1 minutes", timeoutSeconds: 120 }, async () => {
+    // Tournoi supprimé par le propriétaire pendant qu'il tourne : on le clôt côté serveur
+    // (le balayage ferme ensuite les matchs restants).
+    try {
+      const orphans = await db.collection("serverTournaments").where("status", "==", "running").limit(50).get();
+      for (const o of orphans.docs) {
+        const live = await db.collection("tournaments").doc(o.id).get();
+        if (!live.exists) await o.ref.set({ status: "cancelled", at: Date.now(), reason: "deleted" }, { merge: true });
+      }
+    } catch (e) { logger.error("orphan tournaments check failed", { error: e.message }); }
     const tSnap = await db.collection("tournaments").where("status", "in", ["upcoming", "running"]).get();
     if (tSnap.empty) return;
     const tournaments = [];
@@ -1997,7 +2210,13 @@ module.exports = function (admin, db) {
     const prize = (v) => { const n = Math.round((Number(v) || 0) * 2) / 2; return n > 0 && n <= 100000 ? n : 0; };
     const prizes = { first: prize(d.prizes && d.prizes.first), second: prize(d.prizes && d.prizes.second), semis: prize(d.prizes && d.prizes.semis) };
     const slots = Math.min(128, Math.max(2, parseInt(d.slots, 10) || 16));
-    const id = "TR-" + Math.floor(100000 + Math.random() * 900000);
+    let id = null;
+    for (let i = 0; i < 20 && !id; i++) {
+      const cand = "TR-" + Math.floor(100000 + Math.random() * 900000);
+      const [a, b] = await Promise.all([db.collection("tournaments").doc(cand).get(), db.collection("serverTournaments").doc(cand).get()]);
+      if (!a.exists && !b.exists) id = cand;
+    }
+    if (!id) throw new HttpsError("unavailable", "Please try again.");
     const t = {
       id, name, createdBy: me.data.username, createdByUid: uid, createdAt: Date.now(),
       regOpensAt, startAt, slots,
@@ -2022,13 +2241,14 @@ module.exports = function (admin, db) {
     const uid = requireAuth(request);
     const me = await getVerifiedMe(uid);
     const username = me.data.username;
-    if (!(me.data.discordId && me.data.epicLocked)) throw new HttpsError("failed-precondition", "Link your Discord and set your Epic username first.");
+    if (!(discordVerifiedOf(me.data) && me.data.epicLocked)) throw new HttpsError("failed-precondition", "Verify your Discord and set your Epic username first (Settings).");
     const ref = db.collection("tournaments").doc(cleanId((request.data || {}).tid));
     return db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists) throw new HttpsError("not-found", "This tournament no longer exists.");
       const t = snap.data();
       if (t.status !== "upcoming") throw new HttpsError("failed-precondition", "Registration is closed.");
+      if (t.startAt && Date.now() >= t.startAt) throw new HttpsError("failed-precondition", "Registration is closed: the tournament is starting.");
       if (t.regOpensAt && Date.now() < t.regOpensAt) throw new HttpsError("failed-precondition", "Registration isn't open yet.");
       const players = t.players || [];
       if (players.includes(username)) return { ok: true, already: true };
@@ -2048,6 +2268,7 @@ module.exports = function (admin, db) {
       if (!snap.exists) return { ok: true };
       const t = snap.data();
       if (t.status !== "upcoming") throw new HttpsError("failed-precondition", "The tournament has already started.");
+      if (t.startAt && Date.now() >= t.startAt) throw new HttpsError("failed-precondition", "The tournament is starting — you can't leave now.");
       tx.update(ref, { players: (t.players || []).filter((p) => p !== username) });
       return { ok: true };
     });
@@ -2085,13 +2306,19 @@ module.exports = function (admin, db) {
   const requestWithdrawal = onCall(async (request) => {
     const uid = requireAuth(request);
     const me = await getVerifiedMe(uid);
+    if (!discordVerifiedOf(me.data)) throw new HttpsError("failed-precondition", "Verify your Discord account in Settings (Link Discord) before withdrawing.");
     const amount = Math.floor(Number((request.data || {}).amount));
     if (!Number.isFinite(amount) || amount < WITHDRAW_MIN || amount > 100000) {
       throw new HttpsError("invalid-argument", `The minimum withdrawal is ${WITHDRAW_MIN} coins.`);
     }
-    if (WITHDRAW_REQUIRES_DEPOSIT && !(Number(me.data.tournamentPrizeTotal) > 0)) {
-      const dep = await db.collection("deposits").where("uid", "==", uid).limit(1).get();
-      if (dep.empty) throw new HttpsError("failed-precondition", "You need to have made at least one deposit before withdrawing.");
+    // Un dépôt compte seulement s'il n'a pas été entièrement remboursé / contesté.
+    let hasDeposit = false;
+    if (WITHDRAW_REQUIRES_DEPOSIT) {
+      const dep = await db.collection("deposits").where("uid", "==", uid).limit(50).get();
+      hasDeposit = dep.docs.some((d) => (Number(d.data().clawedBack) || 0) < (Number(d.data().coins) || 0));
+      if (!hasDeposit && !(Number(me.data.tournamentPrizeTotal) > 0)) {
+        throw new HttpsError("failed-precondition", "You need to have made at least one deposit before withdrawing.");
+      }
     }
     const userRef = db.collection("users").doc(uid);
     const wRef = db.collection("withdrawals").doc();
@@ -2104,12 +2331,17 @@ module.exports = function (admin, db) {
       }
       const coins = u.coins || 0;
       if (coins < amount) throw new HttpsError("failed-precondition", "Not enough coins.");
+      // Seuls les coins déjà JOUÉS (non verrouillés) sont retirables.
+      if (withdrawableOf(u) < amount) {
+        throw new HttpsError("failed-precondition", `Only coins you've already played with can be withdrawn. Withdrawable now: ${withdrawableOf(u)} coins (deposits, tips and wheel coins must be played in a match first).`);
+      }
       tx.update(userRef, { coins: roundToCents(coins - amount), pendingWithdrawalId: wRef.id });
       tx.set(wRef, {
         id: wRef.id, uid, username: me.data.username, epic: me.data.epic || null,
         discordUsername: me.data.discordUsername || null, amount,
         fee: roundToCents(amount - withdrawPayout(amount)), payout: withdrawPayout(amount),
-        status: "pending", createdAt: Date.now(),
+        status: "pending", createdAt: Date.now(), holdUntil: Date.now() + WITHDRAW_HOLD_MS,
+        prizeOnly: !hasDeposit, lockedLeft: lockedOf(u),
       });
     });
     return { ok: true, id: wRef.id, payout: withdrawPayout(amount) };
@@ -2123,7 +2355,27 @@ module.exports = function (admin, db) {
     // Infos utiles pour décider : compte suspendu ? solde actuel ?
     for (const it of items) {
       try { const u = await db.collection("users").doc(it.uid).get(); const ud = u.data() || {};
-        it.banned = !!ud.banned; it.balance = Number(ud.coins) || 0; } catch (e) { /* ignore */ }
+        it.banned = isSuspended(ud); it.balance = Number(ud.coins) || 0; it.locked = lockedOf(ud);
+        it.ageDays = ud.createdAt ? Math.floor((Date.now() - ud.createdAt) / 86400000) : null;
+        it.matchProfit = Number(ud.stats && ud.stats.totalEarned) || 0;
+        const dps = await db.collection("deposits").where("uid", "==", it.uid).limit(100).get();
+        it.depositsTotal = roundToCents(dps.docs.reduce((a, d) => a + Math.max(0, (Number(d.data().coins) || 0) - (Number(d.data().clawedBack) || 0)), 0));
+      } catch (e) { /* ignore */ }
+      // Coins reçus en tips (30 derniers jours) + expéditeurs suspects
+      // (bannis ou solde négatif = souvent un paiement contesté à la banque).
+      try {
+        const tl = await db.collection("tipLog").where("toUid", "==", it.uid).limit(200).get();
+        const since = Date.now() - 30 * 24 * 3600 * 1000;
+        const recent = tl.docs.map((d) => d.data()).filter((x) => (x.at || 0) >= since);
+        it.tipsIn = roundToCents(recent.reduce((s2, x) => s2 + (Number(x.net) || 0), 0));
+        const senders = [...new Set(recent.map((x) => x.fromUid))].slice(0, 20);
+        const bad = [];
+        for (const su of senders) {
+          const sd = (await db.collection("users").doc(su).get()).data() || {};
+          if (sd.banned || (Number(sd.coins) || 0) < 0) bad.push(sd.username || su);
+        }
+        it.badTipSenders = bad;
+      } catch (e) { /* ignore */ }
     }
     return { ok: true, items };
   });
@@ -2143,8 +2395,11 @@ module.exports = function (admin, db) {
       const userRef = db.collection("users").doc(d.uid);
       const u = await tx.get(userRef);
       const ud = u.data() || {};
-      if (action === "paid" && (ud.banned || (Number(ud.coins) || 0) < 0)) {
+      if (action === "paid" && (isSuspended(ud) || (Number(ud.coins) || 0) < 0)) {
         throw new HttpsError("failed-precondition", "This account is suspended or has a negative balance (payment dispute?). Don't pay — decline or check first.");
+      }
+      if (action === "paid" && d.holdUntil && Date.now() < d.holdUntil && (await adminLevelOf(uid, me.data.username)) !== "owner") {
+        throw new HttpsError("failed-precondition", "This withdrawal is on a 24h safety hold (payment disputes can still arrive). Payable after " + new Date(d.holdUntil).toISOString().slice(0, 16).replace("T", " ") + " UTC.");
       }
       const notifs = (ud.notifications || []).slice(0, 29);
       const text = action === "paid" ? `Your withdrawal of ${d.amount} coins has been paid.` : `Your withdrawal of ${d.amount} coins was declined — the coins are back on your balance.`;
@@ -2159,7 +2414,113 @@ module.exports = function (admin, db) {
     return res;
   });
 
+  /* =========================================================
+     LIAISON DISCORD VÉRIFIÉE PAR LE SERVEUR
+     Avant : le navigateur lisait lui-même l'identité Discord puis ÉCRIVAIT
+     discordId dans Firestore — n'importe qui pouvait donc y mettre le
+     numéro d'une autre personne (ou un faux) en appelant Firebase à la main,
+     et récupérer plusieurs comptes avec un seul vrai Discord.
+     Maintenant : le navigateur envoie seulement le jeton Discord reçu après
+     la connexion, et c'est CE serveur qui interroge Discord avec ce jeton
+     (identité + comptes liés, dont Epic Games). Les règles Firestore
+     interdisent désormais au joueur d'écrire discordId lui-même.
+     Un lien est "vérifié" quand discordVerifiedId === discordId (champ
+     que seul ce serveur écrit ; un modérateur qui délie le Discord remet
+     discordId à null, donc la vérification tombe d'elle-même).
+     ========================================================= */
+  const DISCORD_CLIENT_ID = "1552708034113839124";
+  const discordVerifiedOf = (d) => !!(d && d.discordId && d.discordVerifiedId === d.discordId);
+
+  async function discordGet(path, token) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let res;
+    try {
+      res = await fetch("https://discord.com/api/v10" + path, { headers: { Authorization: "Bearer " + token }, signal: ctl.signal });
+    } catch (e) {
+      throw new HttpsError("unavailable", "Discord is not responding, please try again in a minute.");
+    } finally { clearTimeout(timer); }
+    if (res.status === 401 || res.status === 403) throw new HttpsError("failed-precondition", "Your Discord session expired. Click Link Discord again.");
+    if (!res.ok) throw new HttpsError("unavailable", "Discord is not responding, please try again in a minute.");
+    return res.json();
+  }
+
+  const linkDiscordAccount = onCall(async (request) => {
+    const uid = requireAuth(request);
+    const me = await getVerifiedMe(uid);
+    const token = String((request.data || {}).accessToken || "");
+    if (!/^[A-Za-z0-9._~+\/=-]{10,300}$/.test(token)) throw new HttpsError("invalid-argument", "Invalid Discord token.");
+
+    // 1) À qui est ce jeton ? Il doit venir de NOTRE application Discord.
+    const info = await discordGet("/oauth2/@me", token);
+    if (!info || !info.application || String(info.application.id) !== DISCORD_CLIENT_ID) throw new HttpsError("permission-denied", "Invalid Discord authorization.");
+    const scopes = Array.isArray(info.scopes) ? info.scopes : [];
+    const du = info.user;
+    if (!scopes.includes("identify") || !du || !/^[0-9]{5,25}$/.test(String(du.id))) throw new HttpsError("permission-denied", "Discord did not share your identity. Click Link Discord again and accept.");
+    const discordId = String(du.id);
+    const discordUsername = (String(du.username || "").slice(0, 40) + (du.discriminator && du.discriminator !== "0" ? "#" + du.discriminator : "")).slice(0, 60);
+    const discordAvatar = du.avatar && /^[A-Za-z0-9_]+$/.test(String(du.avatar)) ? `https://cdn.discordapp.com/avatars/${discordId}/${du.avatar}.png` : null;
+
+    // 2) Compte Epic Games lié à ce Discord (facultatif).
+    let epicName = null;
+    if (scopes.includes("connections")) {
+      try {
+        const conns = await discordGet("/users/@me/connections", token);
+        const c = (Array.isArray(conns) ? conns : []).find((x) => x && x.type === "epicgames" && typeof x.name === "string" && x.name.trim() && x.verified !== false);
+        if (c) epicName = c.name.trim().slice(0, 40);
+      } catch (e) { logger.warn("discord connections lookup failed", { uid, error: e.message }); }
+    }
+
+    // 3) Liste noire (contournement de ban) : même règle qu'avant, mais côté serveur.
+    const bl = await db.collection("config").doc("bannedIdentities").get();
+    const blData = bl.exists ? (bl.data() || {}) : {};
+    const bannedDiscord = Array.isArray(blData.discordIds) && blData.discordIds.includes(discordId);
+    const bannedEpic = !!epicName && Array.isArray(blData.epicUsernames) && blData.epicUsernames.includes(epicName.toLowerCase());
+    if (bannedDiscord || bannedEpic) {
+      await db.collection("users").doc(uid).set({
+        banned: true, banReason: "Ban evasion: " + (bannedDiscord ? "Discord" : "Epic Games") + " account already linked to a banned Prime Token account.",
+        bannedBy: "system", bannedAt: Date.now(),
+      }, { merge: true });
+      throw new HttpsError("permission-denied", "This account is linked to a banned Prime Token account. You have been banned.");
+    }
+
+    // 4) Un Discord = un seul compte ; un lien vérifié l'emporte sur un
+    //    ancien lien non vérifié (celui-ci est délié).
+    const userRef = db.collection("users").doc(uid);
+    const claimRef = db.collection("discordLinks").doc(discordId);
+    return db.runTransaction(async (tx) => {
+      const meSnap = await tx.get(userRef);
+      const md = meSnap.data() || {};
+      const dup = await tx.get(db.collection("users").where("discordId", "==", discordId).limit(5));
+      const claim = await tx.get(claimRef);
+      let claimOwner = null;
+      if (claim.exists && claim.data().uid !== uid) claimOwner = await tx.get(db.collection("users").doc(claim.data().uid));
+      let epicDup = null;
+      if (epicName && md.epicLocked !== true) epicDup = await tx.get(db.collection("users").where("epic", "in", caseVariants(epicName)).limit(3));
+
+      const taken = dup.docs.some((d) => d.id !== uid && d.data().discordVerifiedId === discordId)
+        || (claimOwner && claimOwner.exists && claimOwner.data().discordId === discordId && claimOwner.data().discordVerifiedId === discordId);
+      if (taken) throw new HttpsError("already-exists", "This Discord account is already linked to another Prime Token account. Open a ticket on our Discord if it's yours.");
+      if (discordVerifiedOf(md) && md.discordId !== discordId) throw new HttpsError("failed-precondition", "A different Discord account is already linked to your profile. Open a ticket on our Discord to change it.");
+
+      const update = { discordId, discordUsername, discordAvatar, discordVerifiedId: discordId, discordVerifiedAt: Date.now() };
+      let epicSet = false, epicConflict = false;
+      if (epicName && md.epicLocked !== true) {
+        if (epicDup.docs.some((d) => d.id !== uid)) epicConflict = true;
+        else { update.epic = epicName; update.epicLocked = true; update.epicFromDiscord = true; epicSet = true; }
+      }
+      dup.docs.forEach((d) => { if (d.id !== uid) tx.set(d.ref, { discordId: null, discordUsername: null, discordAvatar: null }, { merge: true }); });
+      tx.set(claimRef, { uid, at: Date.now() });
+      tx.set(userRef, update, { merge: true });
+      return {
+        ok: true, discordId, discordUsername, discordAvatar,
+        epicFound: !!epicName, epicSet, epicConflict, epic: epicSet ? epicName : (md.epic || ""), epicLocked: epicSet || md.epicLocked === true,
+      };
+    });
+  });
+
   return {
+    linkDiscordAccount,
     requestWithdrawal, adminListWithdrawals, adminResolveWithdrawal,
     initAccount, selfEcoReset,
     usernameAvailable, lookupUsername, matchCreate, matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,
