@@ -5167,6 +5167,10 @@ function declareResult(matchId, type){
       const waitMin = Math.ceil((startAt - Date.now() + timerMs) / 60000);
       toast(`Victory declared! Your opponent has ${waitMin} minutes to respond, otherwise it's confirmed automatically.`);
       render();
+    } else if(status === "too_early"){
+      const mins = Math.max(1, Math.ceil((res.waitMs || 0) / 60000));
+      toast(`Too early: you can declare victory ${mins} minute${mins > 1 ? 's' : ''} from now (3 minutes after the match starts).`);
+      render();
     } else if(status === "disputed"){
       toast("You both declared victory — send proof to resolve the dispute.");
       render();

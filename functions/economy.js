@@ -1047,6 +1047,15 @@ module.exports = function (admin, db) {
         tx.update(matchRef, { ...(lockUpdate || {}), disputed: true, disputedAt: Date.now() });
         return { status: "disputed" };
       }
+      // Trop tôt : on ne peut déclarer une victoire que 3 min après le début du
+      // match. Ainsi le timer affiché est toujours exactement 15 min (5 min VIP)
+      // à partir du clic, au lieu de démarrer en différé (18 / 8 min).
+      const lockAtMs = (locked.serverLock && locked.serverLock.at) || 0;
+      const waitMs = lockAtMs + MIN_CLAIM_DELAY_MS - Date.now();
+      if (waitMs > 0) {
+        if (lockUpdate) tx.update(matchRef, lockUpdate);
+        return { status: "too_early", waitMs };
+      }
       const timerMs = isVip ? VIP_VICTORY_TIMER_MS : VICTORY_TIMER_MS;
       tx.update(matchRef, { ...(lockUpdate || {}), victoryClaim: { by: username, at: Date.now(), timerMs } });
       return { status: "claimed", timerMs };
