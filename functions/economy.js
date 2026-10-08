@@ -2519,8 +2519,73 @@ module.exports = function (admin, db) {
     });
   });
 
+
+  /* =========================================================
+     EPIC VIA YUNITE (Premium) — le joueur a lié son Epic au serveur Discord
+     avec Yunite ; ce serveur le lit avec la clé API (jamais exposée au
+     navigateur) pour le Discord DÉJÀ vérifié du joueur, puis le verrouille.
+     ========================================================= */
+  const YUNITE_GUILD_ID = "1552226920320471110";
+
+  const linkEpicFromYunite = onCall({ secrets: ["YUNITE_API_KEY"] }, async (request) => {
+    const uid = requireAuth(request);
+    const me = await getVerifiedMe(uid);
+    const md0 = me.data || {};
+    if (!discordVerifiedOf(md0)) throw new HttpsError("failed-precondition", "Link and verify your Discord account first (Settings > Link Discord).");
+    if (md0.epicLocked === true) return { ok: true, epicSet: false, alreadyLocked: true, epic: md0.epic || "" };
+    const discordId = String(md0.discordId);
+    const key = String(process.env.YUNITE_API_KEY || "").trim();
+    if (!key) { logger.error("YUNITE_API_KEY missing"); throw new HttpsError("unavailable", "Epic lookup is not available right now. Open a ticket on our Discord."); }
+
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 9000);
+    let res;
+    try {
+      res = await fetch(`https://yunite.xyz/api/v3/guild/${YUNITE_GUILD_ID}/registration/links`, {
+        method: "POST",
+        headers: { "Y-Api-Token": key, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "DISCORD", userIds: [discordId] }),
+        signal: ctl.signal,
+      });
+    } catch (e) {
+      throw new HttpsError("unavailable", "Yunite is not responding, please try again in a minute.");
+    } finally { clearTimeout(timer); }
+    if (!res.ok) {
+      logger.error("yunite lookup failed", { status: res.status });
+      throw new HttpsError("unavailable", "Epic lookup failed (Yunite " + res.status + "). Try again in a minute or open a ticket on our Discord.");
+    }
+    let body = null;
+    try { body = await res.json(); } catch (e) { body = null; }
+    const u = body && Array.isArray(body.users) ? body.users.find((x) => x && x.discord && String(x.discord.id) === discordId) : null;
+    const epicName = u && u.epic && typeof u.epic.epicName === "string" ? u.epic.epicName.trim().slice(0, 40) : "";
+    if (!epicName) return { ok: true, epicSet: false, notLinked: true, epic: "" };
+    const epicId = u.epic.epicID ? String(u.epic.epicID).slice(0, 64) : null;
+
+    const bl = await db.collection("config").doc("bannedIdentities").get();
+    const blData = bl.exists ? (bl.data() || {}) : {};
+    if (Array.isArray(blData.epicUsernames) && blData.epicUsernames.includes(epicName.toLowerCase())) {
+      await db.collection("users").doc(uid).set({
+        banned: true, banReason: "Ban evasion: Epic Games account already linked to a banned Prime Token account.",
+        bannedBy: "system", bannedAt: Date.now(),
+      }, { merge: true });
+      throw new HttpsError("permission-denied", "This account is linked to a banned Prime Token account. You have been banned.");
+    }
+
+    const userRef = db.collection("users").doc(uid);
+    return db.runTransaction(async (tx) => {
+      const meSnap = await tx.get(userRef);
+      const md = meSnap.data() || {};
+      if (md.epicLocked === true) return { ok: true, epicSet: false, alreadyLocked: true, epic: md.epic || "" };
+      if (!discordVerifiedOf(md) || md.discordId !== discordId) throw new HttpsError("failed-precondition", "Verify your Discord account first.");
+      const dup = await tx.get(db.collection("users").where("epic", "in", caseVariants(epicName)).limit(3));
+      if (dup.docs.some((d) => d.id !== uid)) return { ok: true, epicSet: false, epicConflict: true, epic: "" };
+      tx.set(userRef, { epic: epicName, epicLocked: true, epicFromDiscord: true, epicYuniteId: epicId }, { merge: true });
+      return { ok: true, epicSet: true, epic: epicName };
+    });
+  });
+
   return {
-    linkDiscordAccount,
+    linkDiscordAccount, linkEpicFromYunite,
     requestWithdrawal, adminListWithdrawals, adminResolveWithdrawal,
     initAccount, selfEcoReset,
     usernameAvailable, lookupUsername, matchCreate, matchJoin, matchEscrow, matchTryLock, matchDeclareResult, sweepMatchTimers, matchCancelVote, matchLeave, matchRematch,

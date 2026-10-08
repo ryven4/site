@@ -5585,10 +5585,8 @@ function save(){
   persistState();
   if(currentUid && db){
     db.collection("users").doc(currentUid).set({
-      epic: state.epic,
       equippedAvatar: state.equippedAvatar,
-      customAvatar: state.customAvatar || null,
-      epicLocked: !!state.epicLocked
+      customAvatar: state.customAvatar || null
     }, { merge:true }).catch(err => console.warn("Erreur sauvegarde profil :", err));
   }
 }
@@ -5629,7 +5627,7 @@ function linkDiscord(){
     + "?client_id=" + encodeURIComponent(DISCORD_CLIENT_ID)
     + "&redirect_uri=" + encodeURIComponent(DISCORD_REDIRECT_URI)
     + "&response_type=token"
-    + "&scope=" + encodeURIComponent("identify connections");
+    + "&scope=" + encodeURIComponent("identify");
   window.location.href = url;
 }
 
@@ -5660,9 +5658,9 @@ async function handleDiscordOAuthRedirect(){
     persistState();
     if(r.epicSet) toast("Discord linked: " + r.discordUsername + " — Epic: " + r.epic);
     else if(r.epicConflict) toast("Discord linked, but your Epic account is already used by another player. Open a ticket on our Discord.");
-    else if(!state.epicLocked && !r.epicFound) toast("Discord linked. No Epic Games account found on your Discord — link it in Discord (Settings > Connections) and click again, or type it below.");
     else toast("Discord linked: " + r.discordUsername);
     render();
+    if(!state.epicLocked) fetchEpicFromYunite(true);
   } catch(err){
     console.warn("Erreur de liaison Discord :", err);
     const msg = fnErrorMessage(err);
@@ -5672,6 +5670,35 @@ async function handleDiscordOAuthRedirect(){
       showAuthScreen();
     }
   }
+}
+
+/* Epic : lu côté serveur chez Yunite (lien fait dans le salon de vérification
+   du Discord Prime Token). Rien n'est saisi à la main. */
+async function fetchEpicFromYunite(afterLink){
+  if(window.__yuniteBusy) return;
+  window.__yuniteBusy = true;
+  try{
+    const r = await callFn("linkEpicFromYunite", {});
+    if(r.epicSet){
+      state.epic = r.epic; state.epicLocked = true;
+      persistState();
+      toast("Epic linked: " + r.epic);
+    } else if(r.alreadyLocked){
+      if(!afterLink) toast("Your Epic is already set: " + (r.epic || state.epic));
+    } else if(r.epicConflict){
+      toast("This Epic account is already used by another player. Open a ticket on our Discord.");
+    } else {
+      toast("No Epic account found. Go to the verification channel on our Discord, link your Epic with Yunite, then click “Get my Epic” again.");
+    }
+    render();
+  } catch(err){
+    const msg = fnErrorMessage(err);
+    toast(msg);
+    if(/banned/i.test(msg)){
+      try{ await auth.signOut(); }catch(e){}
+      showAuthScreen();
+    }
+  } finally { window.__yuniteBusy = false; }
 }
 
 /* ROUE (Wheel) — un tour gratuit par jour */
@@ -8843,12 +8870,12 @@ function renderInner(){
     const discordLinked = discordIsVerified();
     const discordLegacy = !!state.discordId && !discordLinked;
     const epicLocked = !!state.epicLocked;
-    const epicEditable = discordLinked && !epicLocked;
+    const epicEditable = false;
     container.innerHTML = `
       <div class="settings-grid">
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">${icon('discord')} Link Discord</h3>
-          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Connect your Discord account: it is checked by our server, and your Epic Games username is filled in automatically if it is linked to your Discord (Discord > Settings > Connections > Epic Games). One Discord account can only be linked to one Prime Token account.</p>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:15px;">Connect your Discord account (checked by our server). Then link your Epic Games account with Yunite in the verification channel of our Discord, and click “Get my Epic”. One Discord account can only be linked to one Prime Token account.</p>
           ${discordLinked ? `
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border:1px solid var(--brand); background:rgba(0,255,136,0.06); border-radius:10px;">
               <div style="display:flex; align-items:center; gap:10px;">
@@ -8860,7 +8887,7 @@ function renderInner(){
               </div>
               <span style="font-size:9px; color:var(--muted2); text-align:right; max-width:130px;">Locked — open a ticket on our Discord to request a change.</span>
             </div>
-            ${!epicLocked ? `<button class="btn" style="background:#5865F2; color:#fff; margin-top:10px;" onclick="linkDiscord()">Get my Epic from Discord</button>` : ''}
+            ${!epicLocked ? `<button class="btn" style="background:#5865F2; color:#fff; margin-top:10px;" onclick="fetchEpicFromYunite()">Get my Epic (Yunite)</button>` : ''}
           ` : `
             ${discordLegacy ? `<p style="color:#ffb454; font-size:11px; margin-bottom:10px;">Your Discord was linked before our server verification. Click below once to verify it (needed to play, join tournaments and withdraw).</p>` : ''}
             <button class="btn" style="background:#5865F2; color:#fff;" onclick="linkDiscord()">${discordLegacy ? 'Verify Discord' : 'Link Discord'}</button>
@@ -8875,11 +8902,10 @@ function renderInner(){
           <div class="form-group" style="margin-bottom:15px;">
             <label>Epic Games Username</label>
             <input type="text" class="input" id="settingEpic" value="${escapeHTML(state.epic)}" placeholder="Your Epic Username" ${epicEditable ? '' : 'disabled style="opacity:.5; cursor:not-allowed;"'}>
-            ${!discordLinked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Link your Discord above to unlock this field.</span>` : ''}
-            ${discordLinked && !epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Not found on your Discord? Type it here (you can only set it once).</span>` : ''}
+            ${!discordLinked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Link your Discord above: your Epic is filled in automatically.</span>` : ''}
+            ${discordLinked && !epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Filled automatically from your Yunite link (verification channel on our Discord). It cannot be typed by hand.</span>` : ''}
             ${discordLinked && epicLocked ? `<span style="font-size:10px; color:var(--muted2); margin-top:4px;">Locked — open a ticket on our Discord to request a change.</span>` : ''}
           </div>
-          <button class="btn green" onclick="saveSettings()" ${epicEditable ? '' : 'disabled title="Locked"'}>Save</button>
         </div>
         <div class="setting-card" style="padding:20px;">
           <h3 style="margin-bottom:15px; font-size:14px;">Account</h3>
@@ -10633,64 +10659,9 @@ function sendTip(){
 }
 
 async function saveSettings(){
-  if(!discordIsVerified()){
-    toast("Link and verify your Discord account first.");
-    return;
-  }
-  if(state.epicLocked){
-    toast("Your Epic username is locked. Open a ticket on our Discord to request a change.");
-    return;
-  }
-  const e = document.getElementById("settingEpic").value.trim();
-  if(!e){
-    toast("Enter your Epic username.");
-    return;
-  }
-
-  // Anti contournement de ban : ce pseudo Epic (le plus dur à changer,
-  // contrairement à un simple compte Discord) est-il celui d'un compte déjà
-  // banni ? On relit la liste noire fraîche depuis Firestore pour être sûr.
-  if(db){
-    try{
-      const blacklistSnap = await db.collection("config").doc("bannedIdentities").get();
-      const blacklist = blacklistSnap.exists ? blacklistSnap.data() : null;
-      const blacklistedEpic = (blacklist && Array.isArray(blacklist.epicUsernames)) ? blacklist.epicUsernames : [];
-      if(blacklistedEpic.includes(e.toLowerCase())){
-        if(currentUid){
-          db.collection("users").doc(currentUid).set({
-            banned: true,
-            banReason: "Ban evasion: Epic Games username already used by a banned Prime Token account.",
-            bannedBy: "system",
-            bannedAt: Date.now()
-          }, { merge:true }).catch(()=>{});
-        }
-        toast("This Epic Games username belongs to a banned Prime Token account. You have been banned.");
-        try{ await auth.signOut(); }catch(err){}
-        showAuthScreen();
-        return;
-      }
-    } catch(err){ console.warn("Erreur de vérification de la liste noire :", err); }
-  }
-
-  // Un pseudo Epic ne peut appartenir qu'à un seul compte.
-  if(db){
-    try{
-      const l = e.toLowerCase();
-      const variants = [...new Set([e, l, e.toUpperCase(), l.charAt(0).toUpperCase() + l.slice(1)])];
-      const dup = await db.collection("users").where("epic", "in", variants).limit(3).get();
-      if(dup.docs.some(d => d.id !== currentUid)){ toast("This Epic username is already used by another account. Open a ticket on Discord if it's yours."); return; }
-    }catch(err){ console.warn("Epic check", err); }
-  }
-
-  state.epic = e;
-  // Une fois enregistré, le pseudo Epic ne peut plus être changé depuis le
-  // site — il faut passer par un ticket Discord pour éviter les abus
-  // (usurper le pseudo d'un autre joueur, changer sans vérification, etc).
-  state.epicLocked = true;
-  window.__identityEditAt = Date.now();
-  save();
-  toast("Saved! Your Epic username is now locked.");
-  render();
+  // L'Epic ne se saisit plus à la main : il vient uniquement de Discord
+  // (linkDiscordAccount, vérifié côté serveur).
+  toast("Your Epic username comes from your Discord. Click “Get my Epic (Yunite)”.");
 }
 
 /* =========================================================
