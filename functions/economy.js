@@ -1394,6 +1394,10 @@ module.exports = function (admin, db) {
      serverRoster), la même mise et le même cover bet. Chaque joueur paie
      ensuite sa mise (matchEscrow, appelé automatiquement par le site) ; le
      match ne se verrouille que quand tout le monde a payé. Idempotent.
+     DOUBLE (data.double === true) : même chose, mais la mise est x2. Votes
+     séparés (doubleVotes) : il faut que TOUS les joueurs aient cliqué
+     "Double" (4/4 en 2v2) ; un vote "Rematch" simple ne vaut jamais un
+     vote "Double". Un seul nouveau match peut sortir d'un match terminé.
   ========================================================= */
   const matchRematch = onCall(async (request) => {
     const uid = requireAuth(request);
@@ -1402,6 +1406,9 @@ module.exports = function (admin, db) {
     const me = await getVerifiedMe(uid);
     const username = me.data.username;
     const matchRef = db.collection("matches").doc(matchId);
+    const isDouble = (request.data || {}).double === true;
+    const VOTES = isDouble ? "doubleVotes" : "rematchVotes";
+    const BLOCKED = isDouble ? "doubleBlocked" : "rematchBlocked";
 
     return db.runTransaction(async (tx) => {
       const snap = await tx.get(matchRef);
@@ -1419,8 +1426,10 @@ module.exports = function (admin, db) {
         if (td && !td.cancelled && !td.completed) return { status: "already_created", newMatchId: match.rematchMatchId };
         deadReset = true;
       }
-      const baseVotes = deadReset ? {} : (match.rematchVotes || {});
-      const clr = deadReset ? { rematchMatchId: null } : {};
+      const baseVotes = deadReset ? {} : (match[VOTES] || {});
+      const clr = deadReset ? { rematchMatchId: null, rematchVotes: {}, doubleVotes: {}, rematchBlocked: null, doubleBlocked: null } : {};
+      const newBet = isDouble ? roundToCents((match.bet !== undefined ? match.bet : 0.5) * 2) : (match.bet !== undefined ? match.bet : 0.5);
+      if (isDouble && newBet > MAX_BET) throw new HttpsError("failed-precondition", "The doubled stake would exceed the maximum bet.");
 
       const { hostPlayers, guestPlayers } = matchRoster(match);
       const all = [...hostPlayers, ...guestPlayers];
@@ -1430,16 +1439,17 @@ module.exports = function (admin, db) {
       if ((request.data || {}).cancel === true) {
         const left = { ...baseVotes };
         delete left[username];
-        tx.update(matchRef, { rematchVotes: left, rematchBlocked: null, ...clr });
+        tx.update(matchRef, { ...clr, [VOTES]: left, [BLOCKED]: null });
         return { status: "cancelled", votes: all.filter((p) => left[p]).length, total: all.length };
       }
 
       const votes = { ...baseVotes, [username]: true };
+      // Vote qui n'existe que si le joueur est bien dans le match (vérifié plus haut).
       const everyoneIn = all.length > 0 && all.every((p) => votes[p]);
 
       if (everyoneIn) {
         // Tout le monde doit pouvoir payer sa mise, sinon pas de rematch.
-        const probe = { ...match, hostPlayers, guestPlayers };
+        const probe = { ...match, hostPlayers, guestPlayers, bet: newBet };
         const uidMap = await resolveUidMap(all, match.escrowUids || {});
         const poor = [];
         for (const p of all) {
@@ -1449,12 +1459,12 @@ module.exports = function (admin, db) {
           if (!us || !us.exists || (us.data().coins || 0) < need) poor.push(p);
         }
         if (poor.length) {
-          tx.update(matchRef, { rematchVotes: votes, rematchBlocked: { players: poor, at: Date.now() }, ...clr });
+          tx.update(matchRef, { ...clr, [VOTES]: votes, [BLOCKED]: { players: poor, at: Date.now() } });
           return { status: "insufficient", players: poor };
         }
       }
       if (!everyoneIn) {
-        tx.update(matchRef, { rematchVotes: votes, rematchBlocked: null, ...clr });
+        tx.update(matchRef, { ...clr, [VOTES]: votes, [BLOCKED]: null });
         return { status: "waiting", votes: all.filter((p) => votes[p]).length, total: all.length };
       }
 
@@ -1478,7 +1488,7 @@ module.exports = function (admin, db) {
         teamSize: match.teamSize || "1v1",
         team: match.team || null,
         coverBet: !!match.coverBet,
-        bet: match.bet !== undefined ? match.bet : 0.5,
+        bet: newBet,
         mode: match.mode || null,
         firstTo: match.firstTo || 1,
         killLead: match.killLead || null,
@@ -1502,11 +1512,12 @@ module.exports = function (admin, db) {
         escrowAmounts: {},
         escrowUids: {},
         rematchOf: matchId,
+        doubledFrom: isDouble ? matchId : null,
       };
       tx.set(db.collection("matches").doc(newId), { ...newMatch, active: true });
       const origCode = origMeta.exists && origMeta.data().passcode !== undefined ? origMeta.data().passcode : (match.passcode || null);
       tx.set(db.collection("matchMeta").doc(newId), { rematchOf: matchId, at: Date.now(), passcode: origCode || null });
-      tx.update(matchRef, { rematchVotes: votes, rematchMatchId: newId, rematchBlocked: null });
+      tx.update(matchRef, { ...clr, [VOTES]: votes, rematchMatchId: newId, rematchBlocked: null, doubleBlocked: null, rematchIsDouble: isDouble });
       return { status: "created", newMatchId: newId };
     });
   });

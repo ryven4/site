@@ -4082,8 +4082,8 @@ function checkMatchNotifications(matches){
        && !(m.escrowedBy || []).includes(state.username) && !autoEscrowTried.has(m.id)){
       autoEscrowTried.add(m.id);
       callFnSilent("matchEscrow", { matchId: m.id }).then(res => {
-        if(res && res.stake > 0) toast(`${m.rematchOf ? "🔁 Rematch! " : ""}${formatCoins(res.stake)} coins locked in.`);
-        else if(m.rematchOf) toast("🔁 Rematch started!");
+        if(res && res.stake > 0) toast(`${m.doubledFrom ? "✖2 Double! " : (m.rematchOf ? "🔁 Rematch! " : "")}${formatCoins(res.stake)} coins locked in.`);
+        else if(m.rematchOf) toast(m.doubledFrom ? "✖2 Double started!" : "🔁 Rematch started!");
       }).catch(err => toast(fnErrorMessage(err) + " Leave the match to get everyone refunded."));
     }
     if(prev){
@@ -5159,7 +5159,13 @@ function declareResult(matchId, type){
     } else if(status === "claimed"){
       const timerMs = res.timerMs || VICTORY_TIMER_MS;
       playTingSound();
-      toast(`Victory declared! Your opponent has ${timerMs === VIP_VICTORY_TIMER_MS ? '5' : '15'} minutes to respond, otherwise it's confirmed automatically.`);
+      // Le timer ne démarre pas avant 3 min après le début du match : on
+      // affiche donc le délai réel (sinon 15 min annoncées, 18 à l'écran).
+      const lm = (state.matches || []).find(m => m.id === matchId);
+      const lockAt = (lm && lm.serverLock && lm.serverLock.at) || 0;
+      const startAt = Math.max(Date.now(), lockAt + 3 * 60 * 1000);
+      const waitMin = Math.ceil((startAt - Date.now() + timerMs) / 60000);
+      toast(`Victory declared! Your opponent has ${waitMin} minutes to respond, otherwise it's confirmed automatically.`);
       render();
     } else if(status === "disputed"){
       toast("You both declared victory — send proof to resolve the dispute.");
@@ -5300,13 +5306,28 @@ function renderRematchBlock(lobby, hostPlayers, guestPlayers){
   }
 
   const blocked = lobby.rematchBlocked && Array.isArray(lobby.rematchBlocked.players) ? lobby.rematchBlocked.players : null;
+  // DOUBLE : même match avec la mise x2. Votes à part : il faut que TOUS les
+  // joueurs (4/4 en 2v2) cliquent sur Double — un simple Rematch ne compte pas.
+  const dVotes = lobby.doubleVotes || {};
+  const dCount = all.filter(p => dVotes[p]).length;
+  const dVoted = !!dVotes[state.username];
+  const dWaiting = dVoted && dCount < all.length;
+  const dBet = Math.round((Number(lobby.bet !== undefined ? lobby.bet : 0.5) * 2) * 100) / 100;
+  const dBlocked = lobby.doubleBlocked && Array.isArray(lobby.doubleBlocked.players) ? lobby.doubleBlocked.players : null;
+  const doubleBtn = dBet <= 10000 ? `
+      <button class="btn ${dWaiting ? '' : 'btn-primary'}" style="margin-left:8px;" onclick="${dWaiting ? 'cancelDouble' : 'requestDouble'}(${jsArg(lobby.id)})" ${dWaiting ? 'title="Click to cancel your Double request"' : ''}>
+        ${dVoted ? `${icon('check') || '✓'} Waiting for others (${dCount}/${all.length}) · Cancel` : `✖2 Double (${dCount}/${all.length})`}
+      </button>` : '';
+  const doubleBlockedMsg = dBlocked ? `<div style="margin-top:10px; color:#ffab40; font-size:11px;">Double impossible: not enough coins for ${escapeHTML(dBlocked.join(", "))}.</div>` : '';
   return `
     ${blocked ? `<div style="margin-top:10px; color:#ffab40; font-size:11px;">Rematch impossible: not enough coins for ${escapeHTML(blocked.join(", "))}.</div>` : ''}
     <div style="margin-top:14px;">
       <button class="btn ${iVoted && votedCount < all.length ? '' : 'btn-primary'}" onclick="${iVoted && votedCount < all.length ? 'cancelRematch' : 'requestRematch'}(${jsArg(lobby.id)})" ${iVoted && votedCount < all.length ? 'title="Click to cancel your rematch request"' : ''}>
         ${iVoted ? `${icon('check') || '✓'} Waiting for others (${votedCount}/${all.length}) · Cancel` : `🔁 Rematch (${votedCount}/${all.length})`}
       </button>
+      ${doubleBtn}
     </div>
+    ${doubleBlockedMsg}
   `;
 }
 
@@ -5319,6 +5340,35 @@ function requestRematch(matchId){
     } else if(res.status === "created" || res.status === "already_created"){
       toast("🔁 Rematch! New match created.");
     }
+    render();
+  }).catch(err => toast(fnErrorMessage(err)));
+}
+
+async function requestDouble(matchId){
+  const m = (state.matches || []).find(x => x.id === matchId);
+  const cur = m ? Number(m.bet !== undefined ? m.bet : 0.5) : null;
+  const msg = cur !== null
+    ? `Double the stake? The new match is played for ${formatCoins(Math.round(cur * 200) / 100)} coins per player instead of ${formatCoins(cur)}. It only starts if EVERY player of both teams clicks Double.`
+    : "Double the stake? It only starts if EVERY player of both teams clicks Double.";
+  if(!(await siteConfirm(msg, { title:"Double the stake", okLabel:"Double" }))) return;
+  callFn("matchRematch", { matchId, double: true }).then(res => {
+    if(res.status === "insufficient"){
+      toast(`Double impossible: not enough coins for ${(res.players || []).join(", ")}.`);
+    } else if(res.status === "waiting"){
+      toast(`Double vote registered (${res.votes}/${res.total})`);
+    } else if(res.status === "created" || res.status === "already_created"){
+      toast("✖2 Double! New match created.");
+    }
+    render();
+  }).catch(err => toast(fnErrorMessage(err)));
+}
+
+function cancelDouble(matchId){
+  callFn("matchRematch", { matchId, cancel: true, double: true }).then(res => {
+    if(res.status === "cancelled") toast("Double request cancelled.");
+    else if(res.status === "already_created") toast("The new match was already created.");
+    const local = state.matches.find(m => m.id === matchId);
+    if(local && res.status === "cancelled"){ const v = Object.assign({}, local.doubleVotes); delete v[state.username]; local.doubleVotes = v; }
     render();
   }).catch(err => toast(fnErrorMessage(err)));
 }
