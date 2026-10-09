@@ -8080,10 +8080,12 @@ function modDeleteGlobalMessage(index){
   db.runTransaction(async tx => {
     const snap = await tx.get(ref);
     const list = (snap.exists && snap.data().messages) || [];
-    const key = JSON.stringify(target);
-    tx.set(ref, { messages: list.filter(m => JSON.stringify(m) !== key) }, { merge:true });
+    const same = m => m && m.user === target.user && m.text === target.text && (m.ts || 0) === (target.ts || 0) && (m.time || "") === (target.time || "");
+    const kept = list.filter(m => !same(m));
+    if(kept.length === list.length) throw new Error("not-found");
+    tx.update(ref, { messages: kept });
   })
-    .then(() => toast("Message deleted."))
+    .then(() => { globalChatCache = globalChatCache.filter((m, i) => i !== index); renderChat(); toast("Message deleted."); })
     .catch(err => { console.warn(err); toast("Failed to delete message."); });
 }
 
