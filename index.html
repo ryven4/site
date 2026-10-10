@@ -8602,6 +8602,7 @@ function renderInner(){
               <span class="match-tag">Region <strong>${escapeHTML(m.region)}</strong></span>
               <span class="match-tag">First To <strong>${firstToLabel(m)}</strong></span>
               <span class="match-tag">Simple Edit <strong>${m.simpleEdit ? "Yes" : "No"}</strong></span>
+              ${m.weapon ? `<span class="match-tag">Loot <strong>${escapeHTML(m.weapon)}</strong></span>` : ''}
             </div>
 
             <div class="match-economy">
@@ -8755,6 +8756,7 @@ function renderInner(){
             <div class="lobby-tag"><strong>${firstToLabel(lobby)}</strong><span>First To</span></div>
             <div class="lobby-tag"><strong>${(parseInt(lobby.killLead,10) > 0) ? parseInt(lobby.killLead,10) : "OFF"}</strong><span>Kill Lead</span></div>
             <div class="lobby-tag"><strong>${lobby.simpleEdit ? "ON" : "OFF"}</strong><span>Simple Edit</span></div>
+            ${lobby.weapon ? `<div class="lobby-tag"><strong>${escapeHTML(lobby.weapon)}</strong><span>Loot</span></div>` : ''}
             ${mapCodeFor(lobby) ? `<button type="button" class="lobby-tag map-code-tag" onclick="copyMapCode(${jsArg(mapCodeFor(lobby))})" title="Click to copy the map code"><strong>${escapeHTML(mapCodeFor(lobby))} ${icon('copy')}</strong><span>Map Code</span></button>` : ''}
             ${lobby.team ? `<div class="lobby-tag"><strong>${escapeHTML(lobby.team.name)}</strong><span>Team</span></div>` : ''}
             ${lobby.coverBet ? `<div class="lobby-tag"><strong style="color:var(--gold); display:flex; align-items:center; gap:5px;">${coinIcon(11)} Host</strong><span>Covers Bet</span></div>` : ''}
