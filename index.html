@@ -3474,6 +3474,89 @@ body::before{
 }
 </style>
 
+<style id="theme-dark">
+/* =========================================================
+   THEME "DARK" — moins de vert : fonds noirs/graphite neutres,
+   le vert reste pour les accents (boutons, actifs, gains).
+   Uniquement des couleurs. Pour revenir : supprimer ce bloc.
+========================================================= */
+:root{
+  --bg:#07090a;
+  --bg2:#0a0c0d;
+  --panel:#0f1213;
+  --panel2:#141819;
+  --panel3:#1b2021;
+  --line:rgba(255,255,255,.07);
+  --line2:rgba(255,255,255,.11);
+  --text:#f2f5f4;
+  --muted:#a3adaa;
+  --muted2:#6c7774;
+}
+body{
+  background:
+    radial-gradient(1100px 600px at 12% -18%, rgba(31,242,140,.08), transparent 60%),
+    radial-gradient(900px 600px at 95% -10%, rgba(31,242,140,.04), transparent 60%),
+    linear-gradient(180deg, #0a0c0d 0%, #07090a 50%, #060707 100%) !important;
+  background-attachment:fixed !important;
+}
+body::before{
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px) !important;
+}
+.sidebar{ background:linear-gradient(180deg, #0d1011, #08090a) !important; }
+.nav button{ color:#c3cbc8; }
+.nav button:hover{ background:rgba(255,255,255,.05); }
+.nav button.active{
+  background:linear-gradient(90deg, rgba(31,242,140,.14), rgba(31,242,140,.02)) !important;
+  box-shadow:inset 0 0 0 1px rgba(31,242,140,.2) !important;
+}
+.profile-mini, .profile-chip{ background:linear-gradient(135deg, rgba(255,255,255,.04), #0f1213) !important; }
+.topbar{ background:rgba(9,11,12,.86) !important; }
+.topbar-search input{ background:#0f1213 !important; }
+.coin-chip{ background:linear-gradient(135deg, rgba(255,200,61,.12), #0f1213) !important; }
+.snipe-chip{ background:linear-gradient(135deg, rgba(41,215,240,.10), #0f1213) !important; }
+.btn{ background:var(--panel2); }
+.btn:hover{ background:var(--panel3); border-color:rgba(255,255,255,.18); }
+
+.panel, .setting-card, .profile-card, .ranking-table, .profile-head-card, .profile-stat-tile, .profile-recent,
+.quick-stat, .matches-tabs, .matches-filters, .shop-banner, .avatar-card, .team-card, .game-info-box,
+.rank-list, .podium-slot, .home-panel, .lobby-main{
+  background:linear-gradient(180deg, #121617, #0c0f10) !important;
+}
+.home-chat-panel{ background:linear-gradient(180deg, #0d1011, #08090a) !important; }
+.input, .select, .matches-filters select, .chat-form input{ background:#0a0c0d !important; }
+.matches-tab.active{ background:linear-gradient(135deg, rgba(31,242,140,.16), rgba(31,242,140,.03)) !important; }
+
+#content .match-card{
+  background:
+    radial-gradient(120% 70% at 0% 0%, rgba(var(--acc-rgb),.07), transparent 60%),
+    linear-gradient(180deg, #131718, #0c0f10) !important;
+}
+#content .match-card{ border:1px solid rgba(255,255,255,.09) !important; }
+#content .match-card:hover{ border-color:rgba(var(--acc-rgb),.38) !important; }
+#content .match-card .match-tag{ background:rgba(255,255,255,.035); border-color:rgba(255,255,255,.08); }
+#content .match-card .match-economy{ background:rgba(0,0,0,.35); border-color:rgba(255,255,255,.06); }
+.pt-wins{ background:linear-gradient(90deg, rgba(31,242,140,.06), #0f1213 30%) !important; }
+.pt-win{ background:#0a0c0d !important; }
+.pt-hero{
+  background:
+    radial-gradient(60% 85% at 82% 50%, rgba(31,242,140,.14), transparent 62%),
+    linear-gradient(135deg, #131718 0%, #0c0f10 55%, #08090a 100%) !important;
+  border-color:rgba(255,255,255,.09) !important;
+}
+.pt-hero::after{ background:repeating-linear-gradient(115deg, transparent 0 46px, rgba(255,255,255,.025) 46px 47px) !important; }
+.pt-mode{
+  border-color:rgba(255,255,255,.09) !important;
+  background:
+    radial-gradient(100% 120% at 100% 0%, rgba(var(--c-rgb),.14), transparent 55%),
+    linear-gradient(160deg, #141819, #0c0f10) !important;
+}
+.pt-box{ background:linear-gradient(180deg, #121617, #0c0f10) !important; }
+.pt-mini{ background:radial-gradient(120% 80% at 0% 0%, rgba(var(--acc-rgb),.07), transparent 60%), #0c0f10 !important; }
+.pt-me{ background:#0c0f10 !important; }
+.pt-dd-btn.set{ background:linear-gradient(135deg, rgba(31,242,140,.12), #0f1213) !important; }
+</style>
 </head>
 
 <body>
