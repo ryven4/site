@@ -4843,6 +4843,52 @@ function initFeaturesSync(){
     if(changed && (currentPage === "roue" || currentPage === "home" || currentPage === "moderation")) renderSoon();
   }, err => console.warn("features listener", err));
 }
+/* Vue propriétaire : coins de chaque joueur (lecture seule). */
+async function loadCoinsOverview(){
+  const box = document.getElementById("coinsOverview");
+  if(!box) return;
+  if(!isSuperAdmin() || !db){ box.textContent = "Not available."; return; }
+  box.innerHTML = `<div style="color:var(--muted); font-size:11px;">Loading…</div>`;
+  try{
+    const snap = await db.collection("users").get();
+    const rows = [];
+    snap.forEach(d => {
+      const u = d.data() || {};
+      if(!u.username) return;
+      const coins = Number(u.coins) || 0;
+      const locked = Number(u.lockedCoins) || 0;
+      rows.push({ name: String(u.username), coins, locked });
+    });
+    rows.sort((a, b) => b.coins - a.coins);
+    const total = rows.reduce((t, r) => t + r.coins, 0);
+    const totalLocked = rows.reduce((t, r) => t + r.locked, 0);
+    const withCoins = rows.filter(r => r.coins > 0).length;
+    const fmt = n => (Math.round(n * 100) / 100).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+    box.innerHTML = `
+      <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:12px; margin-bottom:10px;">
+        <span>Players: <strong>${rows.length}</strong></span>
+        <span>With coins: <strong>${withCoins}</strong></span>
+        <span>Total: <strong style="color:var(--gold);">${fmt(total)}</strong></span>
+        <span>Of which not withdrawable yet: <strong>${fmt(totalLocked)}</strong></span>
+      </div>
+      <div style="max-height:360px; overflow:auto; border:1px solid var(--line); border-radius:10px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead><tr style="text-align:left; color:var(--muted);">
+            <th style="padding:8px 10px;">Player</th><th style="padding:8px 10px; text-align:right;">Coins</th><th style="padding:8px 10px; text-align:right;">Not withdrawable</th>
+          </tr></thead>
+          <tbody>${rows.map(r => `<tr style="border-top:1px solid var(--line);">
+            <td style="padding:7px 10px;">${escapeHTML(r.name)}</td>
+            <td style="padding:7px 10px; text-align:right; color:var(--gold); font-weight:700;">${fmt(r.coins)}</td>
+            <td style="padding:7px 10px; text-align:right; color:var(--muted);">${fmt(r.locked)}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+      </div>`;
+  }catch(e){
+    console.warn("loadCoinsOverview", e);
+    box.innerHTML = `<div style="color:var(--red); font-size:11px;">Could not load the list.</div>`;
+  }
+}
+
 async function toggleWheelOff(){
   if(!isSuperAdmin()) return;
   const next = !wheelOff;
@@ -9896,6 +9942,12 @@ function renderInner(){
             <strong style="font-size:12px;">${wheelOff ? '<span style="color:var(--red);">The wheel is OFF</span>' : '<span style="color:var(--green);">The wheel is ON</span>'}</strong>
             <button class="btn" style="flex:none;" onclick="toggleWheelOff()">${wheelOff ? 'Turn the wheel back on' : 'Turn the wheel off'}</button>
           </div>
+        </div>
+        <div class="setting-card" style="padding:20px; margin-bottom:18px;">
+          <h3 style="margin-bottom:6px; font-size:14px;">${icon('wallet')} Player coins</h3>
+          <p style="color:var(--muted); font-size:11px; margin-bottom:12px;">See how many coins every player has (read only, nothing is changed). Only you can see this.</p>
+          <button class="btn" style="flex:none;" onclick="loadCoinsOverview()">Show player coins</button>
+          <div id="coinsOverview" style="margin-top:12px;"></div>
         </div>
 ` : ``}
 
